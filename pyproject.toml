@@ -1,0 +1,30 @@
+[build-system]
+requires = [
+    "setuptools",
+    "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[project]
+name = "COSEMpdu"
+version = "0.1.0"
+authors = [
+    {name="Serj Kotilevski", email="youserj@outlook.com"}
+]
+dependencies = [
+]
+description="cosem-pdu"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords=['dlms', 'asn.1', 'a-xdr', 'ber', 'pdu', 'coder']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+[project.urls]
+Source = "https://github.com/youserj/SPODESclient_prj"
+
+[project.scripts]
