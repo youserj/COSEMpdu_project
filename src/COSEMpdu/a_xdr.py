@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Self, ByteString
 from struct import pack, Struct
 from math import log, ceil
+from . import x680
 from . import asn1, x690, byte_buffer, ber
 from .byte_buffer import ByteBuffer as Buf
 
@@ -9,16 +11,17 @@ _empty = asn1.NullType.__slots__
 _value = asn1._value
 
 
-def create_buf(value: asn1.Type) -> Buf:
+def create_buf(value: x680.Type) -> Buf:
     buf: Buf = Buf.allocate(len(value))
     value.put(buf)
     buf.set_pos(0)
     return buf
 
 
-class Tag(x690.ComponentEDV, asn1.Tag):
+@dataclass
+class Tag(x690.ComponentEDV, x680.Tag):
     """IEC 61334-6 2000 6.7 Tagged types"""
-    def __len__(self):
+    def __len__(self) -> int:
         return 1
 
     @classmethod
@@ -27,13 +30,15 @@ class Tag(x690.ComponentEDV, asn1.Tag):
         return cls(class_number=buf.get_uint8())
 
     def put(self, buf: Buf) -> int:
-        return buf.put_uint8(self.ClassNumber)
+        return buf.put_uint8(self.class_number)
 
-    def __eq__(self, other: Self):
-        if self.ClassNumber == other.ClassNumber:
-            return True
-        else:
-            return False
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Tag):
+            if self.class_number == other.class_number:
+                return True
+            else:
+                return False
+        raise NotImplementedError
 
 
 class _StringCoder(asn1.SimpleType, ABC):
@@ -49,18 +54,14 @@ class _StringCoder(asn1.SimpleType, ABC):
         return ret + buf.write(self.value)
 
 
-class BitStringType(asn1.BitStringType):
-    __slots__ = _value
-    value: tuple[x690.Length, ByteString]
-
-    def __init__(self, value: tuple[x690.Length, ByteString]):
-        self.value = value
+@dataclass
+class BitStringType(x680.BitStringType):
 
     def __len__(self) -> int:
         return sum(map(len, self.value))
 
     @classmethod
-    def from_str(cls, value: str) -> Self:
+    def parse(cls, value: str) -> Self:
         """override asn.1"""
         l = x690.Length(len(value))
         value = value + '0' * ((8 - l.value) % 8)
@@ -117,12 +118,12 @@ class VisibleString(_StringCoder, asn1.VisibleString):
     __slots__ = _value
 
 
-class Choice(asn1.Choice, ABC):
+class Choice(asn1.ChoiceType, ABC):
     ELEMENTS: asn1.AlternativeTypeList
     __slots__ = _value
 
     def __len__(self):
-        if self.Tag.ClassNumber == asn1.UniversalClassTagAssignments.Reserved:
+        if self.Tag.class_number == asn1.UniversalClassTagAssignments.Reserved:
             return len(self.value)
         else:
             return 1 + len(self.value)
@@ -154,7 +155,7 @@ class NullType(asn1.NullType):
         return 0
 
     @classmethod
-    def from_str(cls, value: str):
+    def parse(cls, value: str):
         return cls()
 
     @classmethod
@@ -280,7 +281,7 @@ class EXPLICIT(asn1.EXPLICIT, ABC):  # todo: make ALL
 
     def put(self, buf: Buf) -> int:
         """override put"""
-        ret = buf.put_uint8(self.Tag.ClassNumber)
+        ret = buf.put_uint8(self.Tag.class_number)
 
         # variant(use additional buffer)
         # _tag2_buf.set_pos(0)
@@ -303,7 +304,7 @@ class Implicit(asn1.IMPLICIT, ABC):
     Tag: Tag
 
     def __str__(self):
-        return F"[{self.Tag.ClassNumber}]{super().__str__()}"
+        return F"[{self.Tag.class_number}]{super().__str__()}"
 
     def __len__(self):
         return len(self.Tag) + super().__len__()

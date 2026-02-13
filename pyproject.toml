@@ -9,7 +9,7 @@ package-dir = {"" = "src"}
 
 [project]
 name = "COSEMpdu"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     {name="Serj Kotilevski", email="youserj@outlook.com"}
 ]
@@ -27,4 +27,49 @@ classifiers = [
 [project.urls]
 Source = "https://github.com/youserj/SPODESclient_prj"
 
-[project.scripts]
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.5.0",
+    "ruff>=0.11",
+    "types-requests",
+    "build>=1.3",
+    "twine"
+]
+
+[tool.mypy]
+exclude = [
+    "build/*",
+    "test/*",
+]
+strict = true
+ignore_missing_imports = true
+disallow_any_generics = true
+explicit_package_bases = true
+
+[tool.ruff]
+src = ["src"]
+line-length = 180
+preview = true
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+include = [
+    "src/**/*.py",
+    "test/test_*.py"
+]
+
+[tool.ruff.lint]
+    ignore = ["SIM108"]  # ternary
+    select = [
+        "E", "F", "W", "C", "Q", "ANN", "ARG", "DTZ", "FBT", "NPY", "PGH", "PIE", "SIM", "RET", "TYP", "TCH", "YTT",
+        # "TRY",
+    ]
+    #extend-select = ["D"]

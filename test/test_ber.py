@@ -94,7 +94,7 @@ class TestType(unittest.TestCase):
     #     print(getsizeof(value2))
 
     def test_bitstring(self):
-        value = ber.BitStringType.from_str("1001011001001111001010101010")
+        value = ber.BitStringType.parse("1001011001001111001010101010")
         buf = bb.ByteBuffer.allocate(100)
         value.put(buf)
         print(value, value.to_list(), buf.buf.hex(" "))

@@ -11,7 +11,7 @@ class TestType(unittest.TestCase):
         # buf = Buf.allocate(1)
         value.put(buf)
         print(value, buf.buf.hex(" "))
-        value2 = a_xdr.NullType.from_str(" ")
+        value2 = a_xdr.NullType.parse(" ")
         print(value2)
 
     def test_BooleanType(self):
@@ -26,14 +26,14 @@ class TestType(unittest.TestCase):
         print(value == value2)
 
     def test_octet_string(self):
-        value = c_pdu.OctetString.from_str("010203")
+        value = c_pdu.OctetString.parse("010203")
         print(value)
         value2 = c_pdu.OctetString4.default()
         value3 = c_pdu.OctetString.default()
 
     def test_to_buf(self):
         buf = Buf(memoryview(bytearray(100)))
-        value = c_pdu.OctetString.from_str("31 32 33")
+        value = c_pdu.OctetString.parse("31 32 33")
         value.put(buf)
         c_pdu.Integer8.default().put(buf)
         value.put(buf)
@@ -68,7 +68,7 @@ class TestType(unittest.TestCase):
             __slots__ = a_xdr._value
 
 
-        value = OptionalInteger8.from_str("13")
+        value = OptionalInteger8.parse("13")
         buf = Buf(memoryview(bytearray(10)))
         value.put(buf)
         print(value)
@@ -77,7 +77,7 @@ class TestType(unittest.TestCase):
         print(value)
 
     def test_choice(self):
-        value = c_pdu.Data.from_str("5: 4")
+        value = c_pdu.Data.parse("5: 4")
         print(value)
         value = c_pdu.Data(c_pdu.Integer64.from_int(1030))
         buf = Buf(memoryview(bytearray(10)))
@@ -86,14 +86,14 @@ class TestType(unittest.TestCase):
         buf.set_pos(0)
         value = c_pdu.Data.get(buf)
         print(value)
-        value = c_pdu.Data.from_str("1: 5:4; 5:2; 9:31 32 33")
+        value = c_pdu.Data.parse("1: 5:4; 5:2; 9:31 32 33")
         buf = Buf(memoryview(bytearray(19)))
         value.put(buf)
         print(value, bytes(buf).hex(" "))
         print(len(value))
 
     def test_create_buf(self):
-        value = c_pdu.Data.from_str("1: 5:4; 5:2; 9:31 32 33")
+        value = c_pdu.Data.parse("1: 5:4; 5:2; 9:31 32 33")
         # value = pdu.Data.from_str("1: 3:True")
         buf = a_xdr.create_buf(value)
         value2 = c_pdu.Data.get(buf)
@@ -103,7 +103,7 @@ class TestType(unittest.TestCase):
         print(getsizeof(value2))
 
     def test_BitstringType(self):
-        value = a_xdr.BitStringType.from_str("100101")
+        value = a_xdr.BitStringType.parse("100101")
         print(value, value.to_list())
         buf = Buf(memoryview(b'\x28\xff\xff\xff\xff\xff\xff'))
         value2 = a_xdr.BitStringType.get(buf)

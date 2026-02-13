@@ -11,7 +11,7 @@ class TestType(unittest.TestCase):
             __slots__ = ("value", )
 
     def test_choice(self):
-        class Data(asn1.WithoutCoding, asn1.Choice):
+        class Data(asn1.WithoutCoding, asn1.ChoiceType):
             ELEMENTS = (
                 asn1.NamedType("null", asn1.NullType),
                 asn1.NamedType("integer", asn1.IntegerType)

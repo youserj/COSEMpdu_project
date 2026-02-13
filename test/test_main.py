@@ -6,7 +6,7 @@ from src.COSEMpdu.byte_buffer import ByteBuffer as Buf
 
 class TestType(unittest.TestCase):
     def test_Conformance(self):
-        conf1 = c_pdu.Conformance.from_str("101001100100110010101101")
+        conf1 = c_pdu.Conformance.parse("101001100100110010101101")
         buf = Buf.allocate(10)
         conf1.put(buf)
         print(F"{conf1}: {buf.buf.hex(' ')}")
@@ -19,7 +19,7 @@ class TestType(unittest.TestCase):
         buf = Buf.allocate(10)
         value.put(buf)
         print(value, buf, buf.buf.hex(" "))
-        value2 = c_pdu.NullData.from_str(" ")
+        value2 = c_pdu.NullData.parse(" ")
         print(value2)
 
     def test_Boolean(self):
@@ -38,31 +38,31 @@ class TestType(unittest.TestCase):
         buf = Buf(memoryview(b'\x00\x03'))
         value = c_pdu.ServiceError.get(buf)
         print(value, isinstance(value, c_pdu.ApplicationReference))
-        enum1 = c_pdu.ApplicationReference.from_str("3")
+        enum1 = c_pdu.ApplicationReference.parse("3")
         self.assertEqual(enum1, value)
-        s_e = c_pdu.ServiceError.from_str("2:3")
+        s_e = c_pdu.ServiceError.parse("2:3")
         print(s_e)
 
     def test_ConfirmedServiceError(self):
         buf = Buf(memoryview(b'\x01\x00\x02'))
         value = c_pdu.ConfirmedServiceError.get(buf)
         print(value, isinstance(value, c_pdu.ApplicationReference))
-        enum1 = c_pdu.ApplicationReference.from_str("2")
+        enum1 = c_pdu.ApplicationReference.parse("2")
         self.assertEqual(enum1, value)
 
     def test_confirmedServiceError(self):
         buf = Buf(memoryview(b'\x0e\x01\x00\x02'))
         value = c_pdu.confirmedServiceError.get(buf)
         print(value, isinstance(value, c_pdu.ApplicationReference))
-        enum1 = c_pdu.ApplicationReference.from_str("2")
+        enum1 = c_pdu.ApplicationReference.parse("2")
         self.assertEqual(enum1, value)
-        pdu = c_pdu.XDLMSAPDU(c_pdu.confirmedServiceError.from_str("2:2:2"))
+        pdu = c_pdu.XDLMSAPDU(c_pdu.confirmedServiceError.parse("2:2:2"))
         buf = Buf(memoryview(bytearray(100)))
         pdu.put(buf)
         print(pdu, buf.buf.hex(" "))
 
     def test_Bitstring(self):
-        value = c_pdu.BitString.from_str("100101")
+        value = c_pdu.BitString.parse("100101")
         print(value, value.to_list())
         buf = Buf(memoryview(b'\x04\x28\xff\xff\xff\xff\xff\xff'))
         value2 = c_pdu.BitString.get(buf)
@@ -75,7 +75,7 @@ class TestType(unittest.TestCase):
         MyOptional = a_xdr.get_optional(a_xdr.IntegerType)
         buf = Buf(memoryview(b'\x00\x02\x05\x04'))
         value = MyOptional.get(buf)
-        value2 = MyOptional.from_str("5")
+        value2 = MyOptional.parse("5")
         print(value)
         buf2 =Buf.allocate(10)
         value.put(buf2)
@@ -125,7 +125,7 @@ class TestType(unittest.TestCase):
             # c_pdu.CosemAttributeDescriptor.from_str("8, 00 00 01 00 01 ff, 2"),
             cosem_attribute_descriptor=c_pdu.CosemAttributeDescriptor((
                 c_pdu.CosemClassId.from_int(8),
-                c_pdu.CosemObjectInstanceId.from_str("00 00 01 00 01 ff"),
+                c_pdu.CosemObjectInstanceId.parse("00 00 01 00 01 ff"),
                 c_pdu.CosemObjectAttributeId.from_int(2)
             )),
             access_selection=c_pdu.SelectiveAccessDescriptorOptional.default()
@@ -135,7 +135,7 @@ class TestType(unittest.TestCase):
             # c_pdu.CosemAttributeDescriptor.from_str("8, 00 00 01 00 01 ff, 2"),
             c_pdu.CosemAttributeDescriptor((
                 c_pdu.CosemClassId.from_int(8),
-                c_pdu.CosemObjectInstanceId.from_str("00 00 01 00 01 ff"),
+                c_pdu.CosemObjectInstanceId.parse("00 00 01 00 01 ff"),
                 c_pdu.CosemObjectAttributeId.from_int(2)
             )),
             c_pdu.SelectiveAccessDescriptorOptional.default()
@@ -177,7 +177,7 @@ class TestType(unittest.TestCase):
 
     def test_Array(self):
         IntegerArray = c_pdu.get_array_of(c_pdu.Integer)
-        value = IntegerArray.from_str("1; 2; 3; 4")
+        value = IntegerArray.parse("1; 2; 3; 4")
         buf = a_xdr.create_buf(value)
         print(value, buf.buf.hex(" "))
         value2 = c_pdu.Data.get(buf)
@@ -209,15 +209,15 @@ class TestType(unittest.TestCase):
         print(value)
 
     def test_readRequest(self):
-        pdu = c_pdu.XDLMSAPDU(c_pdu.readRequest.from_str("2: 1; 4: 1, 1, 3:1; 5: 2"))
+        pdu = c_pdu.XDLMSAPDU(c_pdu.readRequest.parse("2: 1; 4: 1, 1, 3:1; 5: 2"))
         pdu.validation()
         buf = Buf(memoryview(bytearray(100)))
         pdu.put(buf)
         print(pdu, buf.buf.hex(" "))
 
     def test_ActionRequest(self):
-        pdu = c_pdu.XDLMSAPDU.from_str("195:1:1, (8, 00 00 01 00 00 ff, 3),")
-        a_r = c_pdu.actionRequest.from_str("1:1, (8, 00 00 01 00 00 ff, 3),")
+        pdu = c_pdu.XDLMSAPDU.parse("195:1:1, (8, 00 00 01 00 00 ff, 3),")
+        a_r = c_pdu.actionRequest.parse("1:1, (8, 00 00 01 00 00 ff, 3),")
         a_r_n = c_pdu.actionRequestNormal.from_str("1, (8, 00 00 01 00 00 ff, 3),")
         a_r_n2 = c_pdu.ActionRequestNormal.from_str("1, (8, 00 00 01 00 00 ff, 3),3:1")
         a_r_n_pbb = c_pdu.actionRequestNextPblock.from_str("1, 1")
@@ -235,14 +235,14 @@ class TestType(unittest.TestCase):
         print(buf2.buf.hex(" "))
 
     def test_ReadResponse(self):
-        pdu = c_pdu.XDLMSAPDU(c_pdu.ReadResponse_((c_pdu.Data_(c_pdu.Boolean.from_str("0")), c_pdu.Data_(c_pdu.Boolean.default()))))
+        pdu = c_pdu.XDLMSAPDU(c_pdu.ReadResponse_((c_pdu.Data_(c_pdu.Boolean.parse("0")), c_pdu.Data_(c_pdu.Boolean.default()))))
         pdu = c_pdu.XDLMSAPDU(c_pdu.ReadResponse_((c_pdu.Data_.default(), c_pdu.Data_.default())))
         buf = a_xdr.create_buf(pdu)
         print(buf.buf.hex(" "))
 
     def test_sequence_of_Data(self):
         sofData = a_xdr.get_sequence_of(c_pdu.Data)
-        data = sofData.from_str("3:1;3:0")
+        data = sofData.parse("3:1;3:0")
         print(data)
 
     def test_WriteRequest(self):
@@ -277,11 +277,11 @@ class TestType(unittest.TestCase):
             invoke_id_and_priority=c_pdu.InvokeIdAndPriority.from_int(10),
             cosem_attribute_descriptor=c_pdu.CosemAttributeDescriptor.from_elements(
                 class_id=c_pdu.CosemClassId.from_int(8),
-                instance_id=c_pdu.CosemObjectInstanceId.from_str("00 00 01 00 00 ff"),
+                instance_id=c_pdu.CosemObjectInstanceId.parse("00 00 01 00 00 ff"),
                 attribute_id=c_pdu.CosemObjectAttributeId.from_int(2)),
             access_selection=c_pdu.SelectiveAccessDescriptorOptional.default(),
             value_=c_pdu.Data(
-                c_pdu.Unsigned.from_str("4")
+                c_pdu.Unsigned.parse("4")
             ))
         pdu = c_pdu.XDLMSAPDU(c_pdu.setRequest(s_r_n))
         buf = a_xdr.create_buf(pdu)
@@ -291,18 +291,18 @@ class TestType(unittest.TestCase):
     def test_AccessRequest(self):
         a_r = c_pdu.accessRequest.from_elements(
             long_invoke_id_and_priority=c_pdu.LongInvokeIdAndPriority.from_int(1073741824),
-            date_time=a_xdr.OctetStringType.from_str(""),
+            date_time=a_xdr.OctetStringType.parse(""),
             access_request_body=c_pdu.AccessRequestBody.from_elements(
                 access_request_specification=c_pdu.ListOfAccessRequestSpecification((
                     c_pdu.AccessRequestSpecification(c_pdu.accessRequestGet.from_elements(
                         cosem_attribute_descriptor=c_pdu.CosemAttributeDescriptor.from_elements(
                             class_id=c_pdu.CosemClassId.from_int(8),
-                            instance_id=c_pdu.CosemObjectInstanceId.from_str("00 01 02 03 04 05"),
+                            instance_id=c_pdu.CosemObjectInstanceId.parse("00 01 02 03 04 05"),
                             attribute_id=c_pdu.CosemObjectAttributeId.from_int(2)),)),
                     c_pdu.AccessRequestSpecification(c_pdu.accessRequestSet.from_elements(
                         cosem_attribute_descriptor=c_pdu.CosemAttributeDescriptor.from_elements(
                             class_id=c_pdu.CosemClassId.from_int(8),
-                            instance_id=c_pdu.CosemObjectInstanceId.from_str("07 01 02 03 04 05"),
+                            instance_id=c_pdu.CosemObjectInstanceId.parse("07 01 02 03 04 05"),
                             attribute_id=c_pdu.CosemObjectAttributeId.from_int(3)),)),
                 )),
                 access_request_list_of_data=c_pdu.ListOfData((
