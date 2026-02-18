@@ -30,6 +30,8 @@ class ByteBuffer:
 
     def _check_space(self, space: int, pos: Optional[int] = None) -> None:
         """check whether this buffer has enough `space` left for r/w op"""
+        # if self.buf.readonly:
+        #     raise BufferError("Cannot write to readonly buffer")
         if pos is None:
             pos = self.__pos
         if self.remaining(pos) < space:
@@ -60,7 +62,7 @@ class ByteBuffer:
                   pos: int,
                   length: Optional[int] = None) -> int:
         """keep data to position, return length data"""
-        if not length:
+        if length is None:
             length = len(value)
         self._check_space(length, pos)
         self.buf[pos: pos + length] = value
@@ -102,7 +104,7 @@ class ByteBuffer:
         return self.__class__(self.buf[self.__pos:])
 
     def frozen(self) -> Self:
-        """return instance with not writable buffer"""
+        """Allocate a new ByteBuffer with a zero-initialized buffer of given size"""
         return self.__class__(memoryview(bytes(self)))
 
     def __len__(self) -> int:
@@ -127,3 +129,41 @@ class ByteBuffer:
         """shift and return old position"""
         self.set_pos((ret := self.__pos) + value)
         return ret
+    
+    def peek(self, length: int = 1) -> memoryview:
+        return self.read_pos(self.__pos, length)
+
+    def shift_right(self, pos: int, length: int, step: int) -> int:
+        """
+        Shift data in the buffer right by `step` bytes.
+        
+        Args:
+            pos: starting position of data to shift
+            length: length of data to shift
+            step: shift amount (positive integer)
+        
+        Returns:
+            int: next position after shifted data (pos + length + step)
+        
+        Raises:
+            ValueError: if parameters are invalid
+            BufferError: if there's not enough space in buffer
+        """
+        # Validate parameters
+        if step < 0:
+            raise ValueError(f"Step must be non-negative, got {step}")
+        if length < 0:
+            raise ValueError(f"Length must be non-negative, got {length}")
+        if pos < 0 or pos > len(self.buf):
+            raise ValueError(f"Position {pos} out of range [0, {len(self.buf)}]")
+        # Nothing to shift or zero shift - just return next position
+        if length == 0 or step == 0:
+            return pos + length
+        # Check if shifted data fits in buffer
+        if pos + length + step > len(self.buf):
+            raise BufferError(f"Not enough space: need {pos + length + step}, have {len(self.buf)}")
+        # Write data to new position
+        for i in range(length - 1, -1, -1):
+            self.buf[pos + step + i] = self.buf[pos + i]
+        # Return next position after shifted data
+        return pos + length + step

@@ -39,12 +39,14 @@ class TestNamedBitList(unittest.TestCase):
     """Тесты для NamedBitList"""
     
     def setUp(self):
-        self.bits_dict = {
-            "read": 0,
-            "write": 1,
-            "execute": 2
-        }
-        self.named_bits = NamedBitList.from_dict(self.bits_dict)
+        class MyNamedBitList(NamedBitList):
+            bits = (
+                NamedBit("read", 0),
+                NamedBit("write", 1),
+                NamedBit("execute", 2)
+            )
+
+        self.named_bits = MyNamedBitList()
     
     def test_from_dict(self):
         """Создание NamedBitList из словаря"""
@@ -65,7 +67,14 @@ class TestNamedBitList(unittest.TestCase):
         self.assertEqual(mask, 0b111)  # биты 0,1,2 = 7
         
         # Тест с другими битами
-        bits2 = NamedBitList.from_dict({"flag0": 0, "flag2": 2, "flag5": 5})
+        class NamedBitList1(NamedBitList):
+            bits = (
+                NamedBit("flag0", 0),
+                NamedBit("flag2", 2),
+                NamedBit("flag5", 5),
+            )
+
+        bits2 = NamedBitList1()
         self.assertEqual(bits2.get_mask(), (1 << 0) | (1 << 2) | (1 << 5))
     
     def test_get_bit(self):
@@ -106,14 +115,20 @@ class TestNamedBitList(unittest.TestCase):
     def test_len(self):
         """Длина списка"""
         self.assertEqual(len(self.named_bits), 3)
-        self.assertEqual(len(NamedBitList.from_dict({})), 0)
+        class N(NamedBitList):
+            bits = tuple()
+        n = N()
+        self.assertEqual(len(n), 0)
     
     def test_str(self):
         """Строковое представление"""
         self.assertEqual(str(self.named_bits), "{read(0), write(1), execute(2)}")
-        
-        empty = NamedBitList.from_dict({})
-        self.assertEqual(str(empty), "{}")
+
+        class N(NamedBitList):
+            bits = tuple()
+        n = N()
+
+        self.assertEqual(str(n), "{}")
 
 
 # Создаем конкретные типы для тестирования

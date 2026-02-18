@@ -1,143 +1,160 @@
 from dataclasses import dataclass
-from math import log
-from typing import Self, Protocol
-from struct import Struct
+from typing import Self
 from . import x680
 from .byte_buffer import ByteBuffer
 
 
-_length1 = Struct("> B B")
-_length2 = Struct("> B H")
-_length4 = Struct("> B L")
+@dataclass(frozen=True)
+class Length(x680.ComponentEDV):
+    """
+    Length component (X.690 §8.1.3)
+    value: 
+        - >=0: definite length (octets)
+        - -1: indefinite form (EOC terminated)
+    """
+    value: int  # -1 = indefinite form
 
-
-class ComponentEDV(Protocol):
-    """Encoding data value component"""
-
-    def __len__(self) -> int:
-        """necessary length of encode in octets"""
-        ...
-
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> Self:
-        """constructor decoded value from buffer"""
-        ...
-
-    def put(self, buf: ByteBuffer) -> int:
-        """put encode definite length value to buffer"""
-        ...
-
-
-@dataclass
-class Length(ComponentEDV):
-    value: int
+    def __post_init__(self) -> None:
+        if self.value < -1:
+            raise ValueError(f"Invalid length value: {self.value}")
 
     def __len__(self) -> int:
-        """return of necessary length for allocating in buffer"""
-        if self.value < 0x80:
+        """Octets required for encoding (X.690 §8.1.3.4, §8.1.3.6)"""
+        if self.value == -1:  # Indefinite form
             return 1
-        if self.value < 0x1_00:
-            return 2
-        if self.value < 0x1_00_00:
-            return 3
-        if self.value < 0x1_00_00_00_00:
-            return 5
-        amount = int(log(self.value, 256)) + 1
-        return 1 + amount
+        if self.value < 0x80:  # Short definite form
+            return 1
+        # Long definite form: 1 (length-of-length) + minimal value bytes
+        num_value_bytes = (self.value.bit_length() + 7) // 8
+        return 1 + num_value_bytes
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
         """
-        return common element length from buffer, with increasing by decoding according to 8.1.3 Length octets ITU-T Rec. X.690 (07/2002)
-        \n0...: definite mode
-        \n-1: indefinite mode
+        Decode length per X.690 §8.1.3
+        Returns:
+            Length(n) for definite form (n >= 0)
+            Length(-1) for indefinite form
         """
-        define_length = buf.get_uint8()
-        if define_length & 0b10000000:
-            define_length &= 0b0_1111111
-            if define_length == 0b0_1111111:
-                return cls(-1)
-            return cls(buf.get_uint(define_length))
-        else:
-            return cls(define_length)
+        first = buf.get_uint8()
+        if not (first & 0x80):  # Short form: bits 7-1 = length
+            return cls(first)
+        length_of_length = first & 0x7F
+        if length_of_length == 0:  # Indefinite form marker (0x80)
+            return cls(-1)
+        # Long definite form: read 'length_of_length' bytes as big-endian integer
+        value = buf.get_uint(length_of_length)
+        return cls(value)
 
     def put(self, buf: ByteBuffer) -> int:
-        """ put length to buffer, increase position"""
-        if self.value < 0x80:
+        """Encode length per X.690 §8.1.3 (minimal octets required)"""
+        if self.value == -1:  # Indefinite form
+            return buf.put_uint8(0x80)
+        if self.value < 0x80:  # Short definite form
             return buf.put_uint8(self.value)
-        elif self.value < 0x1_00:
-            _length1.pack_into(buf.buf, 0,
-                               0x81, self.value)
-            return 2
-        elif self.value < 0x1_00_00:
-            _length2.pack_into(buf.buf, 0,
-                               0x82, self.value)
-            return 3
-        elif self.value < 0x1_00_00_00_00:
-            _length4.pack_into(buf.buf, 0,
-                               0x84, self.value)
-            return 5
-        else:
-            amount = int(log(self.value, 256)) + 1
-            ret: int = buf.put_uint8(0x80 + amount)
-            length: bytes = self.value.to_bytes(amount, byteorder='big')
-            return ret + buf.write(length)
+        # Long definite form: minimal octets for value
+        num_bytes = (self.value.bit_length() + 7) // 8
+        written = buf.put_uint8(0x80 | num_bytes)
+        value_bytes = self.value.to_bytes(num_bytes, byteorder='big')
+        return written + buf.write(value_bytes)
 
     def __str__(self) -> str:
-        return str(self.value)
+        return "indefinite" if self.value == -1 else str(self.value)
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        raise NotImplementedError("Tag hasn't contents")
+    
+    def put_contents(self, buf: ByteBuffer) -> int:
+        raise NotImplementedError("Tag hasn't contents")
 
 
-class Tag(ComponentEDV, x680.Tag):
+@dataclass(frozen=True)
+class Tag(x680.ComponentEDV, x680.Tag):
+    """
+    Tag component with BER-specific constructed flag (X.690 §8.1.2)
+    Extends x680.Tag with encoding-time metadata
+    """
+    class_number: int
+    constructed: bool = False  # Bit 6 per X.690 §8.1.2.5
+
     def __len__(self) -> int:
-        if self.class_number < 0b11111:
+        """Octets required for tag encoding (X.690 §8.1.2.2, §8.1.2.4)"""
+        if self.class_number < 0x1F:
             return 1
-        else:
-            ret = 1
-            value = self.class_number
-            while value:
-                value >>= 7
-                ret += 1
-            return ret
+        # High-tag-number form: 1 (initial octet) + minimal 7-bit chunks
+        chunks = 0
+        n = self.class_number
+        while n:
+            chunks += 1
+            n >>= 7
+        return 1 + chunks
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
-        """todo: add constructed handle"""
-        value = buf.get_uint8()
-        class_ = x680.Class(value & x680.Class.PRIVATE)
-        class_number = value & 0b0001_1111
-        if class_number == 0b0001_1111:
-            class_number = 0
+        """Decode tag per X.690 §8.1.2 (advances buffer position)"""
+        first = buf.get_uint8()
+        tag_class = x680.Class(first & x680.Class.PRIVATE)  # Bits 8-7
+        constructed = bool(first & 0x20)      # Bit 6
+        tag_number = first & 0x1F             # Bits 5-1
+        
+        # High-tag-number form (X.690 §8.1.2.4)
+        if tag_number == 0x1F:
+            tag_number = 0
             while True:
-                class_number <<= 7
-                value = buf.get_uint8()
-                class_number += value & 0b0111_1111
-                if (value & 0b1000_0000) == 0:
+                byte = buf.get_uint8()
+                tag_number = (tag_number << 7) | (byte & 0x7F)
+                if not (byte & 0x80):  # Last octet has bit 8 = 0
                     break
-        return cls(
-            class_number=class_number,
-            class_=class_)
+        return cls(class_number=tag_number, class_=tag_class, constructed=constructed)
 
     def put(self, buf: ByteBuffer) -> int:
-        if self.class_number < 0b0001_1111:
-            return buf.put_uint8(self.class_ + self.class_number)
-        else:
-            ret = buf.put_uint8(self.class_ | 0b0001_1111)
-            value = self.class_number
-            tmp: list[int] = []
-            while value:
-                tmp.append(value & 0b0111_1111)
-                value >>= 7
-            for it in range(len(tmp)-1, 0, -1):
-                tmp[it] = tmp[it] | 0b1000_0000
-            while tmp:
-                ret += buf.put_uint8(tmp.pop())
-            return ret
+        """Encode tag per X.690 §8.1.2 (minimal octets, sets constructed bit)"""
+        # Initial octet components
+        initial = self.class_
+        if self.constructed:
+            initial |= 0x20
+        
+        if self.class_number < 0x1F:
+            # Low-tag-number form (X.690 §8.1.2.2)
+            return buf.put_uint8(initial | self.class_number)
+        
+        # High-tag-number form (X.690 §8.1.2.4)
+        written = buf.put_uint8(initial | 0x1F)
+        
+        # Encode tag number in 7-bit chunks (MSB first, last chunk has bit 8=0)
+        chunks: list[int] = []
+        n = self.class_number
+        while n:
+            chunks.append(n & 0x7F)
+            n >>= 7
+        
+        # Reverse to get MSB first, set bit 8 on all but last chunk
+        chunks.reverse()
+        for i in range(len(chunks) - 1):
+            chunks[i] |= 0x80
+        
+        # Write chunks
+        for chunk in chunks:
+            written += buf.put_uint8(chunk)
+        return written
 
     def __str__(self) -> str:
-        return F"Class: {self.class_}, ClassNumber: {self.class_number}"
+        form = "constructed" if self.constructed else "primitive"
+        return f"Tag(class={self.class_.name}, number={self.class_number}, {form})"
 
-    def __eq__(self, other: Self) -> bool:
-        if self.class_number == other.class_number and self.class_ == other.class_:
-            return True
-        else:
-            return False
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Tag):
+            return NotImplemented
+        return (
+            self.class_number == other.class_number
+            and self.class_ == other.class_
+            and self.constructed == other.constructed
+        )
+   
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        raise NotImplementedError("Tag hasn't contents")
+    
+    def put_contents(self, buf: ByteBuffer) -> int:
+        raise NotImplementedError("Tag hasn't contents")

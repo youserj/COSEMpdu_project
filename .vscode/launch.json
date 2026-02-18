@@ -52,6 +52,23 @@
       }
 
     },
+            {
+      "name": "Python: test_BER",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_ber"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
     {
       "name": "Python: launch.py",
       "type": "debugpy",

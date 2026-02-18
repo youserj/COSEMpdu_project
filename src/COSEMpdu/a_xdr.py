@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import Self, ByteString
 from struct import pack, Struct
 from math import log, ceil
-from . import x680
-from . import asn1, x690, byte_buffer, ber
+from . import x680, x690_
+from . import asn1, byte_buffer, ber
 from .byte_buffer import ByteBuffer as Buf
 
 _empty = asn1.NullType.__slots__
@@ -19,7 +19,7 @@ def create_buf(value: x680.Type) -> Buf:
 
 
 @dataclass
-class Tag(x690.ComponentEDV, x680.Tag):
+class Tag(x690_.ComponentEDV, x680.Tag):
     """IEC 61334-6 2000 6.7 Tagged types"""
     def __len__(self) -> int:
         return 1
@@ -43,14 +43,14 @@ class Tag(x690.ComponentEDV, x680.Tag):
 
 class _StringCoder(asn1.SimpleType, ABC):
     def __len__(self) -> int:
-        return len(x690.Length(len(self.value))) + len(self.value)
+        return len(x690_.Length(len(self.value))) + len(self.value)
 
     @classmethod
     def get(cls, buf: Buf) -> Self:
-        return cls(buf.read(x690.Length.get(buf).value))
+        return cls(buf.read(x690_.Length.get(buf).value))
 
     def put(self, buf: Buf) -> int:
-        ret: int = x690.Length(len(self.value)).put(buf)
+        ret: int = x690_.Length(len(self.value)).put(buf)
         return ret + buf.write(self.value)
 
 
@@ -63,13 +63,13 @@ class BitStringType(x680.BitStringType):
     @classmethod
     def parse(cls, value: str) -> Self:
         """override asn.1"""
-        l = x690.Length(len(value))
+        l = x690_.Length(len(value))
         value = value + '0' * ((8 - l.value) % 8)
         return cls((l, bytes((int(value[count:(count + 8)], base=2) for count in range(0, l.value, 8)))))
 
     @classmethod
     def get(cls, buf: Buf) -> Self:
-        l: x690.Length = x690.Length.get(buf)
+        l: x690_.Length = x690_.Length.get(buf)
         return cls((l, buf.read(ceil(l.value / 8))))
 
     def put(self, buf: Buf) -> int:
@@ -82,7 +82,7 @@ class BitStringType(x680.BitStringType):
         return ret[:self.length.value]
 
     @property
-    def length(self) -> x690.Length:
+    def length(self) -> x690_.Length:
         return self.value[0]
 
     @property
@@ -227,14 +227,14 @@ class SequenceOfType(asn1.SequenceOfType, ABC):
     __slots__ = _value
 
     def __len__(self):
-        return len(x690.Length(len(self.value))) + sum(map(len, self.value))
+        return len(x690_.Length(len(self.value))) + sum(map(len, self.value))
 
     @classmethod
     def get(cls, buf: Buf) -> Self:
-        return cls(tuple(cls.Type.get(buf) for _ in range(x690.Length.get(buf).value)))
+        return cls(tuple(cls.Type.get(buf) for _ in range(x690_.Length.get(buf).value)))
 
     def put(self, buf: Buf) -> int:
-        ret: int = x690.Length(len(self.value)).put(buf)
+        ret: int = x690_.Length(len(self.value)).put(buf)
         return ret + sum((el.put(buf) for el in self.value))
 
 
@@ -290,7 +290,7 @@ class EXPLICIT(asn1.EXPLICIT, ABC):  # todo: make ALL
         # ret += buf.write(_tag2_buf.buf[:l1], l1)
 
         # variant 2(readable and slow)
-        ret += x690.Length(len(self.value)).put(buf)  # PROBLEM: decide len value each time
+        ret += x690_.Length(len(self.value)).put(buf)  # PROBLEM: decide len value each time
         ret += self.value.put(buf)
 
         # variant 3(right shift buffer)

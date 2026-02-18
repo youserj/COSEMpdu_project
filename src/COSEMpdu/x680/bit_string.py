@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional, Self, ClassVar, Protocol, runtime_checkable
-from .tag import Tag, UniversalClassTagAssignments
+from typing import Iterator, Optional, Self, ClassVar, Protocol, runtime_checkable, overload
 from .type import BuiltinType
 
 
@@ -21,18 +20,11 @@ class NamedBit:
         return 1 << self.position
 
 
-@dataclass
 class NamedBitList:
     """
     NamedBitList ::= NamedBit | NamedBitList "," NamedBit
     """
-    bits: tuple[NamedBit, ...]
-
-    @classmethod
-    def from_dict(cls, bits: dict[str, int]) -> Self:
-        """Создать из словаря {имя: позиция}"""
-        named_bits = tuple(NamedBit(name, pos) for name, pos in bits.items())
-        return cls(named_bits)
+    bits: ClassVar[tuple[NamedBit, ...]]
 
     def get_mask(self) -> int:
         """Битовая маска всех именованных битов"""
@@ -80,7 +72,6 @@ class BitStringType(BuiltinType, Protocol):
         Status ::= BIT STRING { read(0), write(1), execute(2) }
         Bits ::= BIT STRING { flag0(0), flag1(1), flag2(2) } (SIZE(4))
     """
-    tag: ClassVar[Tag] = Tag(UniversalClassTagAssignments.BitString)
     named_bits: ClassVar[Optional[NamedBitList]] = None  # ← ClassVar!
     value: tuple[int, ...]  # биты в порядке LSB0: (bit0, bit1, bit2, ...)
 
@@ -166,6 +157,12 @@ class BitStringType(BuiltinType, Protocol):
     def octet_length(self) -> int:
         """Длина в октетах (с округлением вверх)"""
         return (len(self.value) + 7) // 8
+
+    @overload
+    def __getitem__(self, key: int | str) -> int: ...
+
+    @overload
+    def __getitem__(self, key: slice) -> Self: ...
 
     def __getitem__(self, key: int | str | slice) -> int | Self:
         """

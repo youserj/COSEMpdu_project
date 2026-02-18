@@ -1,5 +1,5 @@
 from typing import Self, Union, TypeAlias
-from . import asn1, a_xdr, ber, x690
+from . import asn1, a_xdr, ber, x690_
 from .byte_buffer import ByteBuffer as Buf
 
 _value = a_xdr._value
@@ -240,7 +240,7 @@ class AnnotationSequenceOfData(asn1.AnnotationGetterMixin, SequenceOfData):
     def get(cls, buf: Buf) -> Self:
         if (length := len(cls.__annotations__)) == 0:
             return super().get(buf)
-        elif length != (l := x690.Length.get(buf).value):
+        elif length != (l := x690_.Length.get(buf).value):
             raise ValueError(F"got {cls.__name__} length={l}, expected {len(cls.__annotations__)}")
         else:
             ret = list()
@@ -309,7 +309,7 @@ class OptionalProposedQualityOfService(a_xdr.Optional, ProposedQualityOfService)
 # todo: wrong realization
 class Conformance(ber.BitStringType, asn1.IMPLICIT):
     __slots__ = _value
-    Tag = x690.Tag(31, asn1.Class.APPLICATION)
+    Tag = x690_.Tag(31, asn1.Class.APPLICATION)
     # {
     #     -- the bit is set when the corresponding service or functionality is available
     #     reserved-zero                      (0),
