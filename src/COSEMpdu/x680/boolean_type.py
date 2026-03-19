@@ -1,22 +1,23 @@
 from dataclasses import dataclass
-from typing import Protocol
-from .type import BuiltinType
+from typing import Any
+from .type import BuiltinType, BOOLEAN, Constraint, TYPE_VALUE, SEQUENCE_OF, Type
 
 
 @dataclass
-class BooleanType(BuiltinType, Protocol):
+class BooleanType(BuiltinType):
     """
     BOOLEAN type (X.680 §17)
     NATIVE REPRESENTATION: bool
     """
-    value: bool
+    value: BOOLEAN
+
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
 
     def __bool__(self) -> bool:
-        """Прямое преобразование в Python bool"""
         return self.value
 
     def __str__(self) -> str:
-        """ASN.1 textual representation: TRUE / FALSE"""
         return "TRUE" if self.value else "FALSE"
 
     def __repr__(self) -> str:

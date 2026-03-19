@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from typing import Protocol
-from .type import BuiltinType
+from typing import Self, Any
+from .type import BuiltinType, OCTET_STRING, Constraint, TYPE_VALUE, Type, SEQUENCE_OF, SizeConstraint
 
 
 @dataclass
-class OctetStringType(BuiltinType, Protocol):
+class OctetStringType(BuiltinType):
     """
     OCTET STRING type (X.680 §22, X.690 §8.7)
     NATIVE REPRESENTATION: bytes
@@ -18,7 +18,14 @@ class OctetStringType(BuiltinType, Protocol):
     - Values: arbitrary sequence of octets (X.680 §6.3.49)
     - XML notation: <OCTET_STRING>hex</OCTET_STRING> (X.680 Table 4)
     """
-    value: bytes  # immutable sequence of octets (0-255)
+    value: OCTET_STRING
+
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        if (
+            isinstance(constraint.constraint_spec, SizeConstraint)
+            and not constraint.constraint_spec.contains(len(self.value))
+        ):
+            raise ValueError(f"got {len(self.value)}, expected {constraint.constraint_spec}")
 
     def __len__(self) -> int:
         """Length in octets (X.680 §22.6)"""
@@ -38,3 +45,7 @@ class OctetStringType(BuiltinType, Protocol):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(b'{self.value.hex()}')"
+    
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(b"")

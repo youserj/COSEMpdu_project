@@ -123,28 +123,27 @@ class ByteBuffer:
         elif 0 <= index < len_:
             self.__pos = index
         else:
-            raise IndexError(F"{self} can't set {index=}")
+            raise BufferError(f"overflow, {self} can't set {index=}")
 
     def shift_pos(self, value: int) -> int:
         """shift and return old position"""
         self.set_pos((ret := self.__pos) + value)
         return ret
-    
+
     def peek(self, length: int = 1) -> memoryview:
         return self.read_pos(self.__pos, length)
 
     def shift_right(self, pos: int, length: int, step: int) -> int:
         """
         Shift data in the buffer right by `step` bytes.
-        
+
         Args:
             pos: starting position of data to shift
             length: length of data to shift
             step: shift amount (positive integer)
-        
+
         Returns:
             int: next position after shifted data (pos + length + step)
-        
         Raises:
             ValueError: if parameters are invalid
             BufferError: if there's not enough space in buffer
@@ -167,3 +166,21 @@ class ByteBuffer:
             self.buf[pos + step + i] = self.buf[pos + i]
         # Return next position after shifted data
         return pos + length + step
+
+    def extract(self) -> Self:
+        """
+        Return new ByteBuffer with data from start to current position.
+
+        This is useful for getting the data that has been 'consumed' or 'read'
+        from the buffer up to the current position.
+
+        Returns:
+            Self: New ByteBuffer instance containing data[0:__pos]
+
+        Example:
+            >>> buf = ByteBuffer.allocate(15)
+            >>> buf.write(b'Hello World')
+            >>> buf.set_pos(5)  # position now at 5
+            >>> extracted = buf.extract()  # contains b'Hello'
+        """
+        return self.__class__(self.buf[:self.__pos])

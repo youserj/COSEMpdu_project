@@ -52,7 +52,7 @@
       }
 
     },
-            {
+    {
       "name": "Python: test_BER",
       "type": "debugpy",
       "request": "launch",
@@ -68,6 +68,122 @@
             "PYTHONPATH": "${workspaceFolder}/src"
       }
 
+    },
+    {
+      "name": "Python: test_constraint",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_constraint"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
+    {
+      "name": "Python: test_axdr",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_axdr"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
+    {
+      "name": "test ACSE-PDU",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_acse_pdu"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
+    {
+      "name": "test service-error",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_service_error"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
+    {
+      "name": "test Data",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_data"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+    },
+    {
+      "name": "test x690",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_x690"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+    },
+    {
+      "name": "test types used",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_types_used"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
     },
     {
       "name": "Python: launch.py",

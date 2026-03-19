@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol, Self
+from typing import Self
 from enum import IntEnum
 from ..byte_buffer import ByteBuffer
 
@@ -49,8 +49,8 @@ class Class(IntEnum):
     PRIVATE = 0b11_000000
 
 
-@dataclass(frozen=True)
-class Tag(Protocol):
+@dataclass
+class Tag:
     """
     ASN.1 tag (X.680 31.2)
     A tag consists of:
@@ -104,25 +104,3 @@ class Tag(Protocol):
 
     def __int__(self) -> int:
         return self.class_number
-    
-    def validate(self, buf: ByteBuffer) -> None:
-        """Decode and validate tag against this instance"""
-        decoded = self.get(buf)
-        if decoded.class_number != self.class_number:
-            raise ValueError(
-                f"Expected tag {self.class_number}, got {decoded.class_number}"
-            )
-        if decoded.class_ != self.class_:
-            raise ValueError(
-                f"Expected class {self.class_.name}, got {decoded.class_.name}"
-            )
-
-
-    def put(self, buf: ByteBuffer) -> int:
-        """Encode tag per X.690 §8.1.2 (minimal octets, sets constructed bit)"""
-        ...
-
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> Self:
-        """Decode tag per X.690 §8.1.2 (advances buffer position)"""
-        ...

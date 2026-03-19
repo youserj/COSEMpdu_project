@@ -1,11 +1,12 @@
-from dataclasses import dataclass
-from typing import Self
+from dataclasses import dataclass, field
+from typing import ClassVar, Self
 from . import x680
+from .x680.type import EDTLV
 from .byte_buffer import ByteBuffer
 
 
-@dataclass(frozen=True)
-class Length(x680.ComponentEDV):
+@dataclass
+class Length(EDTLV):
     """
     Length component (X.690 §8.1.3)
     value: 
@@ -61,34 +62,32 @@ class Length(x680.ComponentEDV):
     def __str__(self) -> str:
         return "indefinite" if self.value == -1 else str(self.value)
 
-    @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
-        raise NotImplementedError("Tag hasn't contents")
-    
-    def put_contents(self, buf: ByteBuffer) -> int:
-        raise NotImplementedError("Tag hasn't contents")
 
-
-@dataclass(frozen=True)
-class Tag(x680.ComponentEDV, x680.Tag):
+@dataclass
+class Tag(EDTLV, x680.Tag):
     """
     Tag component with BER-specific constructed flag (X.690 §8.1.2)
     Extends x680.Tag with encoding-time metadata
     """
-    class_number: int
+    # class_number: int
     constructed: bool = False  # Bit 6 per X.690 §8.1.2.5
+    _hash_cache: int = field(init=False, repr=False, default=0)
 
-    def __len__(self) -> int:
-        """Octets required for tag encoding (X.690 §8.1.2.2, §8.1.2.4)"""
-        if self.class_number < 0x1F:
-            return 1
-        # High-tag-number form: 1 (initial octet) + minimal 7-bit chunks
-        chunks = 0
-        n = self.class_number
-        while n:
-            chunks += 1
-            n >>= 7
-        return 1 + chunks
+    def __post_init__(self) -> None:
+        # Вычисляем хэш один раз при создании
+        object.__setattr__(self, '_hash_cache', 
+            hash((self.class_, self.class_number, self.constructed)))
+        object.__setattr__(self, '_hash_computed', True)
+
+    def validate(self, buf: ByteBuffer) -> None:
+        pos = buf.get_pos()
+        tag = self.get(buf)
+        if tag.class_number != self.class_number:
+            buf.set_pos(pos)
+            raise ValueError(f"Expected tag {self.class_number}, got {tag.class_number}")
+        if tag.class_ != self.class_:
+            buf.set_pos(pos)
+            raise ValueError(f"Expected class {self.class_.name}, got {tag.class_.name}")
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
@@ -151,10 +150,10 @@ class Tag(x680.ComponentEDV, x680.Tag):
             and self.class_ == other.class_
             and self.constructed == other.constructed
         )
-   
-    @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
-        raise NotImplementedError("Tag hasn't contents")
-    
-    def put_contents(self, buf: ByteBuffer) -> int:
-        raise NotImplementedError("Tag hasn't contents")
+
+    def __hash__(self) -> int:
+        """
+        Efficient hash for Choice alternative lookup.
+        Combines class (2 bits), constructed flag (1 bit), and number.
+        """
+        return self._hash_cache

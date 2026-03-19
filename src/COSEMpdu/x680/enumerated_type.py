@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Optional, Self, Protocol
-from .type import BuiltinType
+from typing import ClassVar, Iterator, Optional, Self, Any, Literal
+from .type import BuiltinType, INTEGER, Constraint
 
 
 @dataclass(frozen=True)
@@ -20,13 +20,13 @@ class EnumerationList:
     """
     EnumerationList ::= EnumerationItem | EnumerationList "," EnumerationItem
     Base container for enumeration members (X.680 §19). Subclasses define `members` ClassVar.
-    
+
     Supports:
     - Lookup by identifier (str) → value (int)
     - Lookup by value (int) → identifier (str)
     - Membership checks for both
     """
-    members: ClassVar[tuple[EnumerationMember, ...]] = ()
+    members: ClassVar[tuple[EnumerationMember, ...]]
 
     def get_value(self, identifier: str) -> Optional[int]:
         """Get integer value for identifier (X.680 §19.8)."""
@@ -57,12 +57,12 @@ class EnumerationList:
         return "{" + ", ".join(str(m) for m in self.members) + "}"
 
 
-@dataclass
-class EnumeratedType(BuiltinType, Protocol):
+@dataclass(frozen=True)
+class EnumeratedType(BuiltinType):
     """
     ENUMERATED type (X.680 §19)
     NATIVE REPRESENTATION: int (non-negative enumeration index)
-    
+
     Subclassing pattern (matches BitStringType.named_bits pattern):
         class AccessResultMembers(EnumerationList):
             members: ClassVar[tuple[EnumerationMember, ...]] = (
@@ -70,10 +70,10 @@ class EnumeratedType(BuiltinType, Protocol):
                 EnumerationMember("object-undefined", 1),
                 EnumerationMember("access-violated", 5),  # non-contiguous allowed
             )
-        
+
         class AccessResult(EnumeratedType):
             named_members: ClassVar[EnumerationList] = AccessResultMembers()
-    
+
     Standards compliance:
     - Values: non-negative integers (X.680 §19.3, §19.6)
     - Tag: UNIVERSAL 10 (X.680 §19.7)
@@ -82,11 +82,10 @@ class EnumeratedType(BuiltinType, Protocol):
     - Supports NamedNumber syntax (identifier "(" number ")") and implicit numbering
     """
     named_members: ClassVar[Optional[EnumerationList]] = None
-    value: int  # enumeration index
+    value: INTEGER
 
-    def __int__(self) -> int:
-        """Return enumeration index (required for codec implementations)."""
-        return self.value
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
 
     def __str__(self) -> str:
         """
@@ -99,6 +98,11 @@ class EnumeratedType(BuiltinType, Protocol):
         return str(self.value)
 
     def __repr__(self) -> str:
+        if (
+            self.named_members
+            and (name := self.named_members.get_identifier(self.value))
+        ):
+            return f"{self.__class__.__name__}.{name.upper()}"
         return f"{self.__class__.__name__}({self.value})"
 
     @property
@@ -117,3 +121,7 @@ class EnumeratedType(BuiltinType, Protocol):
         if (val := cls.named_members.get_value(identifier)) is None:
             raise KeyError(f"Identifier '{identifier}' not found in {cls.__name__}")
         return cls(val)
+
+    def __int__(self) -> int:
+        """Native integer conversion (required for codec implementations)."""
+        return self.value

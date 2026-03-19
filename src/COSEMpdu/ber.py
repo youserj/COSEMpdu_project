@@ -1,13 +1,109 @@
 # src/COSEMpdu/x690/bit_string.py
 from dataclasses import dataclass
-from typing import ClassVar, Self, Iterator
+from typing import ClassVar, Self, cast, Optional
+from COSEMpdu.x680.type import SEQUENCE_OF, Type, NamedType, Constraint, OBJECT_IDENTIFIER
 from . import x680
+from .x680 import TaggingMode, UniversalClassTagAssignments
 from .byte_buffer import ByteBuffer
 from .x690 import Tag, Length
 
 
+class EDV(x680.EDV):
+    tag: ClassVar[Tag]
+
+    @classmethod
+    def get(cls, buf: ByteBuffer) -> Self:
+        """Decode with Tag + Length + Contents"""
+        cls.tag.validate(buf)
+        ret = cls.get_contents(buf)  # Then decode length + contents
+        if isinstance(cls.constraint, Constraint):
+            ret.check_constraint(cls.constraint)
+        return ret
+
+    def put(self, buf: ByteBuffer) -> int:
+        """Encode with Tag + Length + Contents"""
+        return self.tag.put(buf) + self.put_contents(buf)
+
+
 @dataclass
-class BitStringType(x680.BitStringType):
+class TaggedType(EDV, x680.TaggedType):
+    tag: ClassVar[Tag]
+
+    def is_explicit(self) -> bool:
+        """Check if this is an explicit tag (X.680 §30.6)"""
+        if self.mode == x680.TaggingMode.DEFAULT:
+            return True  # Default is EXPLICIT
+        return self.mode == x680.TaggingMode.EXPLICIT
+
+    @classmethod
+    def is_implicit(cls) -> bool:
+        """Check if this is an implicit tag (X.680 §30.6)"""
+        return cls.mode == x680.TaggingMode.IMPLICIT
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        if cls.is_implicit():
+            value = cls.type_.get_contents(buf)  # IMPLICIT: decode base type contents directly (no inner tag)
+        else:
+            length = Length.get(buf)  # EXPLICIT: decode length, then complete base encoding (TLV)
+            if length.value == -1:
+                raise ValueError("Indefinite length not supported for tagged types")
+            # Decode inner value (with its own tag)
+            value = cls.type_.get(buf)
+        return cls(value)
+
+    def __str__(self) -> str:
+        """ASN.1 notation representation"""
+        mode_str = ""
+        if self.mode == TaggingMode.IMPLICIT:
+            mode_str = "IMPLICIT"
+        elif self.mode == TaggingMode.EXPLICIT:
+            mode_str = "EXPLICIT"
+        return f"[{int(self.tag)}] {mode_str} {self.type_.__name__}"
+
+    def put(self, buf: ByteBuffer) -> int:
+        """
+        Encode tagged type per X.690 §8.14
+        
+        Returns number of bytes written.
+        
+        X.690 §8.14:
+        - IMPLICIT: encode outer tag + base type contents (no inner tag)
+        - EXPLICIT: encode outer tag (constructed) + length + complete base encoding
+        """
+        # Encode the outer tag
+        if self.is_explicit():
+            # EXPLICIT: always constructed (X.690 §8.14.2)
+            tag_to_encode = Tag(
+                class_number=self.tag.class_number,
+                class_=self.tag.class_,
+                constructed=True
+            )
+        else:
+            # IMPLICIT: preserve base type's constructed flag
+            tag_to_encode = self.tag
+        return tag_to_encode.put(buf) + self.put_contents(buf)
+
+    def put_contents(self, buf: ByteBuffer) -> int:
+        if self.is_explicit():
+            # EXPLICIT: encode complete base encoding as contents
+            l_pos: int = buf.shift_pos(1)
+            counter = self.value.put(buf)
+            length = Length(counter)
+            if (step := len(length) - 1) > 0:
+                end = buf.shift_right(l_pos + 1, counter, step)
+            else:
+                end = buf.get_pos()
+            buf.set_pos(l_pos)
+            length.put(buf)
+            buf.set_pos(end)
+            return step + 1 + counter
+        # IMPLICIT: encode base type contents only
+        return self.value.put_contents(buf)
+
+
+@dataclass
+class BitStringType(EDV, x680.BitStringType):
     """
     BIT STRING with BER encoding/decoding (X.690 §8.6)
     
@@ -78,17 +174,9 @@ class BitStringType(x680.BitStringType):
         # Write: tag + length + unused_bits + data
         return Length(1 + len(data_bytes)).put(buf) + buf.put_uint8(unused_bits) + buf.write(bytes(data_bytes))
 
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.6.2)
-        """
-        n = len(self.value)
-        padded_length = (n + 7) // 8
-        return 1 + len(Length(1 + padded_length)) + 1 + padded_length
-
 
 @dataclass
-class BooleanType(x680.BooleanType):
+class BooleanType(EDV, x680.BooleanType):
     """
     BOOLEAN with BER encoding/decoding (X.690 §8.2)
     
@@ -135,16 +223,77 @@ class BooleanType(x680.BooleanType):
         """
         # Write: tag + length(1) + content
         return Length(1).put(buf) + buf.put_uint8(0xFF if self.value else 0x00)
+
+
+@dataclass
+class GraphicString(EDV, x680.GraphicString):
+    """GRAPHIC STRING with BER encoding/decoding (X.690 §8.21)"""
+
+    # Cached BER tag instance (primitive form)
+    tag: ClassVar[Tag] = Tag(
+        class_number=x680.UniversalClassTagAssignments.GraphicString,
+        constructed=False
+    )
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        """
+        Decode GRAPHIC STRING contents only (no tag validation).
         
-    def __len__(self) -> int:
+        Used for:
+            - CHOICE alternatives (X.690 §8.13)
+            - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+        
+        Returns instance and advances buffer position.
         """
-        Return octets required for BER encoding (X.690 §8.2)
-        Always 3 bytes: Tag(1) + Length(1) + Content(1)
+        length = Length.get(buf)
+        if length.value < 0:
+            raise ValueError(
+                "Indefinite length form not supported for GRAPHIC STRING primitive"
+            )
+        if length.value == 0:
+            return cls(b"")
+        return cls(bytes(buf.read(length.value)))
+
+    def put_contents(self, buf: ByteBuffer) -> int:
         """
-        return 3
+        Encode GRAPHIC STRING contents only (no tag).
+        
+        Used for:
+            - CHOICE alternatives (X.690 §8.13)
+            - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+        
+        Returns number of bytes written.
+        """
+        return Length(len(self.value)).put(buf) + buf.write(self.value)
+
+    def __str__(self) -> str:
+        """
+        Human-readable string representation.
+        
+        Returns:
+            String representation of character content
+            
+        Note:
+            - May contain non-printable characters
+            - Use repr() for full byte representation
+        """
+        try:
+            # Attempt UTF-8 decoding for display
+            return self.value.decode("utf-8", errors="replace")
+        except Exception:
+            return repr(self.value)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.value!r})"
 
 
-class ChoiceType(x680.ChoiceType):
+def create_alternatives(values: tuple[NamedType[EDV], ...]) -> dict[Tag, NamedType[EDV]]:
+    return {value.type_.tag: value for value in values}
+
+
+@dataclass
+class ChoiceType(EDV, x680.ChoiceType):
     """
     CHOICE with BER encoding/decoding (X.690 §8.13)
     
@@ -161,42 +310,29 @@ class ChoiceType(x680.ChoiceType):
         - Tag identifies which alternative was selected
         - For DLMS/COSEM, alternatives use CONTEXT SPECIFIC class
     """
-    
-    # Class variable: defines available alternatives for this CHOICE type
-    alternatives: ClassVar[dict[int, type[x680.Type]]]
-    
+    alternatives: ClassVar[dict[Tag, NamedType[EDV]]]
+    value: EDV
+
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
         """
         Decode CHOICE from BER (X.690 §8.13)
         Returns instance with chosen alternative and advances buffer position.
         """
-        # Peek at tag to determine which alternative was chosen
-        tag_byte = buf.get_uint8()
-        
-        # Extract tag number from identifier octet (bits 5-1 for tag < 31)
-        # For CHOICE alternatives in DLMS, tag is typically context-specific 0-30
-        tag_number = tag_byte & 0x1F
-        
-        # Find the alternative type for this tag
-        if tag_number not in cls.alternatives:
-            raise ValueError(
-                f"CHOICE tag {tag_number} not in alternatives: "
-                f"{list(cls.alternatives.keys())}"
-            )
-        
-        alternative_type = cls.alternatives[tag_number]
-        
-        # Decode the alternative value using its own get() method
-        # This will consume the tag, length, and contents
-        value = alternative_type.get_contents(buf)
-        
-        return cls(
-            selected_tag=tag_number,
-            value=value,
-            class_=x680.Class.CONTEXT_SPECIFIC
-        )
-    
+        tag = Tag.get(buf)
+        if (n_t := cls.alternatives.get(tag)) is None:
+            raise ValueError(f"{tag=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
+        # tag_byte = buf.get_uint8()
+        # tag_number = tag_byte & 0x1F
+        # for n_t in cls.alternatives:
+        #     alternative_type = n_t.type_
+        #     if int(alternative_type.tag) == tag_number:
+        #         break
+        # else:
+        #     raise ValueError(f"Tag {tag_number} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives)))}")
+        value = n_t.type_.get_contents(buf)
+        return cls(value)
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         return cls.get(buf)
@@ -208,31 +344,20 @@ class ChoiceType(x680.ChoiceType):
         
         Encoding is identical to the chosen alternative type.
         """
-        # Verify the selected tag is valid for this CHOICE
-        if self.selected_tag not in self.alternatives:
-            raise ValueError(
-                f"Tag {self.selected_tag} not in alternatives: "
-                f"{list(self.alternatives.keys())}"
-            )
-        return Tag(
-            self.selected_tag, 
-            x680.Class.CONTEXT_SPECIFIC,
-            constructed=self.value.tag.constructed if isinstance(self.value, x680.Type) else False
-        ).put(buf) + self.value.put_contents(buf)
-    
+        return self.value.put(buf)
+
     def put_contents(self, buf: ByteBuffer) -> int:
         return self.put(buf)
-    
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.13)
-        Same as the chosen alternative type.
-        """
-        return len(self.value)
+
+    @property
+    def selected(self) -> str:
+        if (n_t := self.alternatives.get(self.value.tag)) is None:
+            raise ValueError(f"Value {self.value} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in self.alternatives.values())))}")
+        return n_t.identifier
 
 
-@dataclass
-class EnumeratedType(x680.EnumeratedType):
+@dataclass(frozen=True)
+class EnumeratedType(EDV, x680.EnumeratedType):
     """
     ENUMERATED with BER encoding/decoding (X.690 §8.4)
     
@@ -259,7 +384,7 @@ class EnumeratedType(x680.EnumeratedType):
         class_number=x680.UniversalClassTagAssignments.Enumerated,
         constructed=False
     )
-    
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         """
@@ -277,7 +402,7 @@ class EnumeratedType(x680.EnumeratedType):
         if index & (1 << (length.value * 8 - 1)):
             index -= (1 << (length.value * 8))
         return cls(index)
-    
+
     def put_contents(self, buf: ByteBuffer) -> int:
         """
         Encode ENUMERATED to BER primitive form (X.690 §8.4)
@@ -298,28 +423,14 @@ class EnumeratedType(x680.EnumeratedType):
             # Ensure sign bit is 0 for positive values
             if value & (1 << (num_bytes * 8 - 1)):
                 num_bytes += 1
-        
+
         # Write: tag + length + content
-        content_bytes = value.to_bytes(num_bytes, byteorder='big')
+        content_bytes = value.to_bytes(num_bytes, byteorder="big")
         return Length(num_bytes).put(buf) + buf.write(content_bytes)
-    
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.4)
-        """
-        # Calculate minimal bytes for enumeration index
-        if self.value < 0:
-            num_bytes = (self.value.bit_length() // 8) + 1
-        else:
-            num_bytes = max(1, (self.value.bit_length() + 7) // 8)
-            # Check if sign bit would be set
-            if self.value & (1 << (num_bytes * 8 - 1)):
-                num_bytes += 1
-        return 1 + len(Length(num_bytes)) + num_bytes
 
 
 @dataclass
-class IntegerType(x680.IntegerType):
+class IntegerType(EDV, x680.IntegerType):
     """
     INTEGER with BER encoding/decoding (X.690 §8.3)
     
@@ -346,7 +457,7 @@ class IntegerType(x680.IntegerType):
         class_number=x680.UniversalClassTagAssignments.Integer,
         constructed=False
     )
-    
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         """
@@ -358,12 +469,12 @@ class IntegerType(x680.IntegerType):
             raise ValueError("Indefinite length form not supported for INTEGER")
         if length.value == 0:
             raise ValueError("INTEGER length must be >= 1")
-        
+
         # Read content octets as big-endian two's complement
         content = buf.read(length.value)
-        value = int.from_bytes(content, byteorder='big', signed=True)
+        value = int.from_bytes(content, byteorder="big", signed=True)
         return cls(value)
-    
+
     def put_contents(self, buf: ByteBuffer) -> int:
         """
         Encode INTEGER to BER primitive form (X.690 §8.3)
@@ -381,26 +492,14 @@ class IntegerType(x680.IntegerType):
             bit_length = self.value.bit_length()
             # Add 1 for sign bit, round up to full bytes
             num_bytes = (bit_length + 1 + 7) // 8
-            
-            # Convert to two's complement bytes
-            content_bytes = self.value.to_bytes(num_bytes, byteorder='big', signed=True)
-        return Length(len(content_bytes)).put(buf) + buf.write(content_bytes)
-    
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.3)
-        """
-        # Calculate content length
-        if self.value == 0:
-            content_length = 1
-        else:
-            bit_length = self.value.bit_length()
-            content_length = (bit_length + 1 + 7) // 8
-        return 1 + len(Length(content_length)) + content_length
-    
 
-@dataclass(frozen=True)
-class NullType(x680.NullType):
+            # Convert to two's complement bytes
+            content_bytes = self.value.to_bytes(num_bytes, byteorder="big", signed=True)
+        return Length(len(content_bytes)).put(buf) + buf.write(content_bytes)
+
+
+@dataclass
+class NullType(EDV, x680.NullType):
     """
     NULL with BER encoding/decoding (X.690 §8.8)
     
@@ -423,12 +522,11 @@ class NullType(x680.NullType):
         class_number=x680.UniversalClassTagAssignments.Null,
         constructed=False
     )
-    
+
     def __post_init__(self) -> None:
         """Validate NULL has no value (always null)"""
         # NULL type has no instance value - it's a singleton type
-        pass
-    
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         """
@@ -439,8 +537,8 @@ class NullType(x680.NullType):
         if length.value != 0:
             raise ValueError(f"NULL length must be 0, got {length.value}")
         # NULL has no contents - nothing to read
-        return cls()
-    
+        return cls(None)
+
     def put_contents(self, buf: ByteBuffer) -> int:
         """
         Encode NULL to BER primitive form (X.690 §8.8)
@@ -450,24 +548,134 @@ class NullType(x680.NullType):
             Tag(1) + Length(1) + Contents(0) = 2 bytes
         """
         return Length(0).put(buf)
-    
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.8)
-        Always 2 bytes: Tag(1) + Length(1) + Contents(0)
-        """
-        return 2
-    
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
-    
+
     def __eq__(self, other: object) -> bool:
         """All NULL values are equal"""
         return isinstance(other, NullType)
 
 
 @dataclass
-class OctetStringType(x680.OctetStringType):
+class ObjectIdentifierType(EDV, x680.ObjectIdentifierType):
+    """
+    OBJECT IDENTIFIER with BER encoding/decoding (X.690 §8.19).
+    
+    BER encoding structure:
+        [Tag=0x06] [Length] [Content]
+    
+    Content encoding:
+        - First two arcs: (arc0 * 40) + arc1 (single octet)
+        - Subsequent arcs: base-128 variable-length encoding
+          * Bit 8 = 1: more octets follow
+          * Bit 8 = 0: last octet of subidentifier
+          * Bits 7-1: value (MSB first)
+    
+    Example:
+        OID {1 0 1} (iso.standard.asn1):
+        - First two arcs: (1 * 40) + 0 = 40 = 0x28
+        - Third arc: 1 = 0x01
+        - Content: 0x28 0x01
+        - Full encoding: 0x06 0x02 0x28 0x01
+    
+    References:
+        - X.690 §8.19: Encoding of an object identifier value
+        - X.680 §31: Notation for the object identifier type
+        - ITU-T X.660 | ISO/IEC 9834-1: OID registration procedures
+    """
+
+    # Cached BER tag instance (primitive form)
+    tag: ClassVar[Tag] = Tag(
+        class_number=x680.UniversalClassTagAssignments.ObjectIdentifier,
+        constructed=False
+    )
+    value: OBJECT_IDENTIFIER
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        """
+        Decode OBJECT IDENTIFIER contents only (no tag validation).
+        
+        Used for:
+            - CHOICE alternatives (X.690 §8.13)
+            - Explicitly tagged types where outer tag already validated
+        
+        Returns instance and advances buffer position.
+        """
+        length = Length.get(buf)
+        if length.value < 0:
+            raise ValueError(
+                "Indefinite length form not supported for OBJECT IDENTIFIER"
+            )
+        if length.value == 0:
+            raise ValueError(
+                "OBJECT IDENTIFIER must have at least 1 content octet"
+            )
+        # Read all content octets
+        content = buf.read(length.value)
+        # Decode first octet (first two arcs)
+        first_octet = content[0]
+        arc0 = first_octet // 40
+        arc1 = first_octet % 40
+        arcs = [arc0, arc1]
+        # Decode remaining arcs (base-128 variable-length)
+        pos = 1
+        while pos < len(content):
+            arc_value = 0
+            while True:
+                if pos >= len(content):
+                    raise BufferError(
+                        "Truncated OBJECT IDENTIFIER encoding"
+                    )
+                octet = content[pos]
+                pos += 1
+                # Add 7 bits to arc value
+                arc_value = (arc_value << 7) | (octet & 0x7F)
+                # Check continuation bit
+                if not (octet & 0x80):
+                    break
+            arcs.append(arc_value)
+        return cls(tuple(arcs))
+
+    def put_contents(self, buf: ByteBuffer) -> int:
+        """
+        Encode OBJECT IDENTIFIER contents only (no tag).
+        
+        Used for:
+            - CHOICE alternatives (X.690 §8.13)
+            - Explicitly tagged types where outer tag already encoded
+        
+        Returns number of bytes written.
+        """
+        # Encode first two arcs as single octet
+        first_octet: int = (self.value[0] * 40) + self.value[1]
+        content_bytes = bytearray([first_octet])
+        # Encode remaining arcs (base-128 variable-length)
+        for arc in self.value[2:]:
+            if arc == 0:
+                content_bytes.append(0x00)
+            else:
+                # Calculate number of octets needed
+                arc_bits = arc.bit_length()
+                num_octets = (arc_bits + 6) // 7
+                # Encode in 7-bit chunks (MSB first)
+                chunks: list[int] = []
+                value = arc
+                for _ in range(num_octets):
+                    chunks.append(value & 0x7F)
+                    value >>= 7
+                # Reverse to get MSB first
+                chunks.reverse()
+                # Set continuation bit on all but last octet
+                for i in range(len(chunks) - 1):
+                    chunks[i] |= 0x80
+                content_bytes.extend(chunks)
+        return Length(len(content_bytes)).put(buf) + buf.write(bytes(content_bytes))
+
+
+@dataclass
+class OctetStringType(EDV, x680.OctetStringType):
     """
     OCTET STRING with BER encoding/decoding (X.690 §8.7)
     
@@ -490,7 +698,7 @@ class OctetStringType(x680.OctetStringType):
         class_number=x680.UniversalClassTagAssignments.OctetString,
         constructed=False
     )
-    
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         """
@@ -505,7 +713,7 @@ class OctetStringType(x680.OctetStringType):
             return cls(b"")
         data = bytes(buf.read(length.value))
         return cls(data)
-    
+
     def put_contents(self, buf: ByteBuffer) -> int:
         """
         Encode OCTET STRING to BER primitive form (X.690 §8.7.2)
@@ -517,17 +725,10 @@ class OctetStringType(x680.OctetStringType):
         """
         data = bytes(self.value)
         return Length(len(data)).put(buf) + buf.write(data)
-    
-    def __len__(self) -> int:
-        """
-        Return octets required for BER encoding (X.690 §8.7)
-        """
-        data_length = len(self.value)
-        return 1 + len(Length(data_length)) + data_length
 
 
-@dataclass(frozen=True)
-class SequenceType(x680.SequenceType):
+@dataclass
+class SequenceType(EDV, x680.SequenceType):
     """
     SEQUENCE with BER encoding/decoding (X.690 §8.9)
     
@@ -552,10 +753,7 @@ class SequenceType(x680.SequenceType):
         class_number=x680.UniversalClassTagAssignments.Sequence,
         constructed=True
     )
-    
-    # Class variable: defines component types for this SEQUENCE
-    components: ClassVar[dict[str, type[x680.UType]]]
-    
+
     @classmethod
     def get_contents(cls, buf: ByteBuffer) -> Self:
         """
@@ -567,29 +765,26 @@ class SequenceType(x680.SequenceType):
             raise ValueError("Indefinite length form not supported for SEQUENCE")
         # Read all component encodings within the length
         start_pos = buf.get_pos()
-        components_data: dict[str, type[x680.Type]] = {}
-        for name, comp_type in cls.components.items():
-            # Check if we've reached the end of the SEQUENCE contents
+        components_data: list[Optional[Type]] = []
+        for n_t in cls.components:
             if buf.get_pos() - start_pos >= length.value:
                 # Component is absent (OPTIONAL or DEFAULT)
-                components_data[name] = None
+                components_data.append(None)
                 continue
             # Decode the component using its own get() method
             # This handles tag, length, and contents for each component
             try:
-                value = comp_type.get(buf)
-                components_data[name] = value
+                value = n_t.type_.get(buf)
+                components_data.append(value)
             except ValueError:
                 # Component is absent (OPTIONAL or DEFAULT)
-                components_data[name] = None
-        return cls(**components_data)
-    
-    def __iter__(self) -> Iterator[x680.UType]:
-        for name in self.components.keys():
-            value = getattr(self, name, None)
-            if value is None:
-                raise ValueError(f"not find component {name} in {self}")
-            yield value
+                if isinstance(n_t, x680.OptionalNamedType):
+                    components_data.append(None)
+                elif isinstance(n_t, x680.DefaultNamedType):
+                    components_data.append(n_t.default)
+                else:
+                    raise ValueError(f"can't get {cls.__name__} from {buf}")
+        return cls(tuple(components_data))
 
     def put_contents(self, buf: ByteBuffer) -> int:
         """
@@ -603,32 +798,135 @@ class SequenceType(x680.SequenceType):
         """
         # Encode all present components
         counter: int = 0
-        start: int = buf.shift_pos(1)
-        for name in self.components.keys():
-            value = getattr(self, name, None)
+        l_pos: int = buf.shift_pos(1)
+        for value, n_t in zip(self.value, self.components):
+            if (
+                isinstance(n_t, x680.DefaultNamedType)
+                and value == n_t.default
+            ):
+                continue
             if value is None:
-                raise ValueError(f"not find component {name} in {self}")
+                if isinstance(n_t, x680.OptionalNamedType):
+                    continue
+                raise ValueError(f"Required component <{n_t.identifier}> not set")
             counter += value.put(buf)
         length = Length(counter)
-        if (step := len(length)) > 1:
-            end = buf.shift_right(start, counter, step)
+        if (step := len(length) - 1) > 0:
+            end = buf.shift_right(l_pos + 1, counter, step)
         else:
             end = buf.get_pos()
-        buf.set_pos(start)
+        buf.set_pos(l_pos)
         length.put(buf)
         buf.set_pos(end)
-        return step + counter
-    
-    def __len__(self) -> int:
+        return step + 1 + counter
+
+
+@dataclass
+class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
+    """
+    SEQUENCE OF with BER encoding/decoding (X.690 §8.10)
+    BER encoding structure (constructed form):
+        [Tag=0x30] [Length] [Component1] [Component2] ... [ComponentN]
+
+    Standards:
+        - Tag: UNIVERSAL 16 (X.680 §25.2, X.690 §8.10)
+        - Constructed encoding (always, X.690 §8.10.1)
+        - Components encoded in order of appearance (X.690 §8.10.3)
+        - IEC 61334-6 §6.10: DLMS/COSEM SEQUENCE OF usage
+
+    Note:
+        - Each component is encoded using its own BER encoding rules
+        - Length field covers all component encodings combined
+        - Empty sequence: Length = 0, no component encodings
+    """
+    # Class variable: universal tag for SEQUENCE OF (constructed)
+    # X.680 Table 1, X.690 §8.10.1: UNIVERSAL 16, constructed
+    tag: ClassVar[Tag] = Tag(
+        class_number=x680.UniversalClassTagAssignments.SequenceOf,
+        constructed=True
+    )
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
         """
-        Return octets required for BER encoding (X.690 §8.9)
+        Decode SEQUENCE OF from BER (X.690 §8.10)
+        Returns instance and advances buffer position.
         """
-        # Calculate total components length
-        components_length = 0
-        for name in self.components.keys():
-            value = getattr(self, name, None)
-            if value is not None:
-                components_length += len(value)
-        
-        # Tag(1) + Length(1+) + Components(n)
-        return 1 + len(Length(components_length)) + components_length
+        length = Length.get(buf)
+        if length.value < 0:
+            raise ValueError("Indefinite length form not supported for SEQUENCE OF")
+        if length.value == 0:
+            return cls([])
+        # Decode components until we've consumed all bytes
+        components: SEQUENCE_OF[T] = []
+        start_pos = buf.get_pos()
+        bytes_read = 0
+        while bytes_read < length.value:
+            # Decode next component using component type's get() method
+            component = cast("T", cls.component_type.get(buf))
+            components.append(component)
+
+            # Track bytes consumed
+            current_pos = buf.get_pos()
+            bytes_read = current_pos - start_pos
+
+        # Verify we consumed exactly the expected length
+        if bytes_read != length.value:
+            raise BufferError(
+                f"SEQUENCE OF decoded {bytes_read} bytes, expected {length.value}"
+            )
+
+        return cls(value=components)
+
+    def put_contents(self, buf: ByteBuffer) -> int:
+        """
+        Encode SEQUENCE OF to BER constructed form (X.690 §8.10)
+        Returns number of bytes written.
+        """
+        counter: int = 0
+        l_pos: int = buf.shift_pos(1)
+        for component in self.value:
+            counter += component.put(buf)
+        length = Length(counter)
+        if (step := len(length) - 1) > 0:
+            end = buf.shift_right(l_pos + 1, counter, step)
+        else:
+            end = buf.get_pos()
+        buf.set_pos(l_pos)
+        length.put(buf)
+        buf.set_pos(end)
+        return step + 1 + counter
+
+    @property
+    def is_empty(self) -> bool:
+        """Check if sequence contains no components"""
+        return len(self.value) == 0
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(component={self.component_type.__name__}, count={len(self.value)})"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SequenceOfType):
+            return False
+        return (
+            self.component_type == other.component_type and
+            self.value == other.value
+        )
+
+
+@dataclass
+class GeneralizedTime(EDV, x680.GeneralizedTime):
+    """GeneralizedTime with BER encoding (X.690 §8.23)"""
+    tag: ClassVar[Tag] = Tag(class_number=UniversalClassTagAssignments.GeneralizedTime, constructed=False)
+
+    @classmethod
+    def get_contents(cls, buf: ByteBuffer) -> Self:
+        """Decode GeneralizedTime from BER VisibleString"""
+        length = Length.get(buf)
+        data = buf.read(length.value).tobytes().decode("ascii")
+        return cls(data)
+
+    def put_contents(self, buf: ByteBuffer) -> int:
+        """Encode GeneralizedTime to BER VisibleString"""
+        data = self.value.encode("ascii")
+        return Length(len(data)).put(buf) + buf.write(data)

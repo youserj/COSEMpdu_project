@@ -1,7 +1,7 @@
 # src/COSEMpdu/x680/integer_type.py
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Optional, Self, Protocol
-from .type import BuiltinType
+from typing import ClassVar, Iterator, Optional, Self, Any, Protocol
+from .type import BuiltinType, ValueRange, Constraint, INTEGER, TYPE_VALUE, Type, SEQUENCE_OF
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class NamedNumber:
         return f"{self.identifier}({sign}{abs_val})"
 
 
+@dataclass
 class NamedNumberList:
     """
     NamedNumberList ::= NamedNumber | NamedNumberList "," NamedNumber
@@ -34,7 +35,7 @@ class NamedNumberList:
     - Lookup by value → identifier
     - Membership checks
     """
-    members: ClassVar[tuple[NamedNumber, ...]] = ()
+    members: tuple[NamedNumber, ...]
 
     def get_value(self, identifier: str) -> Optional[int]:
         """Get integer value for identifier (X.680 §18.10)."""
@@ -70,7 +71,7 @@ class IntegerType(BuiltinType, Protocol):
     """
     INTEGER type (X.680 §18)
     NATIVE REPRESENTATION: int (arbitrary precision)
-    
+
     Subclassing pattern (matches EnumeratedType.named_members):
         class AccessResultNumbers(NamedNumberList):
             members: ClassVar[tuple[NamedNumber, ...]] = (
@@ -78,10 +79,10 @@ class IntegerType(BuiltinType, Protocol):
                 NamedNumber("object-undefined", 1),
                 NamedNumber("access-violated", -5),  # negative allowed
             )
-        
+
         class AccessResult(IntegerType):
             named_numbers: ClassVar[NamedNumberList] = AccessResultNumbers()
-    
+
     Standards compliance:
     - Tag: UNIVERSAL 2 (X.680 §18.8)
     - Values: arbitrary precision integers (X.680 §3.6.41, §6.3.34)
@@ -90,11 +91,14 @@ class IntegerType(BuiltinType, Protocol):
     - A-XDR constraint: 0..255 for ENUMERATED (IEC 61334-6 §6.77), NOT for INTEGER
     """
     named_numbers: ClassVar[Optional[NamedNumberList]] = None
-    value: int  # arbitrary precision integer
+    value: INTEGER
 
-    def __int__(self) -> int:
-        """Native integer conversion (required for codec implementations)."""
-        return self.value
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        if isinstance(v_r := constraint.constraint_spec, ValueRange):
+            if not v_r.contains(self.value):
+                raise ValueError(f"Value {self.value!r} outside range [{v_r.lower_endpoint}..{v_r.upper_endpoint}]")
+            return
+        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
 
     def __str__(self) -> str:
         """
@@ -105,6 +109,10 @@ class IntegerType(BuiltinType, Protocol):
         if self.named_numbers and (ident := self.named_numbers.get_identifier(self.value)):
             return ident
         return str(self.value)
+
+    def __int__(self) -> int:
+        """Native integer conversion (required for codec implementations)."""
+        return self.value
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.value})"

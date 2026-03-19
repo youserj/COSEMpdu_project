@@ -10,12 +10,14 @@ Standards:
     - X.690 §8.13: CHOICE encoding rules (handled in x690)
     - IEC 61334-6 §6.6: DLMS/COSEM CHOICE usage
 """
-from typing import ClassVar, Optional
-from .tag import Class
-from .type import Type, UType
+from dataclasses import dataclass
+from typing import ClassVar, Any, Self
+from .tag import Tag
+from .type import Type, NamedType, BuiltinType, Constraint
 
 
-class ChoiceType(UType):
+@dataclass
+class ChoiceType(BuiltinType):
     """
     ASN.1 CHOICE type metadata (X.680 §28).
     
@@ -31,7 +33,6 @@ class ChoiceType(UType):
     Attributes:
         alternatives: Mapping of tag numbers to ASN.1 type classes (ClassVar)
         selected_tag: Tag number of the currently chosen alternative
-        class_: Tag class for alternatives (default CONTEXT_SPECIFIC)
     
     Note:
         - Encoding/decoding is handled in x690 module (BER)
@@ -40,58 +41,30 @@ class ChoiceType(UType):
     """
     
     # Class variable: defines available alternatives for this CHOICE type
-    alternatives: ClassVar[dict[int, type[Type]]]
-    
-    # Instance variables: which alternative was actually chosen
-    selected_tag: int
+    alternatives: ClassVar[dict[Tag, NamedType[Type]]]
     value: Type
-    class_: Class
-    
-    def __init__(
-        self,
-        selected_tag: int,
-        value: Type,
-        class_: Class = Class.CONTEXT_SPECIFIC
-    ) -> None:
-        """
-        Initialize CHOICE type instance.
-        
-        Args:
-            selected_tag: Tag number of the chosen alternative
-            class_: Tag class (default CONTEXT_SPECIFIC)
-        """
-        if selected_tag not in self.alternatives:
-            raise ValueError(
-                f"Tag {selected_tag} not in alternatives: "
-                f"{list(self.alternatives.keys())}"
-            )
-        self.selected_tag = selected_tag
-        self.class_ = class_
-        self.value = value
 
-    @property
-    def selected_alternative(self) -> int:
-        """Return the tag number of the selected alternative."""
-        return self.selected_tag
-    
-    @property
-    def alternative_value(self) -> Optional[Type]:
-        """Return the value of the selected alternative."""
-        return self.value
-    
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+       
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"tag={self.selected_tag}, "
-            f"class={self.class_.name}, "
             f"value={self.value!r})"
         )
     
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ChoiceType):
             return False
-        return (
-            self.selected_tag == other.selected_tag and
-            self.class_ == other.class_ and
-            self.value == other.value
-        )
+        return self.value == other.value
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}.{self.value}"
+
+    @classmethod
+    def from_id(cls, identifier: str, value: Type) -> Self:
+        for n_t in cls.alternatives.values():
+            if n_t.identifier == identifier:
+                return cls(n_t.type_(value))
+        else:
+            raise ValueError(f"{identifier=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")

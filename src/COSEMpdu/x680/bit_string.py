@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional, Self, ClassVar, Protocol, runtime_checkable, overload
-from .type import BuiltinType
+from typing import Iterator, Optional, Self, ClassVar, runtime_checkable, overload, Any
+from .type import BuiltinType, BIT_STRING, Constraint, TYPE_VALUE, Type, SEQUENCE_OF, SizeConstraint
 
 
 @dataclass(frozen=True)
@@ -20,11 +20,12 @@ class NamedBit:
         return 1 << self.position
 
 
+@dataclass
 class NamedBitList:
     """
     NamedBitList ::= NamedBit | NamedBitList "," NamedBit
     """
-    bits: ClassVar[tuple[NamedBit, ...]]
+    bits: tuple[NamedBit, ...]
 
     def get_mask(self) -> int:
         """Битовая маска всех именованных битов"""
@@ -60,9 +61,8 @@ class NamedBitList:
         return "{" + ", ".join(str(b) for b in self.bits) + "}"
 
 
-@runtime_checkable
 @dataclass
-class BitStringType(BuiltinType, Protocol):
+class BitStringType(BuiltinType):
     """
     BIT STRING type (X.680 22)
     NATIVE REPRESENTATION:
@@ -73,7 +73,14 @@ class BitStringType(BuiltinType, Protocol):
         Bits ::= BIT STRING { flag0(0), flag1(1), flag2(2) } (SIZE(4))
     """
     named_bits: ClassVar[Optional[NamedBitList]] = None  # ← ClassVar!
-    value: tuple[int, ...]  # биты в порядке LSB0: (bit0, bit1, bit2, ...)
+    value: BIT_STRING
+
+    def check_constraint(self, constraint: Constraint[Any]) -> None:
+        if (
+            isinstance(constraint.constraint_spec, SizeConstraint)
+            and not constraint.constraint_spec.contains(len(self.value))
+        ):
+            raise ValueError(f"got {len(self.value)}, expected {constraint.constraint_spec}")
 
     @classmethod
     def from_bin(cls, bin_str: str) -> Self:
