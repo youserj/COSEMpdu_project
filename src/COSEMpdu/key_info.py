@@ -4,6 +4,7 @@ from .x680.type import NamedType, OCTET_STRING
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.tagged_type import TaggingMode
 from . import axdr
+from .axdr import Type, ChoiceType, SequenceType, TaggedType, EnumeratedType, OctetStringType
 
 
 # =============================================================================
@@ -20,8 +21,8 @@ class KeyIdList(EnumerationList):
     )
 
 
-@dataclass
-class KeyId(axdr.EnumeratedType):
+@dataclass(frozen=True)
+class KeyId(EnumeratedType):
     """Key-Id"""
     named_members = KeyIdList()
 
@@ -34,8 +35,8 @@ class KekIdList(EnumerationList):
     )
 
 
-@dataclass
-class KekId(axdr.EnumeratedType):
+@dataclass(frozen=True)
+class KekId(EnumeratedType):
     """Kek-Id"""
     named_members = KekIdList()
 
@@ -45,7 +46,7 @@ class KekId(axdr.EnumeratedType):
 # =============================================================================
 
 @dataclass
-class IdentifiedKey(axdr.SequenceType):
+class IdentifiedKey(SequenceType):
     """Identified-Key"""
     components = (
         NamedType("key-id", KeyId),
@@ -53,16 +54,15 @@ class IdentifiedKey(axdr.SequenceType):
 
 
 @dataclass
-class IdentifiedKey0(axdr.TaggedType):
+class IdentifiedKey0(TaggedType[IdentifiedKey]):
     """[0] Identified-Key"""
     tag = 0
     mode = TaggingMode.IMPLICIT
-    type_ = IdentifiedKey
     value: IdentifiedKey
 
 
 @dataclass
-class WrappedKey(axdr.SequenceType):
+class WrappedKey(SequenceType):
     """Wrapped-Key"""
     components = (
         NamedType("kek-id", KekId),
@@ -71,29 +71,27 @@ class WrappedKey(axdr.SequenceType):
 
 
 @dataclass
-class WrappedKey1(axdr.TaggedType):
+class WrappedKey1(TaggedType[WrappedKey]):
     """[1] Wrapped-Key"""
     tag = 1
     mode = TaggingMode.IMPLICIT
-    type_ = WrappedKey
     value: WrappedKey
 
 
 @dataclass
-class AgreedKey(axdr.SequenceType):
+class AgreedKey(SequenceType):
     """Agreed-Key"""
     components = (
-        NamedType("key-parameters", axdr.OctetStringType),
-        NamedType("key-ciphered-data", axdr.OctetStringType),
+        NamedType("key-parameters", OctetStringType),
+        NamedType("key-ciphered-data", OctetStringType),
     )
 
 
 @dataclass
-class AgreedKey2(axdr.TaggedType):
+class AgreedKey2(TaggedType[AgreedKey]):
     """[2] Agreed-Key"""
     tag = 2
     mode = TaggingMode.IMPLICIT
-    type_ = AgreedKey
     value: AgreedKey
 
 
@@ -104,11 +102,11 @@ class AgreedKey2(axdr.TaggedType):
 @dataclass
 class KeyInfo(axdr.ChoiceType):
     """Key-Info"""
-    alternatives = axdr.create_alternatives((
-        NamedType("identified-key", IdentifiedKey0),
-        NamedType("wrapped-key", WrappedKey1),
-        NamedType("agreed-key", AgreedKey2),
-    ))
+    alternatives = {
+        0: NamedType("identified-key", IdentifiedKey0),
+        1: NamedType("wrapped-key", WrappedKey1),
+        2: NamedType("agreed-key", AgreedKey2)
+    }
 
     # Convenience constructors
     @classmethod

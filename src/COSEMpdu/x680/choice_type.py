@@ -11,48 +11,49 @@ Standards:
     - IEC 61334-6 §6.6: DLMS/COSEM CHOICE usage
 """
 from dataclasses import dataclass
-from typing import ClassVar, Any, Self
+from typing import ClassVar, Self
 from .tag import Tag
-from .type import Type, NamedType, BuiltinType, Constraint
+from .type import Type, NamedType, BuiltinType
 
 
 @dataclass
-class ChoiceType(BuiltinType):
+class ChoiceType[T: Type](BuiltinType):
     """
     ASN.1 CHOICE type metadata (X.680 §28).
-    
+
     CHOICE defines a type where exactly one alternative is present.
     This Protocol describes the structure without encoding logic.
-    
+
     Example ASN.1:
         Dummy_PDU ::= CHOICE {
             a [0] INTEGER,
             b [1] BYTE STRING (SIZE(4))
         }
-    
+
     Attributes:
         alternatives: Mapping of tag numbers to ASN.1 type classes (ClassVar)
         selected_tag: Tag number of the currently chosen alternative
-    
+
     Note:
         - Encoding/decoding is handled in x690 module (BER)
         - This Protocol only describes the abstract syntax structure
         - For IEC 61334-6, alternatives should be explicitly tagged
     """
-    
+
     # Class variable: defines available alternatives for this CHOICE type
     alternatives: ClassVar[dict[Tag, NamedType[Type]]]
-    value: Type
+    value: T
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
-       
+    @classmethod
+    def default(cls) -> Self:
+        return cls(cls.alternatives[next(iter(cls.alternatives))].type_.default())  # type: ignore
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
             f"value={self.value!r})"
         )
-    
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ChoiceType):
             return False

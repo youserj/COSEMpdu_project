@@ -3,7 +3,7 @@ from typing import Self
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.tagged_type import TaggingMode
 from .x680.type import NamedType
-from .axdr import create_alternatives
+from .axdr import create_alternatives, TaggedType
 from . import axdr
 
 
@@ -24,18 +24,18 @@ class ApplicationReferenceList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ApplicationReferenceEnum(axdr.EnumeratedType):
     """application-reference"""
     named_members = ApplicationReferenceList()
 
 
 @dataclass
-class ApplicationReference(axdr.TaggedType):
+class ApplicationReference(TaggedType[ApplicationReferenceEnum]):
     """application-reference"""
     tag = 0
     mode = TaggingMode.IMPLICIT
-    type_ = ApplicationReferenceEnum
+    value: ApplicationReferenceEnum
 
 
 # =============================================================================
@@ -53,18 +53,18 @@ class HardwareResourceList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class HardwareResourceEnum(axdr.EnumeratedType):
     """hardware-resource"""
     named_members = HardwareResourceList()
 
 
 @dataclass
-class HardwareResource(axdr.TaggedType):
+class HardwareResource(TaggedType[HardwareResourceEnum]):
     """hardware-resource"""
     tag = 1
     mode = TaggingMode.IMPLICIT
-    type_ = HardwareResourceEnum
+    value: HardwareResourceEnum
 
 
 # =============================================================================
@@ -82,18 +82,18 @@ class VDEStateErrorList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class VDEStateErrorEnum(axdr.EnumeratedType):
     """vde-state-error"""
     named_members = VDEStateErrorList()
 
 
 @dataclass
-class VDEStateError(axdr.TaggedType):
+class VDEStateError(TaggedType[VDEStateErrorEnum]):
     """vde-state-error"""
     tag = 2
     mode = TaggingMode.IMPLICIT
-    type_ = VDEStateErrorEnum
+    value: VDEStateErrorEnum
 
 
 # =============================================================================
@@ -109,18 +109,18 @@ class ServiceList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ServiceEnum(axdr.EnumeratedType):
     """service"""
     named_members = ServiceList()
 
 
 @dataclass
-class Service(axdr.TaggedType):
+class Service(TaggedType[ServiceEnum]):
     """service"""
     tag = 3
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceEnum
+    value: ServiceEnum
 
 
 # =============================================================================
@@ -137,18 +137,18 @@ class DefinitionList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class DefinitionEnum(axdr.EnumeratedType):
     """definition"""
     named_members = DefinitionList()
 
 
 @dataclass
-class Definition(axdr.TaggedType):
+class Definition(TaggedType[DefinitionEnum]):
     """definition"""
     tag = 4
     mode = TaggingMode.IMPLICIT
-    type_ = DefinitionEnum
+    value: DefinitionEnum
 
 
 # =============================================================================
@@ -166,18 +166,18 @@ class AccessList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class AccessEnum(axdr.EnumeratedType):
     """access"""
     named_members = AccessList()
 
 
 @dataclass
-class Access(axdr.TaggedType):
+class Access(TaggedType[AccessEnum]):
     """access"""
     tag = 5
     mode = TaggingMode.IMPLICIT
-    type_ = AccessEnum
+    value: AccessEnum
 
 
 # =============================================================================
@@ -195,18 +195,18 @@ class InitiateList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class InitiateEnum(axdr.EnumeratedType):
     """initiate"""
     named_members = InitiateList()
 
 
 @dataclass
-class Initiate(axdr.TaggedType):
+class Initiate(TaggedType[InitiateEnum]):
     """initiate"""
     tag = 6
     mode = TaggingMode.IMPLICIT
-    type_ = InitiateEnum
+    value: InitiateEnum
 
 
 # =============================================================================
@@ -227,18 +227,18 @@ class LoadDataSetList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoadDataSetEnum(axdr.EnumeratedType):
     """load-data-set"""
     named_members = LoadDataSetList()
 
 
 @dataclass
-class LoadDataSet(axdr.TaggedType):
+class LoadDataSet(TaggedType[LoadDataSetEnum]):
     """load-data-set"""
     tag = 7
     mode = TaggingMode.IMPLICIT
-    type_ = LoadDataSetEnum
+    value: LoadDataSetEnum
 
 
 # =============================================================================
@@ -256,42 +256,42 @@ class TaskList(EnumerationList):
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class TaskEnum(axdr.EnumeratedType):
     """task"""
     named_members = TaskList()
 
 
 @dataclass
-class Task(axdr.TaggedType):
+class Task(TaggedType[TaskEnum]):
     """task"""
     tag = 9
     mode = TaggingMode.IMPLICIT
-    type_ = TaskEnum
+    value: TaskEnum
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChangeScopeEnum(axdr.EnumeratedType): ...
 
 
 @dataclass
-class ChangeScope(axdr.TaggedType):
+class Changescope(TaggedType[ChangeScopeEnum]):
     """change-scope"""
     tag = 8
     mode = TaggingMode.IMPLICIT
-    type_ = ChangeScopeEnum
+    value: ChangeScopeEnum
 
 
-@dataclass
+@dataclass(frozen=True)
 class OtherEnum(axdr.EnumeratedType): ...
 
 
 @dataclass
-class Other(axdr.TaggedType):
+class Other(TaggedType[OtherEnum]):
     """Other"""
     tag = 10
     mode = TaggingMode.IMPLICIT
-    type_ = OtherEnum
+    value: OtherEnum
 
 
 # =============================================================================
@@ -301,7 +301,7 @@ class Other(axdr.TaggedType):
 @dataclass
 class ServiceError(axdr.ChoiceType):
     """ServiceError"""
-    alternatives = create_alternatives((
+    alternatives = create_alternatives(
         NamedType("application-reference", ApplicationReference),
         NamedType("hardware-resource", HardwareResource),
         NamedType("vde-state-error", VDEStateError),
@@ -310,10 +310,10 @@ class ServiceError(axdr.ChoiceType):
         NamedType("access", Access),
         NamedType("initiate", Initiate),
         NamedType("load-data-set", LoadDataSet),
-        NamedType("change-scope", ChangeScope),
+        NamedType("change-scope", Changescope),
         NamedType("task", Task),
         NamedType("other", Other),
-    ))
+    )
 
     @classmethod
     def access(cls, value: AccessEnum) -> Self:
@@ -321,161 +321,161 @@ class ServiceError(axdr.ChoiceType):
 
 
 @dataclass
-class InitiateError(axdr.TaggedType):
+class InitiateError(TaggedType[ServiceError]):
     """[1] ServiceError"""
     tag = 1
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class GetStatus(axdr.TaggedType):
+class GetStatus(TaggedType[ServiceError]):
     """[2] ServiceError"""
     tag = 2
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class GetNameList(axdr.TaggedType):
+class GetNameList(TaggedType[ServiceError]):
     """[3] ServiceError"""
     tag = 3
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class GetVariableAttribute(axdr.TaggedType):
+class GetVariableAttribute(TaggedType[ServiceError]):
     """[4] ServiceError"""
     tag = 4
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class Read(axdr.TaggedType):
+class Read(TaggedType[ServiceError]):
     """[5] ServiceError"""
     tag = 5
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class Write(axdr.TaggedType):
+class Write(TaggedType[ServiceError]):
     """[6] ServiceError"""
     tag = 6
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class GetDataSetAttribute(axdr.TaggedType):
+class GetDataSetAttribute(TaggedType[ServiceError]):
     """[7] ServiceError"""
     tag = 7
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class GetTIAttribute(axdr.TaggedType):
+class GetTIAttribute(TaggedType[ServiceError]):
     """[8] ServiceError"""
     tag = 8
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class ChangeScope(axdr.TaggedType):
+class ChangeScope(TaggedType[ServiceError]):
     """[9] ServiceError"""
     tag = 9
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class Start(axdr.TaggedType):
+class Start(TaggedType[ServiceError]):
     """[10] ServiceError"""
     tag = 10
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class Stop(axdr.TaggedType):
+class Stop(TaggedType[ServiceError]):
     """[11] ServiceError"""
     tag = 11
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class Resume(axdr.TaggedType):
+class Resume(TaggedType[ServiceError]):
     """[12] ServiceError"""
     tag = 12
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class MakeUsable(axdr.TaggedType):
+class MakeUsable(TaggedType[ServiceError]):
     """[13] ServiceError"""
     tag = 13
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class InitiateLoad(axdr.TaggedType):
+class InitiateLoad(TaggedType[ServiceError]):
     """[14] ServiceError"""
     tag = 14
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class LoadSegment(axdr.TaggedType):
+class LoadSegment(TaggedType[ServiceError]):
     """[15] ServiceError"""
     tag = 15
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class TerminateLoad(axdr.TaggedType):
+class TerminateLoad(TaggedType[ServiceError]):
     """[16] ServiceError"""
     tag = 16
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class InitiateUpLoad(axdr.TaggedType):
+class InitiateUpLoad(TaggedType[ServiceError]):
     """[17] ServiceError"""
     tag = 17
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class UpLoadSegment(axdr.TaggedType):
+class UpLoadSegment(TaggedType[ServiceError]):
     """[18] ServiceError"""
     tag = 18
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
-class TerminateUpLoad(axdr.TaggedType):
+class TerminateUpLoad(TaggedType[ServiceError]):
     """[19] ServiceError"""
     tag = 19
     mode = TaggingMode.IMPLICIT
-    type_ = ServiceError
+    value: ServiceError
 
 
 @dataclass
 class ConfirmedServiceError(axdr.ChoiceType):
     """ConfirmedServiceError"""
-    alternatives = create_alternatives((
+    alternatives = create_alternatives(
         NamedType("initiate-error", InitiateError),
         NamedType("get-status", GetStatus),
         NamedType("get-name-list", GetNameList),
@@ -495,7 +495,7 @@ class ConfirmedServiceError(axdr.ChoiceType):
         NamedType("initiate-upload", InitiateUpLoad),
         NamedType("upload-segment", UpLoadSegment),
         NamedType("terminate-upload", TerminateUpLoad),
-    ))
+    )
 
     @classmethod
     def initiate(cls, value: ServiceError) -> Self:

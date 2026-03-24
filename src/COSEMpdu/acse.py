@@ -4,7 +4,7 @@ Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COSEMpdu_GB83
 """
 from dataclasses import dataclass
-from re import X
+from re import A, M
 from typing import ClassVar, Self, Optional, override
 from . import x690
 from .x680 import (
@@ -21,6 +21,7 @@ from .x680 import (
 from . import axdr
 from . import ber
 from .x680.tag import Class
+from .ber import create_alternatives
 
 
 @dataclass
@@ -29,11 +30,11 @@ class ApplicationContextName(ber.ObjectIdentifierType):
 
 
 @dataclass
-class ApplicationContextName1(ber.TaggedType):
+class ApplicationContextName1(ber.TaggedType[ApplicationContextName]):
     """[1] Application-context-name"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = ApplicationContextName
+    value: ApplicationContextName
 
 
 @dataclass
@@ -68,24 +69,24 @@ class MechanismName(ber.ObjectIdentifierType):
 
 
 @dataclass
-class Charstring(ber.TaggedType):
+class Charstring(ber.TaggedType[ber.GraphicString]):
     """[0] IMPLICIT GraphicString"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = ber.GraphicString
+    value: ber.GraphicString
 
 @dataclass
-class BitString1(ber.TaggedType):
+class BitString1(ber.TaggedType[ber.BitStringType]):
     """ [1] IMPLICIT BIT STRING"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = ber.BitStringType
+    value: ber.BitStringType
 
 
 @dataclass
 class AuthenticationValue(ber.ChoiceType):
     """Authentication-value"""
-    alternatives = (
+    alternatives = ber.create_alternatives(
         NamedType("charstring", Charstring),
         NamedType("bitstring", BitString1)
     )
@@ -97,11 +98,11 @@ class ImplementationData(ber.GraphicString):
 
 
 @dataclass
-class ImplementationData29(ber.TaggedType):
+class ImplementationData29(ber.TaggedType[ImplementationData]):
     """[29] IMPLICIT Implementation-data"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=29)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = ImplementationData
+    value: ImplementationData
 
 
 @dataclass
@@ -110,11 +111,11 @@ class AssociationInformation(ber.OctetStringType):
 
 
 @dataclass
-class AssociationInformation30(ber.TaggedType):
+class AssociationInformation30(ber.TaggedType[AssociationInformation]):
     """[30] EXPLICIT Association-information"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=30)
     mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
-    type_: ClassVar[type[Type]] = AssociationInformation
+    value: AssociationInformation
 
 
 @dataclass
@@ -128,11 +129,11 @@ class AssociationResult(ber.IntegerType):
 
 
 @dataclass
-class Result(ber.TaggedType):
+class Result(ber.TaggedType[AssociationResult]):
     """[2] Association-result"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AssociationResult
+    value: AssociationResult
 
 
 @dataclass
@@ -158,11 +159,11 @@ class AcseServiceUser(ber.IntegerType):
 
 
 @dataclass
-class ServiceUser(ber.TaggedType):
+class ServiceUser(ber.TaggedType[AcseServiceUser]):
     """[1] acse-service-user"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AcseServiceUser
+    value: AcseServiceUser
 
 
 @dataclass
@@ -176,28 +177,28 @@ class AcseServiceProvider(ber.IntegerType):
 
 
 @dataclass
-class Provider(ber.TaggedType):
+class Provider(ber.TaggedType[AcseServiceProvider]):
     """[2] acse-service-provider"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AcseServiceProvider
+    value: AcseServiceProvider
 
 
 @dataclass
 class AssociateSourceDiagnostic(ber.ChoiceType):
     """Associate-source-diagnostic"""
-    alternatives = (
+    alternatives = create_alternatives(
         NamedType("acse-service-user", ServiceUser),
         NamedType("acse-service-provider", Provider)
     )
 
 
 @dataclass
-class ResultSourceDiagnostic(ber.TaggedType):
+class ResultSourceDiagnostic(ber.TaggedType[AssociateSourceDiagnostic]):
     """[3] Associate-source-diagnostic"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=3)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AssociateSourceDiagnostic
+    value: AssociateSourceDiagnostic
 
 
 @dataclass
@@ -211,11 +212,11 @@ class ReleaseRequestReason(ber.IntegerType):
 
 
 @dataclass
-class RequestReason(ber.TaggedType):
+class RequestReason(ber.TaggedType[ReleaseRequestReason]):
     """[0] IMPLICIT Release-request-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = ReleaseRequestReason
+    value: ReleaseRequestReason
 
 
 @dataclass
@@ -229,11 +230,11 @@ class ReleaseResponseReason(ber.IntegerType):
 
 
 @dataclass
-class ResponseReason(ber.TaggedType):
+class ResponseReason(ber.TaggedType[ReleaseResponseReason]):
     """[0] IMPLICIT Release-response-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = ReleaseResponseReason
+    value: ReleaseResponseReason
 
 
 @dataclass
@@ -243,97 +244,102 @@ class ProtocolVersion(ber.BitStringType):
 
 
 @dataclass
-class ProtocolVersion0(ber.TaggedType):
+class ProtocolVersion0(ber.TaggedType[ProtocolVersion]):
     """[0] IMPLICIT protocol-version"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = ProtocolVersion
+    value: ProtocolVersion
 
 
 DEFAULT_PROTOCOL_VERSION = ProtocolVersion0(ProtocolVersion((0,)))
 
 
-class CalledAPTitle(ber.TaggedType):
+@dataclass
+class CalledAPTitle(ber.TaggedType[APTitle]):
     """[2] AP-title"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = APTitle
+    value: APTitle
 
 
-class CallingAPTitle(ber.TaggedType):
+@dataclass
+class CallingAPTitle(ber.TaggedType[APTitle]):
     """[6] AP-title"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=6)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = APTitle
+    value: APTitle
 
-class CalledAEQualifier(ber.TaggedType):
+
+@dataclass
+class CalledAEQualifier(ber.TaggedType[AEQualifier]):
     """[3] AE-qualifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=3)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = AEQualifier
+    value: AEQualifier
 
 
-class CallingAEQualifier(ber.TaggedType):
+@dataclass
+class CallingAEQualifier(ber.TaggedType[AEQualifier]):
     """[7] AE-qualifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=7)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = AEQualifier
+    value: AEQualifier
 
 
 @dataclass
-class CalledAPInvocationIdentifier(ber.TaggedType):
+class CalledAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
     """[4] AP-invocation-identifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=4)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = APInvocationIdentifier
+    value: APInvocationIdentifier
 
 
 @dataclass
-class CallingAPInvocationIdentifier(ber.TaggedType):
+class CallingAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
     """[8] AP-invocation-identifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=8)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = APInvocationIdentifier
+    value: APInvocationIdentifier
 
 
 @dataclass
-class CalledAEInvocationIdentifier(ber.TaggedType):
+class CalledAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
     """[5] AE-invocation-identifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=5)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AEInvocationIdentifier
+    value: AEInvocationIdentifier
 
 
 @dataclass
-class CallingAEInvocationIdentifier(ber.TaggedType):
+class CallingAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
     """[9] AE-invocation-identifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=9)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AEInvocationIdentifier
+    value: AEInvocationIdentifier
 
 
 @dataclass
-class SenderACSERequirements(ber.TaggedType):
+class SenderACSERequirements(ber.TaggedType[ACSERequirements]):
     """[10] IMPLICIT ACSE-requirements"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=10)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = ACSERequirements
+    value: ACSERequirements
 
 
 @dataclass
-class MechanismName11(ber.TaggedType):
+class MechanismName11(ber.TaggedType[MechanismName]):
     """[11] IMPLICIT Mechanism-name tagged"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=11)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = MechanismName
+    value: MechanismName
 
 
 @dataclass
-class CallingAuthenticationValue(ber.TaggedType):
+class CallingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
     """[12] EXPLICIT Authentication-value"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=12)
     mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
-    type_: ClassVar[type[Type]] = AuthenticationValue
+    value: AuthenticationValue
 
 
 @dataclass
@@ -379,7 +385,7 @@ class AARQApdu(ber.SequenceType):
     ) -> Self:
         """
         Create AARQApdu instance from named components.
-        
+
         Returns:
             Self: New AARQApdu instance with value set to _AARQApdu
         """
@@ -403,7 +409,7 @@ class AARQApdu(ber.SequenceType):
 
 
 @dataclass
-class AARQApdu0(ber.TaggedType):
+class AARQ(ber.TaggedType[AARQApdu]):
     """[APPLICATION 0] IMPLICIT AARQ-apdu"""
     tag: ClassVar[x690.Tag] = x690.Tag(
         class_=Class.APPLICATION,
@@ -411,61 +417,64 @@ class AARQApdu0(ber.TaggedType):
         constructed=True
     )
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = AARQApdu
+    value: AARQApdu
 
 
-class RespondingAPTitle(ber.TaggedType):
+@dataclass
+class RespondingAPTitle(ber.TaggedType[APTitle]):
     """[4] AP-title"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=4)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = APTitle
+    value: APTitle
 
-class RespondingAEQualifier(ber.TaggedType):
+
+@dataclass
+class RespondingAEQualifier(ber.TaggedType[AEQualifier]):
     """[5] AE-qualifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=5)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_ = AEQualifier
+    value: AEQualifier
 
 
 @dataclass
-class RespondingAPInvocationIdentifier(ber.TaggedType):
+class RespondingAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
     """[6] AP-invocation-identifier tagged"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=6)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = APInvocationIdentifier
+    value: APInvocationIdentifier
 
 
 @dataclass
-class RespondingAEInvocationIdentifier(ber.TaggedType):
+class RespondingAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
     """[7] AE-invocation-identifier"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=7)
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]] = AEInvocationIdentifier
+    value: AEInvocationIdentifier
 
 
 @dataclass
-class ResponderACSERequirements(ber.TaggedType):
+class ResponderACSERequirements(ber.TaggedType[ACSERequirements]):
     """[8] IMPLICIT ACSE-requirements tagged"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=8)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = ACSERequirements
+    value: ACSERequirements
 
 
 @dataclass
-class MechanismName9(ber.TaggedType):
+class MechanismName9(ber.TaggedType[MechanismName]):
     """[9] IMPLICIT Mechanism-name"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=9)
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = MechanismName
+    value: MechanismName
 
 
 
 @dataclass
-class RespondingAuthenticationValue(ber.TaggedType):
+class RespondingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
     """[11] EXPLICIT Authentication-value"""
     tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=11)
     mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
-    type_: ClassVar[type[Type]] = AuthenticationValue
+    value: AuthenticationValue
 
 
 @dataclass
@@ -505,7 +514,7 @@ class AAREApdu(ber.SequenceType):
         implementation_information: Optional[ImplementationData29] = None,
         user_information: Optional[AssociationInformation30] = None,
     ) -> Self:
-       return cls((
+        return cls((
             DEFAULT_PROTOCOL_VERSION if protocol_version is None else protocol_version,
             application_context_name,
             result,
@@ -521,8 +530,9 @@ class AAREApdu(ber.SequenceType):
             user_information
         ))
 
+
 @dataclass
-class AAREApdu1(ber.TaggedType):
+class AARE(ber.TaggedType[AAREApdu]):
     """[1] AARE-apdu"""
     tag: ClassVar[x690.Tag] = x690.Tag(
         class_=Class.APPLICATION,
@@ -530,7 +540,7 @@ class AAREApdu1(ber.TaggedType):
         constructed=True
     )
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = AAREApdu
+    value: AAREApdu
 
 
 @dataclass
@@ -549,7 +559,7 @@ class RLRQApdu(ber.SequenceType):
     ) -> Self:
         """
         Create RLREApdu instance from named components.
-        
+
         Returns:
             Self: New RLREApdu instance
         """
@@ -560,7 +570,7 @@ class RLRQApdu(ber.SequenceType):
 
 
 @dataclass
-class RLRQApdu2(ber.TaggedType):
+class RLRQ(ber.TaggedType[RLRQApdu]):
     """[2] RLRQ-apdu"""
     tag: ClassVar[x690.Tag] = x690.Tag(
         class_=Class.APPLICATION,
@@ -568,7 +578,7 @@ class RLRQApdu2(ber.TaggedType):
         constructed=True
     )
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]] = RLRQApdu
+    value: RLRQApdu
 
 
 @dataclass
@@ -588,7 +598,7 @@ class RLREApdu(ber.SequenceType):
     ) -> Self:
         """
         Create RLREApdu instance from named components.
-        
+
         Returns:
             Self: New RLREApdu instance
         """
@@ -599,7 +609,7 @@ class RLREApdu(ber.SequenceType):
 
 
 @dataclass
-class RLREApdu3(ber.TaggedType):
+class RLRE(ber.TaggedType[RLREApdu]):
     """[3] RLRE-apdu"""
     tag: ClassVar[x690.Tag] = x690.Tag(
         class_=Class.APPLICATION,
@@ -607,15 +617,15 @@ class RLREApdu3(ber.TaggedType):
         constructed=True
     )
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_ = RLREApdu
+    value: RLREApdu
 
 
 @dataclass
 class ACSEApdu(ber.ChoiceType):
     """ACSE-APDU"""
-    alternatives = (
-        NamedType("aarq", AARQApdu0),
-        NamedType("aare", AAREApdu1),
-        NamedType("rlrq", RLRQApdu2),
-        NamedType("rlre", RLREApdu3)
+    alternatives = create_alternatives(
+        NamedType("aarq", AARQ),
+        NamedType("aare", AARE),
+        NamedType("rlrq", RLRQ),
+        NamedType("rlre", RLRE)
     )

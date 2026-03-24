@@ -75,9 +75,9 @@ class Tag(EDTLV, x680.Tag):
 
     def __post_init__(self) -> None:
         # Вычисляем хэш один раз при создании
-        object.__setattr__(self, '_hash_cache', 
+        object.__setattr__(self, "_hash_cache",
             hash((self.class_, self.class_number, self.constructed)))
-        object.__setattr__(self, '_hash_computed', True)
+        object.__setattr__(self, "_hash_computed", True)
 
     def validate(self, buf: ByteBuffer) -> None:
         pos = buf.get_pos()
@@ -96,7 +96,7 @@ class Tag(EDTLV, x680.Tag):
         tag_class = x680.Class(first & x680.Class.PRIVATE)  # Bits 8-7
         constructed = bool(first & 0x20)      # Bit 6
         tag_number = first & 0x1F             # Bits 5-1
-        
+
         # High-tag-number form (X.690 §8.1.2.4)
         if tag_number == 0x1F:
             tag_number = 0
@@ -113,14 +113,14 @@ class Tag(EDTLV, x680.Tag):
         initial = self.class_
         if self.constructed:
             initial |= 0x20
-        
+
         if self.class_number < 0x1F:
             # Low-tag-number form (X.690 §8.1.2.2)
             return buf.put_uint8(initial | self.class_number)
-        
+
         # High-tag-number form (X.690 §8.1.2.4)
         written = buf.put_uint8(initial | 0x1F)
-        
+
         # Encode tag number in 7-bit chunks (MSB first, last chunk has bit 8=0)
         chunks: list[int] = []
         n = self.class_number

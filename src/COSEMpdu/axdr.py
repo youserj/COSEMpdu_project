@@ -19,9 +19,11 @@ Standards:
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any
+from COSEMpdu import x690
 from .x680.tagged_type import TaggingMode
-from .x680.type import Type, OptionalNamedType, DefaultNamedType, Constraint, NamedType, SizeConstraint, ValueRange, INTEGER
+from .x680.constrained_type import ValueRange, SizeConstraint
+from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF
 from . import x680
 from .byte_buffer import ByteBuffer
 
@@ -68,25 +70,22 @@ def _decode_variable_length_integer(buf: ByteBuffer) -> int:
     return buf.get_uint(num_bytes)
 
 
-class EDV(x680.EDV):
+class Type(x680.Type, Protocol):
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
         """Decode with Length + Contents"""
-        ret = cls.get_contents(buf)  # Then decode length + contents
-        if isinstance(cls.constraint, Constraint):
-            ret.check_constraint(cls.constraint)
-        return ret
+        return cls.get_lc(buf)  # Then decode length + contents
 
     def put(self, buf: ByteBuffer) -> int:
         """Encode with Length + Contents"""
-        return self.put_contents(buf)
+        return self.put_lc(buf)
 
 
 TagNumber: TypeAlias = Annotated[int, "0-255"]
 
 
 @dataclass
-class TaggedType(EDV, x680.TaggedType):
+class TaggedType[T: Type](Type, x680.TaggedType[T]):
     """
     TaggedType for A-XDR encoding (IEC 61334-6 §6.6, §6.7)
 
@@ -101,8 +100,7 @@ class TaggedType(EDV, x680.TaggedType):
     """
     tag: ClassVar[TagNumber]
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    type_: ClassVar[type[Type]]
-    value: Type
+    value: T
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self:
@@ -119,10 +117,10 @@ class TaggedType(EDV, x680.TaggedType):
         tag_number = buf.get_uint8()
         if tag_number != cls.tag:
             raise ValueError(f"Expected tag {cls.tag}, got {tag_number}")
-        return cls.get_contents(buf)
+        return cls.get_lc(buf)
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode tagged type from A-XDR
 
@@ -134,16 +132,16 @@ class TaggedType(EDV, x680.TaggedType):
         """
         # Decode contents based on tagging mode
         if cls.mode == TaggingMode.IMPLICIT:
-            value = cls.type_.get_contents(buf)  # IMPLICIT: contents without inner tag
+            value = cls.get_type().get_lc(buf)  # IMPLICIT: contents without inner tag
         else:
-            value = cls.type_.get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
+            value = cls.get_type().get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
         return cls(value)
 
     def put(self, buf: ByteBuffer) -> int:
         """Encode with Length + Contents"""
-        return buf.put_uint8(self.tag) + self.put_contents(buf)
+        return buf.put_uint8(self.tag) + self.put_lc(buf)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode tagged type to A-XDR
 
@@ -158,7 +156,7 @@ class TaggedType(EDV, x680.TaggedType):
         # Encode contents based on tagging mode
         if self.mode == TaggingMode.IMPLICIT:
             # IMPLICIT: contents without inner tag
-            return self.value.put_contents(buf)
+            return self.value.put_lc(buf)
         # EXPLICIT: contents may have inner tag (e.g., nested CHOICE)
         return self.value.put(buf)  # put() includes tag/length if applicable
 
@@ -168,7 +166,7 @@ class TaggedType(EDV, x680.TaggedType):
 
 
 @dataclass
-class BooleanType(EDV, x680.BooleanType):
+class BooleanType(Type, x680.BooleanType):
     """
     BOOLEAN with A-XDR encoding/decoding (IEC 61334-6 §6.2)
 
@@ -190,22 +188,22 @@ class BooleanType(EDV, x680.BooleanType):
     """
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode BOOLEAN from A-XDR (IEC 61334-6 §6.2)
-        
+
         Returns instance and advances buffer position.
         """
         # Single octet, no tag/length
         content = buf.get_uint8()
         return cls(content != 0)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode BOOLEAN to A-XDR (IEC 61334-6 §6.2)
-        
+
         Returns number of bytes written (always 1).
-        
+
         Content encoding:
             FALSE → 0x00
             TRUE  → 0xFF
@@ -218,7 +216,7 @@ class BooleanType(EDV, x680.BooleanType):
 # =============================================================================
 
 @dataclass
-class IntegerType(EDV, x680.IntegerType):
+class IntegerType(Type, x680.IntegerType):
     """
     INTEGER with A-XDR encoding/decoding (IEC 61334-6 §6.1)
 
@@ -245,70 +243,28 @@ class IntegerType(EDV, x680.IntegerType):
         - DLMS/COSEM mostly uses constrained INTEGERs (Unsigned8, Unsigned16, etc.)
         - More compact than BER for constrained types
     """
-    fixed_length: ClassVar[Optional[int]] = None
-    signed: ClassVar[bool] = True
-
     @classmethod
-    def __init_subclass__(cls) -> None:
-        if (
-            cls.constraint
-            and isinstance(v_r := cls.constraint.constraint_spec, ValueRange)
-        ):
-            if v_r.lower_endpoint >= 0:
-                cls.signed = False
-            cls.fixed_length = max(1, ((v_r.upper_endpoint - v_r.lower_endpoint).bit_length() + 7) // 8)
-
-    @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
-        """
-        Decode INTEGER from A-XDR (IEC 61334-6 §6.1)
-        
-        Args:
-            fixed_length: Number of octets (None for variable-length)
-        
-        Returns instance and advances buffer position.
-        """
-        if cls.fixed_length is not None:
-            # Fixed-length encoding (§6.1.1)
-            if cls.fixed_length == 0:
-                return cls(0)
-            content = buf.read(cls.fixed_length)
-            # Decode as unsigned for non-negative, signed for negative ranges
-            # DLMS typically uses unsigned for constrained types
-            value = int.from_bytes(content, byteorder="big", signed=cls.signed)
-            return cls(value)
-        # Variable-length encoding (§6.1.2)
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        """Variable-length encoding (§6.1.2)"""
         first = buf.get_uint8()
         if not (first & 0x80):
             # Short form: 0-127
             return cls(first)
         # Long form: length octet + value octets
         num_bytes = first & 0x7F
-        content = buf.read(num_bytes)
+        return cls.get_c(buf, num_bytes)
+
+    @classmethod
+    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
+        content = buf.read(length)
         # Decode as two's complement
         value = int.from_bytes(content, byteorder="big", signed=True)
         return cls(value)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
-        """
-        Encode INTEGER to A-XDR (IEC 61334-6 §6.1)
-        
-        Returns number of bytes written.
-        """
-        if self.fixed_length is not None:
-            # Fixed-length encoding
-            if self.fixed_length == 0:
-                return 0
-            content_bytes = self.value.to_bytes(
-                self.fixed_length,
-                byteorder="big",
-                signed=self.signed
-            )
-            return buf.write(content_bytes)
-        # Variable-length encoding
+    def put_lc(self, buf: ByteBuffer) -> int:
+        """Variable-length encoding"""
         if 0 <= self.value <= 127:
             return buf.put_uint8(self.value)
-        # Encode as variable-length integer
         encoded = _encode_variable_length_integer(self.value)
         return buf.write(encoded)
 
@@ -318,110 +274,64 @@ class IntegerType(EDV, x680.IntegerType):
 # =============================================================================
 
 @dataclass
-class BitStringType(EDV, x680.BitStringType):
+class BitStringType(Type, x680.BitStringType):
     """
     BIT STRING with A-XDR encoding/decoding (IEC 61334-6 §6.4)
-    
+
     A-XDR provides TWO encoding forms:
-    
+
     1. Fixed-length (SIZE specified):
        [Content(N)]  # NO tag, NO length, NO unused_bits
        - N = (SIZE + 7) // 8 octets
        - Bits padded to octet boundary with zeros
-    
+
     2. Variable-length (no SIZE):
        [Length(1+)] [unused_bits(1)] [Content(N)]  # NO tag
        - Length: number of BITS (not octets)
        - unused_bits: 0-7 (trailing unused bits in final octet)
-    
+
     Standards:
         - IEC 61334-6 §6.4: BIT STRING encoding
         - X.680 §21: BIT STRING type definition
         - §6.4.1: Fixed-length encoding
         - §6.4.2: Variable-length encoding
-    
+
     Note:
         - More compact than BER (no tag, no unused_bits for fixed-length)
         - DLMS uses fixed-length for conformance blocks
     """
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
-        """6.4"""
-        # Extract bits MSB-first
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        num_bits = _decode_variable_length_integer(buf)
+        if num_bits == 0:
+            return cls(())
+        return cls.get_c(buf, num_bits)
+
+    @classmethod
+    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
         bits: list[int] = []
-        if (
-            cls.constraint is not None
-            and isinstance(cls.constraint.constraint_spec, SizeConstraint)
-        ):  # Fixed-length encoding (§6.4.1)
-            length = cls.constraint.constraint_spec.max_size
-            if length == 0:
-                return cls(())
-            num_octets = (length + 7) // 8
-            data = buf.read(num_octets)
-            for byte in data:
-                for i in range(8):
-                    bits.append(1 if (byte & (1 << (7 - i))) else 0)
-            bits = bits[:length]  # Trim to exact bit length
-        else:
-            # Variable-length encoding (§6.4.2)
-            # Length = number of BITS
-            num_bits = _decode_variable_length_integer(buf)
-            if num_bits == 0:
-                return cls(())
-            # Calculate octets needed
-            num_octets = (num_bits + 7) // 8
-            data = buf.read(num_octets)
-            for byte in data:
-                for i in range(8):
-                    bits.append(1 if (byte & (1 << (7 - i))) else 0)
-            # Remove unused trailing bits
-            bits = bits[:num_bits]
+        num_octets = (length + 7) // 8
+        data = buf.read(num_octets)
+        for byte in data:
+            for i in range(8):
+                bits.append(1 if (byte & (1 << (7 - i))) else 0)
+        bits = bits[:length]  # Trim to exact bit length
         return cls(tuple(bits))
 
-    def put_contents(self, buf: ByteBuffer) -> int:
-        """
-        Encode BIT STRING to A-XDR (IEC 61334-6 §6.4)
-        
-        Returns number of bytes written.
-        """
+    def put_lc(self, buf: ByteBuffer) -> int:
         n = len(self.value)
-        if (
-            self.constraint
-            and isinstance(self.constraint.constraint_spec, SizeConstraint)
-        ):
-            # Fixed-length encoding (§6.4.1)
-            if n == 0:
-                return 0
-            # Pad to octet boundary
-            unused_bits = (8 - (n % 8)) % 8
-            padded = list(self.value) + [0] * unused_bits
-            # Convert to bytes MSB-first
-            data_bytes = bytearray()
-            for i in range(0, len(padded), 8):
-                byte = 0
-                for j in range(8):
-                    if padded[i + j]:
-                        byte |= (1 << (7 - j))
-                data_bytes.append(byte)
-            return buf.write(bytes(data_bytes))
-        # Variable-length encoding (§6.4.2)
         if n == 0:
             # Length = 0 bits
             return buf.put_uint8(0)
-
         # Encode length (number of BITS)
-        length_bytes = _encode_variable_length_integer(n)
-        written = buf.write(length_bytes)
+        length_bytes = _encode_variable_length_integer(len(self.value))
+        return buf.write(length_bytes) + self.put_c(buf)
 
-        # Calculate unused bits
+    def put_c(self, buf: ByteBuffer) -> int:
+        n = len(self.value)
         unused_bits = (8 - (n % 8)) % 8
-
-        # Write unused bits octet
-        # written += buf.put_uint8(unused_bits)
-
         # Pad to octet boundary
         padded = list(self.value) + [0] * unused_bits
-
         # Convert to bytes MSB-first
         data_bytes = bytearray()
         for i in range(0, len(padded), 8):
@@ -430,9 +340,7 @@ class BitStringType(EDV, x680.BitStringType):
                 if padded[i + j]:
                     byte |= (1 << (7 - j))
             data_bytes.append(byte)
-
-        written += buf.write(bytes(data_bytes))
-        return written
+        return buf.write(bytes(data_bytes))
 
 
 # =============================================================================
@@ -440,19 +348,11 @@ class BitStringType(EDV, x680.BitStringType):
 # =============================================================================
 
 @dataclass
-class OctetStringType(EDV, x680.OctetStringType):
+class OctetStringType(Type, x680.OctetStringType):
     """
     OCTET STRING with A-XDR encoding/decoding (IEC 61334-6 §6.5)
 
     A-XDR provides TWO encoding forms:
-
-    1. Fixed-length (SIZE specified):
-       [Content(N)]  # NO tag, NO length
-       - N = SIZE octets
-
-    2. Variable-length (no SIZE):
-       [Length(1+)] [Content(N)]  # NO tag
-       - Length: number of OCTETS (variable-length integer)
 
     Standards:
         - IEC 61334-6 §6.5: OCTET STRING encoding
@@ -465,61 +365,32 @@ class OctetStringType(EDV, x680.OctetStringType):
         - DLMS uses for VisibleString, data blocks, etc.
     """
 
-    fixed_length: ClassVar[Optional[int]] = None  # Number of octets (None = variable)
-
     @classmethod
-    def __init_subclass__(cls) -> None:
-        if (
-            cls.constraint
-            and isinstance(s_c := cls.constraint.constraint_spec, SizeConstraint)
-        ):
-            cls.fixed_length = s_c.max_size
-
-    @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
-        """
-        Decode OCTET STRING from A-XDR (IEC 61334-6 §6.5)
-
-        Args:
-            fixed_length: Number of octets (None for variable-length)
-
-        Returns instance and advances buffer position.
-        """
-        if cls.fixed_length is not None:
-            # Fixed-length encoding (§6.5.1)
-            if cls.fixed_length == 0:
-                return cls(b"")
-            data = bytes(buf.read(cls.fixed_length))
-            return cls(data)
-        # Variable-length encoding (§6.5.2)
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         num_octets = _decode_variable_length_integer(buf)
         if num_octets == 0:
             return cls(b"")
-        data = bytes(buf.read(num_octets))
+        return cls.get_c(buf, num_octets)
+
+    @classmethod
+    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
+        """decode content"""
+        data = bytes(buf.read(length))
         return cls(data)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
-        """
-        Encode OCTET STRING to A-XDR (IEC 61334-6 §6.5)
+    def put_lc(self, buf: ByteBuffer) -> int:
+        length_bytes = _encode_variable_length_integer(len(self.value))
+        return buf.write(length_bytes) + self.put_c(buf)
 
-        Returns number of bytes written.
-        """
-        data = bytes(self.value)
-        n = len(data)
-
-        if self.fixed_length is not None:
-            # Fixed-length encoding (§6.5.1)
-            return buf.write(data)
-        # Variable-length encoding (§6.5.2)
-        length_bytes = _encode_variable_length_integer(n)
-        return buf.write(length_bytes) + buf.write(data)
+    def put_c(self, buf: ByteBuffer) -> int:
+        return buf.write(self.value)
 
 
 @dataclass
-class VisibleString(EDV, x680.VisibleString):
+class VisibleString(Type, x680.VisibleString):
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         # Variable-length encoding (§6.5.2) only
         num_octets = _decode_variable_length_integer(buf)
         if num_octets == 0:
@@ -527,7 +398,7 @@ class VisibleString(EDV, x680.VisibleString):
         data = bytes(buf.read(num_octets))
         return cls(data.decode(encoding="ascii"))
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         length_bytes = _encode_variable_length_integer(len(self.value))
         return buf.write(length_bytes) + buf.write(self.value.encode("ascii"))
 
@@ -539,10 +410,10 @@ class VisibleString(EDV, x680.VisibleString):
 
 
 @dataclass
-class Utf8String(EDV, x680.VisibleString):  # todo: copypast VisibleString
+class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         # Variable-length encoding (§6.5.2) only
         num_octets = _decode_variable_length_integer(buf)
         if num_octets == 0:
@@ -550,7 +421,7 @@ class Utf8String(EDV, x680.VisibleString):  # todo: copypast VisibleString
         data = bytes(buf.read(num_octets))
         return cls(data.decode(encoding="utf-8"))
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         data = self.value.encode("utf-8")
         length_bytes = _encode_variable_length_integer(len(data))
         return buf.write(length_bytes) + buf.write(data)
@@ -565,51 +436,48 @@ class Utf8String(EDV, x680.VisibleString):  # todo: copypast VisibleString
 # =============================================================================
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
-def create_alternatives(values: tuple[NamedType[TaggedType], ...]) -> dict[int, NamedType[TaggedType]]:
-    return {value.type_.tag: value for value in values}
-
 
 @dataclass
-class ChoiceType(EDV, x680.ChoiceType):
+class ChoiceType(Type, x680.ChoiceType[Type]):
     """
     CHOICE with A-XDR encoding/decoding (IEC 61334-6 §6.6)
-    
+
     A-XDR encoding structure:
         [Tag(1)] [Contents]  # NO length for tag
-    
+
     Tag:
         - Single octet (tag number only, 0-255)
         - Tag class is CONTEXT_SPECIFIC for DLMS
-    
+
     Standards:
         - IEC 61334-6 §6.6: CHOICE encoding
         - X.680 §28: CHOICE type definition
         - All alternatives MUST be explicitly tagged
-    
+
     Note:
         - Tag identifies selected alternative
         - Contents encoded per alternative type rules
         - More compact than BER (1 byte tag vs 2-3 bytes)
     """
-    alternatives: ClassVar[dict[int, NamedType[TaggedType]]]
-    value: TaggedType
+    alternatives: ClassVar[dict[int, NamedType[TaggedType[Any]]]]
+    value: TaggedType[Type]
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode CHOICE from A-XDR (IEC 61334-6 §6.6)
-        
+
         Returns instance with chosen alternative and advances buffer position.
         """
         tag = buf.get_uint8()
         if (n_t := cls.alternatives.get(tag)) is None:
             raise ValueError(f"{tag} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
-        return cls(n_t.type_.get_contents(buf))
+        return cls(n_t.type_.get_lc(buf))
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode CHOICE to A-XDR (IEC 61334-6 §6.6)
-        
+
         Returns number of bytes written.
         """
         return self.value.put(buf)
@@ -627,7 +495,7 @@ class ChoiceType(EDV, x680.ChoiceType):
 # =============================================================================
 
 @dataclass
-class SequenceType(EDV, x680.SequenceType):
+class SequenceType(Type, x680.SequenceType):
     """
     SEQUENCE with A-XDR encoding/decoding (IEC 61334-6 §6.9)
 
@@ -651,7 +519,7 @@ class SequenceType(EDV, x680.SequenceType):
     """
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode SEQUENCE from A-XDR (IEC 61334-6 §6.9)
 
@@ -670,11 +538,11 @@ class SequenceType(EDV, x680.SequenceType):
                         components_data.append(None)
                     continue
             # Decode the component using its A-XDR get_contents()
-            value = n_t.type_.get_contents(buf)
+            value = n_t.type_.get_lc(buf)
             components_data.append(value)
         return cls(tuple(components_data))
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode SEQUENCE to A-XDR (IEC 61334-6 §6.9)
 
@@ -695,7 +563,7 @@ class SequenceType(EDV, x680.SequenceType):
                 written += buf.put_uint8(1)
             if value is None:
                 raise ValueError(f"Required component <{n_t.identifier}> not set")
-            written += value.put_contents(buf)  # Encode component contents (no tag/length)
+            written += value.put_lc(buf)  # Encode component contents (no tag/length)
         return written
 
 
@@ -707,7 +575,7 @@ ENUM_VALUE: TypeAlias = Annotated[INTEGER, "0-255"]
 
 
 @dataclass(frozen=True)
-class EnumeratedType(EDV, x680.EnumeratedType):
+class EnumeratedType(Type, x680.EnumeratedType):
     """
     ENUMERATED with A-XDR encoding/decoding (IEC 61334-6 §6.3)
     A-XDR encoding structure:
@@ -728,7 +596,7 @@ class EnumeratedType(EDV, x680.EnumeratedType):
     value: ENUM_VALUE
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode ENUMERATED from A-XDR (IEC 61334-6 §6.3)
 
@@ -738,7 +606,7 @@ class EnumeratedType(EDV, x680.EnumeratedType):
         index = buf.get_uint8()
         return cls(index)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode ENUMERATED to A-XDR (IEC 61334-6 §6.3)
 
@@ -752,17 +620,17 @@ class EnumeratedType(EDV, x680.EnumeratedType):
 # =============================================================================
 
 @dataclass
-class NullType(EDV, x680.NullType):
+class NullType(Type, x680.NullType):
     """
     NULL with A-XDR encoding/decoding (IEC 61334-6 §6.13)
-    
+
     A-XDR encoding structure:
         [Tag(1)]  # For CHOICE alternatives only
-    
+
     Standards:
         - IEC 61334-6 §6.13: NULL encoding
         - X.680 §23: NULL type definition
-    
+
     Note:
         - In SEQUENCE: NO encoding (absence indicates NULL)
         - In CHOICE: Tag number only (1 byte)
@@ -770,19 +638,19 @@ class NullType(EDV, x680.NullType):
     """
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode NULL from A-XDR (IEC 61334-6 §6.13)
-        
+
         Returns instance (no bytes consumed in SEQUENCE).
         """
         # NULL has no content in SEQUENCE components
         return cls(None)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode NULL to A-XDR (IEC 61334-6 §6.13)
-        
+
         Returns number of bytes written (0 in SEQUENCE).
         """
         # NULL has no content in SEQUENCE components
@@ -796,6 +664,14 @@ class NullType(EDV, x680.NullType):
         return isinstance(other, NullType)
 
 
+@dataclass
+class NullType0(TaggedType[NullType]):
+    """[0] IMPLICIT NULL"""
+    tag = 0
+    mode = TaggingMode.IMPLICIT
+    value: NullType
+
+
 null = NullType(None)
 
 # =============================================================================
@@ -804,7 +680,7 @@ null = NullType(None)
 
 
 @dataclass
-class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
+class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     """
     SEQUENCE OF with A-XDR encoding/decoding (IEC 61334-6 §6.10)
 
@@ -828,9 +704,10 @@ class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
     """
 
     fixed_length: ClassVar[Optional[int]] = None  # Number of components (None = variable)
+    value: SEQUENCE_OF[T]
 
     @classmethod
-    def get_contents(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> Self:
         """
         Decode SEQUENCE OF from A-XDR (IEC 61334-6 §6.10)
 
@@ -843,17 +720,17 @@ class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
         if cls.fixed_length is not None:
             # Fixed-length encoding (§6.10.1)
             for _ in range(cls.fixed_length):
-                component = cast("T", cls.component_type.get_contents(buf))
+                component = cast("T", cls.component_type.get_lc(buf))
                 components.append(component)
         else:
             # Variable-length encoding (§6.10.2)
             num_components = _decode_variable_length_integer(buf)
             for _ in range(num_components):
-                component = cast("T", cls.component_type.get_contents(buf))
+                component = cast("T", cls.component_type.get_lc(buf))
                 components.append(component)
         return cls(components)
 
-    def put_contents(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> int:
         """
         Encode SEQUENCE OF to A-XDR (IEC 61334-6 §6.10)
 
@@ -865,7 +742,7 @@ class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
             # Fixed-length encoding (§6.10.1)
             written = 0
             for component in self.value:
-                written += component.put_contents(buf)
+                written += component.put_lc(buf)
             return written
         # Variable-length encoding (§6.10.2)
         # Encode count
@@ -874,7 +751,7 @@ class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
 
         # Encode components
         for component in self.value:
-            written += component.put_contents(buf)
+            written += component.put_lc(buf)
 
         return written
 
@@ -893,3 +770,128 @@ class SequenceOfType[T: Type](EDV, x680.SequenceOfType[T]):
             self.component_type == other.component_type and
             self.value == other.value
         )
+
+
+@dataclass
+class GeneralizedTime(Type, x680.GeneralizedTime):
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        length = x690.Length.get(buf)
+        data = buf.read(length.value).tobytes().decode("ascii")
+        return cls(data)
+
+    def put_lc(self, buf: ByteBuffer) -> int:
+        data = self.value.encode("ascii")
+        return x690.Length(len(data)).put(buf) + buf.write(data)
+
+
+@dataclass
+class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
+    fixed_length: ClassVar[Optional[int]] = None
+    signed: ClassVar[bool] = True
+    value: IntegerType
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        if isinstance(v_r := cls.constraint_spec, ValueRange):
+            if v_r.lower_endpoint >= 0:
+                cls.signed = False
+            cls.fixed_length = max(1, ((v_r.upper_endpoint - v_r.lower_endpoint).bit_length() + 7) // 8)
+
+    @classmethod
+    def from_int(cls, value: INTEGER) -> Self:
+        return cls(IntegerType(value))
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        """
+        Decode INTEGER from A-XDR (IEC 61334-6 §6.1.1)
+
+        Args:
+            fixed_length: Number of octets (None for variable-length)
+
+        Returns instance and advances buffer position.
+        """
+        if isinstance(cls.fixed_length, int):
+            if cls.fixed_length == 0:
+                return cls(IntegerType(0))
+            content = buf.read(cls.fixed_length)
+            # Decode as unsigned for non-negative, signed for negative ranges
+            # DLMS typically uses unsigned for constrained types
+            value = int.from_bytes(content, byteorder="big", signed=cls.signed)
+            return cls(IntegerType(value))
+        return cls(IntegerType.get_lc(buf))
+
+    def put_lc(self, buf: ByteBuffer) -> int:
+        """
+        Encode INTEGER to A-XDR (IEC 61334-6 §6.1)
+
+        Returns number of bytes written.
+        """
+        if isinstance(self.fixed_length, int):
+            if self.fixed_length == 0:
+                return 0
+            content_bytes = self.value.value.to_bytes(
+                self.fixed_length,
+                byteorder="big",
+                signed=self.signed
+            )
+            return buf.write(content_bytes)
+        return self.value.put_lc(buf)
+
+
+@dataclass
+class ConstrainedOctetStringType(Type, x680.ConstrainedType[OctetStringType]):
+    fixed_length: ClassVar[Optional[int]] = None
+    value: OctetStringType
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        if (  # Fixed-length encoding (§6.5.1)
+            isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size is None
+        ):
+            cls.fixed_length = cls.constraint_spec.max_size
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        type_ = cls.get_type()
+        if isinstance(cls.fixed_length, int):
+            return cls(type_.get_c(buf, cls.fixed_length))
+        return cls(type_.get_lc(buf))
+
+    def put_lc(self, buf: ByteBuffer) -> int:
+        if isinstance(self.fixed_length, int):
+            return self.value.put_c(buf)
+        return self.value.put_lc(buf)
+
+
+@dataclass
+class ConstrainedBitStringType(Type, x680.ConstrainedType[BitStringType]):
+    fixed_length: ClassVar[Optional[int]] = None
+    value: BitStringType
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        if (  # Fixed-length encoding (§6.4.1)
+            isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size is None
+        ):
+            cls.fixed_length = cls.constraint_spec.max_size
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> Self:
+        type_ = cls.get_type()
+        if isinstance(cls.fixed_length, int):
+            return cls(type_.get_c(buf, cls.fixed_length))
+        return cls(type_.get_lc(buf))
+
+    def put_lc(self, buf: ByteBuffer) -> int:
+        if isinstance(self.fixed_length, int):
+            return self.value.put_c(buf)
+        return self.value.put_lc(buf)
+
+
+def create_alternatives[U: Type](*values: NamedType[TaggedType[U]]) -> dict[int, NamedType[TaggedType[U]]]:
+    return {value.type_.tag: value for value in values}

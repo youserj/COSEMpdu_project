@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Any
-from .type import BuiltinType, BOOLEAN, Constraint, TYPE_VALUE, SEQUENCE_OF, Type
+from typing import Self
+from .type import BuiltinType, BOOLEAN
 
 
 @dataclass
@@ -11,8 +11,10 @@ class BooleanType(BuiltinType):
     """
     value: BOOLEAN
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+    @classmethod
+    def default(cls) -> Self:
+        """Default value: FALSE"""
+        return cls(False)  # noqa: FBT003
 
     def __bool__(self) -> bool:
         return self.value

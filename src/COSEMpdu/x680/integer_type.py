@@ -1,7 +1,7 @@
 # src/COSEMpdu/x680/integer_type.py
 from dataclasses import dataclass
 from typing import ClassVar, Iterator, Optional, Self, Any, Protocol
-from .type import BuiltinType, ValueRange, Constraint, INTEGER, TYPE_VALUE, Type, SEQUENCE_OF
+from .type import BuiltinType, INTEGER
 
 
 @dataclass(frozen=True)
@@ -9,7 +9,7 @@ class NamedNumber:
     """
     NamedNumber ::= identifier "(" SignedNumber ")" | identifier "(" DefinedValue ")"
     Represents a named integer constant (X.680 §18.1, §18.3-18.6).
-    
+
     Notes:
     - Values may be negative (SignedNumber)
     - Used solely in value notation (X.680 §18.3: "not significant in type definition")
@@ -29,7 +29,7 @@ class NamedNumberList:
     """
     NamedNumberList ::= NamedNumber | NamedNumberList "," NamedNumber
     Container for named integer constants (X.680 §18.1).
-    
+
     Supports:
     - Lookup by identifier → value
     - Lookup by value → identifier
@@ -67,7 +67,7 @@ class NamedNumberList:
 
 
 @dataclass
-class IntegerType(BuiltinType, Protocol):
+class IntegerType(BuiltinType):
     """
     INTEGER type (X.680 §18)
     NATIVE REPRESENTATION: int (arbitrary precision)
@@ -93,12 +93,10 @@ class IntegerType(BuiltinType, Protocol):
     named_numbers: ClassVar[Optional[NamedNumberList]] = None
     value: INTEGER
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        if isinstance(v_r := constraint.constraint_spec, ValueRange):
-            if not v_r.contains(self.value):
-                raise ValueError(f"Value {self.value!r} outside range [{v_r.lower_endpoint}..{v_r.upper_endpoint}]")
-            return
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+    @classmethod
+    def default(cls) -> Self:
+        """Default value: 0"""
+        return cls(0)
 
     def __str__(self) -> str:
         """

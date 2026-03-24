@@ -1,7 +1,7 @@
 # src/COSEMpdu/x680/sequence_type.py
 from dataclasses import dataclass
-from typing import ClassVar, Optional, Self, Any
-from .type import BuiltinType, NamedType, Type, SEQUENCE, DefaultNamedType, OptionalNamedType, SEQUENCE_OF, Constraint, TYPE_VALUE
+from typing import ClassVar, Optional, Self
+from .type import BuiltinType, NamedType, Type, SEQUENCE, DefaultNamedType, OptionalNamedType
 
 
 @dataclass
@@ -37,8 +37,9 @@ class SequenceType(BuiltinType):
     components: ClassVar[tuple[NamedType[Type], ...]]
     value: SEQUENCE
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+    @classmethod
+    def default(cls) -> Self:
+        return cls(tuple(component.type_.default() for component in cls.components))
 
     def __str__(self) -> str:
         """

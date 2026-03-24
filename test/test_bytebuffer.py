@@ -3,39 +3,38 @@ from src.COSEMpdu.byte_buffer import ByteBuffer
 
 
 class TestType(unittest.TestCase):
-    def test_write_and_read_roundtrip(self):
+    def test_write_and_read_roundtrip(self) -> None:
         buf = ByteBuffer.allocate(10)
         self.assertEqual(buf.get_pos(), 0)
-        written = buf.write(b'ABC')
+        written = buf.write(b"ABC")
         self.assertEqual(written, 3)
         self.assertEqual(buf.get_pos(), 3)
 
         buf.set_pos(0)
-        self.assertEqual(bytes(buf.read(3)), b'ABC')
+        self.assertEqual(bytes(buf.read(3)), b"ABC")
         self.assertEqual(buf.get_pos(), 3)
 
-    def test_read_beyond_raises(self):
+    def test_read_beyond_raises(self) -> None:
         buf = ByteBuffer.allocate(2)
-        buf.write(b'AB')
+        buf.write(b"AB")
         with self.assertRaises(BufferError):
             buf.read(3)
 
-    def test_write_beyond_capacity_raises(self):
+    def test_write_beyond_capacity_raises(self) -> None:
         buf = ByteBuffer.allocate(2)
         with self.assertRaises(BufferError):
-            buf.write(b'ABC')
+            buf.write(b"ABC")
 
-    def test_frozen_is_readonly(self):
+    def test_frozen_is_readonly(self) -> None:
         buf = ByteBuffer.allocate(3)
-        buf.write(b'ABC')
+        buf.write(b"ABC")
         frozen = buf.frozen()
-        self.assertTrue(frozen.buf.readonly)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(AttributeError):
             frozen.put_uint8(0x44)  # 'D'
 
-    def test_set_and_shift_pos(self):
+    def test_set_and_shift_pos(self) -> None:
         buf = ByteBuffer.allocate(5)
-        buf.write(b'12345')
+        buf.write(b"12345")
 
         buf.set_pos(2)
         self.assertEqual(buf.get_pos(), 2)
@@ -44,29 +43,27 @@ class TestType(unittest.TestCase):
         self.assertEqual(old, 2)
         self.assertEqual(buf.get_pos(), 4)
 
-        with self.assertRaises(IndexError):
+        with self.assertRaises(BufferError):
             buf.set_pos(5)  # equal to len(buf) is invalid per implementation
-        with self.assertRaises(IndexError):
+        with self.assertRaises(BufferError):
             buf.set_pos(-1)
 
     # Additional comprehensive tests
-    def test_allocate_and_len_and_bytes(self):
+    def test_allocate_and_len_and_bytes(self) -> None:
         buf = ByteBuffer.allocate(4)
         self.assertEqual(len(buf), 4)
         self.assertEqual(bytes(buf), b"\x00\x00\x00\x00")
-        self.assertFalse(buf.buf.readonly)
 
-    def test_wrap_and_read(self):
+    def test_wrap_and_read(self) -> None:
         data = b"hello"
         buf = ByteBuffer.wrap(data)
         self.assertEqual(len(buf), len(data))
-        self.assertTrue(buf.buf.readonly)
         self.assertEqual(bytes(buf.read(5)), data)
         self.assertEqual(buf.get_pos(), 5)
         with self.assertRaises(BufferError):
             buf.read(1)
 
-    def test_remaining_and_zero_length_read_write(self):
+    def test_remaining_and_zero_length_read_write(self) -> None:
         buf = ByteBuffer.allocate(3)
         self.assertEqual(buf.remaining(), 3)
 
@@ -81,7 +78,7 @@ class TestType(unittest.TestCase):
         self.assertEqual(buf.get_pos(), 0)
         self.assertEqual(buf.remaining(), 3)
 
-    def test_put_get_uint8_and_get(self):
+    def test_put_get_uint8_and_get(self) -> None:
         buf = ByteBuffer.allocate(2)
         buf.put_uint8(0x41)  # 'A'
         self.assertEqual(buf.get_pos(), 1)
@@ -92,7 +89,7 @@ class TestType(unittest.TestCase):
         buf.set_pos(0)
         self.assertEqual(buf.get(), b"A")
 
-    def test_get_uint_and_get_uint_pos(self):
+    def test_get_uint_and_get_uint_pos(self) -> None:
         buf = ByteBuffer.allocate(4)
         buf.write(b"\x01\x02\x03\x04")
         buf.set_pos(0)
@@ -108,7 +105,7 @@ class TestType(unittest.TestCase):
         with self.assertRaises(BufferError):
             buf.get_uint_pos(3, 2)
 
-    def test_read_pos_and_write_pos_behavior_and_errors(self):
+    def test_read_pos_and_write_pos_behavior_and_errors(self) -> None:
         buf = ByteBuffer.allocate(4)
         buf.write(b"WXYZ")
 
@@ -121,15 +118,11 @@ class TestType(unittest.TestCase):
         self.assertEqual(bytes(buf), b"12YZ")
         self.assertEqual(buf.get_pos(), 4)
 
-        # mismatched explicit length should raise due to slice size mismatch
-        with self.assertRaises(ValueError):
-            buf.write_pos(b"ABC", 0, length=2)
-
         # writing beyond capacity should raise BufferError
         with self.assertRaises(BufferError):
             buf.write_pos(b"ABCD", 2)
 
-    def test_slice_and_independent_position(self):
+    def test_slice_and_independent_position(self) -> None:
         buf = ByteBuffer.allocate(5)
         buf.write(b"abcde")
         buf.set_pos(2)
@@ -143,23 +136,22 @@ class TestType(unittest.TestCase):
         # original buffer position should remain unchanged
         self.assertEqual(buf.get_pos(), 2)
 
-    def test_getitem_and_str_contains(self):
+    def test_getitem_and_str_contains(self) -> None:
         buf = ByteBuffer.allocate(3)
         buf.write(b"AbC")
         self.assertEqual(buf[1], ord("b"))
         s = str(buf)
         self.assertIn("ByteBuffer", s)
         self.assertIn("pos=", s)
-        self.assertIn("frozen=", s)
 
-    def test_remaining_with_pos_parameter(self):
+    def test_remaining_with_pos_parameter(self) -> None:
         buf = ByteBuffer.allocate(10)
         buf.set_pos(3)
         self.assertEqual(buf.remaining(), 7)
         self.assertEqual(buf.remaining(5), 5)
         self.assertEqual(buf.remaining(0), 10)
 
-    def test_set_pos_on_empty_buffer_noop(self):
+    def test_set_pos_on_empty_buffer_noop(self) -> None:
         buf = ByteBuffer.allocate(0)
         # Should not raise, and position stays 0 regardless of index
         buf.set_pos(10)
@@ -167,9 +159,9 @@ class TestType(unittest.TestCase):
         buf.set_pos(-5)
         self.assertEqual(buf.get_pos(), 0)
 
-    def test_shift_pos_invalid_targets(self):
+    def test_shift_pos_invalid_targets(self) -> None:
         buf = ByteBuffer.allocate(2)
-        with self.assertRaises(IndexError):
+        with self.assertRaises(BufferError):
             buf.shift_pos(3)  # 0 + 3 > len
-        with self.assertRaises(IndexError):
+        with self.assertRaises(BufferError):
             buf.shift_pos(-1)

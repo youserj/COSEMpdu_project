@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Self, Any
-from .type import BuiltinType, OCTET_STRING, Constraint, TYPE_VALUE, Type, SEQUENCE_OF, SizeConstraint
+from typing import Self
+from .type import BuiltinType, OCTET_STRING
 
 
 @dataclass
@@ -8,11 +8,11 @@ class OctetStringType(BuiltinType):
     """
     OCTET STRING type (X.680 §22, X.690 §8.7)
     NATIVE REPRESENTATION: bytes
-    
+
     ASN.1 examples:
         ImageData ::= OCTET STRING
         'A5'H, '10100101'B (converted to bytes internally)
-    
+
     Standards compliance:
     - Tag: UNIVERSAL 4 (X.680 §22.2)
     - Values: arbitrary sequence of octets (X.680 §6.3.49)
@@ -20,12 +20,10 @@ class OctetStringType(BuiltinType):
     """
     value: OCTET_STRING
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        if (
-            isinstance(constraint.constraint_spec, SizeConstraint)
-            and not constraint.constraint_spec.contains(len(self.value))
-        ):
-            raise ValueError(f"got {len(self.value)}, expected {constraint.constraint_spec}")
+    @classmethod
+    def default(cls) -> Self:
+        """Default to empty OCTET STRING"""
+        return cls(b"")
 
     def __len__(self) -> int:
         """Length in octets (X.680 §22.6)"""
@@ -45,7 +43,7 @@ class OctetStringType(BuiltinType):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(b'{self.value.hex()}')"
-    
+
     @classmethod
     def empty(cls) -> Self:
         return cls(b"")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Optional, Self, Any, Literal
-from .type import BuiltinType, INTEGER, Constraint
+from typing import ClassVar, Iterator, Optional, Self
+from .type import BuiltinType, INTEGER
 
 
 @dataclass(frozen=True)
@@ -84,8 +84,12 @@ class EnumeratedType(BuiltinType):
     named_members: ClassVar[Optional[EnumerationList]] = None
     value: INTEGER
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+    @classmethod
+    def default(cls) -> Self:
+        """Default value: first member in the list."""
+        if cls.named_members is None:
+            return cls(0)  # Default to 0 if no members defined, though this may be invalid
+        return cls(cls.named_members.members[0].value)
 
     def __str__(self) -> str:
         """

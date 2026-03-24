@@ -10,9 +10,11 @@ from .sequence_type import SequenceType
 from .object_identifier_type import ObjectIdentifierType
 from .sequence_of_type import SequenceOfType
 from .generalized_time import GeneralizedTime
-from .type import Type, Transcript, NamedType, DefaultNamedType, OptionalNamedType, ValueRange, Constraint, Elements, BuiltinType, EDV
+from .type import Type, Transcript, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, EDV
+from .constrained_type import ConstrainedType, ValueRange, Elements
 from .null_type import NullType
 from .tagged_type import TaggedType, TaggingMode
+
 
 __all__ = [
     "EDV",
@@ -47,7 +49,7 @@ __all__ = [
     "OptionalNamedType",
     "NamedType",
     "ValueRange",
-    "Constraint",
+    "ConstrainedType",
     "Transcript",
     "GeneralizedTime"
 ]

@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum, auto
-from typing import ClassVar, Self, Any
-from .tag import Tag
-from .type import Type, BuiltinType, TYPE_VALUE, SEQUENCE_OF, Constraint
+from typing import ClassVar, Self
+from .type import Type, BuiltinType, TYPE_VALUE
 
 
 class TaggingMode(IntEnum):
@@ -19,7 +18,7 @@ class TaggingMode(IntEnum):
 
 
 @dataclass
-class TaggedType(BuiltinType):
+class TaggedType[T: Type](BuiltinType):
     """
     ASN.1 TaggedType per ITU-T X.680 §30 and IEC 61334-6 §6.7
 
@@ -39,15 +38,17 @@ class TaggedType(BuiltinType):
     - EXPLICIT: constructed, contents = complete base encoding (TLV)
     """
     mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-    type_: ClassVar[type[Type]]
-    value: Type
+    value: T
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        value = self.value
-        if isinstance(value.constraint, Constraint):
-            value.check_constraint(value.constraint)
+    @classmethod
+    def default(cls) -> Self:
+        return cls(cls.get_type().default())
+
+    @classmethod
+    def get_type(cls) -> type[T]:
+        return cls.__annotations__["value"]
 
     @classmethod
     def from_tv(cls, value: Type | TYPE_VALUE) -> Self:
         "constuctor from type value"
-        return cls(cls.type_(value))
+        return cls(cls.get_type()(value))

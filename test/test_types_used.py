@@ -25,12 +25,12 @@ from src.COSEMpdu.types_used import (
     # Access Request Types
     AccessRequestGet, AccessRequestGet1, AccessRequestGetWithSelection, AccessRequestBody, ListOfAccessRequestSpecification0,
     # Access Response Types
-    AccessResponseGet, AccessResponseBodyContent,
+    AccessResponseGet, AccessResponseBody,
 )
 from src.COSEMpdu.data import Data
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
-from src.COSEMpdu.cosem_pdu import (
+from COSEMpdu.useful_types import (
     Integer8, Unsigned16, Unsigned32
 )
 
@@ -636,7 +636,7 @@ class TestAccessResponseBodyContent(unittest.TestCase):
         data_list = ListOfData([Data.integer(100)])
         response_spec_list = ListOfAccessResponseSpecification([])
 
-        body = AccessResponseBodyContent((
+        body = AccessResponseBody((
             request_spec_list,
             data_list,
             response_spec_list
@@ -646,7 +646,7 @@ class TestAccessResponseBodyContent(unittest.TestCase):
         body.put(buf)
 
         buf.set_pos(0)
-        decoded = AccessResponseBodyContent.get(buf)
+        decoded = AccessResponseBody.get(buf)
         self.assertIsNotNone(decoded.value[0])
 
     def test_without_optional_request_spec(self) -> None:
@@ -654,7 +654,7 @@ class TestAccessResponseBodyContent(unittest.TestCase):
         data_list = ListOfData([Data.integer(100)])
         response_spec_list = ListOfAccessResponseSpecification([])
 
-        body = AccessResponseBodyContent((
+        body = AccessResponseBody((
             None,  # Optional field absent
             data_list,
             response_spec_list
@@ -664,7 +664,7 @@ class TestAccessResponseBodyContent(unittest.TestCase):
         body.put(buf)
 
         buf.set_pos(0)
-        decoded = AccessResponseBodyContent.get(buf)
+        decoded = AccessResponseBody.get(buf)
         self.assertIsNone(decoded.value[0])
 
 

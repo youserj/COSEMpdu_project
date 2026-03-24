@@ -11,8 +11,8 @@ Note:
     - SEQUENCE OF is a BUILTIN type per X.680 §16.2
 """
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Any
-from .type import BuiltinType, SEQUENCE_OF, Type, Constraint
+from typing import ClassVar, Iterator
+from .type import BuiltinType, SEQUENCE_OF, Type
 
 
 @dataclass
@@ -28,8 +28,10 @@ class SequenceOfType[T: Type](BuiltinType):
             "component_type": item,
         })
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        raise NotImplementedError(f"Validation not implemented for {type(constraint.constraint_spec)}")
+    @classmethod
+    def default(cls) -> "SequenceOfType[T]":
+        """Return default instance with empty sequence."""
+        return cls([])
 
     def __getitem__(self, index: int) -> T:
         """

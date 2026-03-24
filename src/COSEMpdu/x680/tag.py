@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from typing import Self
 from enum import IntEnum
-from ..byte_buffer import ByteBuffer
+
 
 @dataclass(frozen=True)
 class UniversalClassTagAssignments:

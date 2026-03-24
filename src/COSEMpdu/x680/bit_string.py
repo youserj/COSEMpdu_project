@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional, Self, ClassVar, runtime_checkable, overload, Any
-from .type import BuiltinType, BIT_STRING, Constraint, TYPE_VALUE, Type, SEQUENCE_OF, SizeConstraint
+from typing import Iterator, Optional, Self, ClassVar, overload
+from .type import BuiltinType, BIT_STRING
 
 
 @dataclass(frozen=True)
@@ -75,12 +75,10 @@ class BitStringType(BuiltinType):
     named_bits: ClassVar[Optional[NamedBitList]] = None  # ← ClassVar!
     value: BIT_STRING
 
-    def check_constraint(self, constraint: Constraint[Any]) -> None:
-        if (
-            isinstance(constraint.constraint_spec, SizeConstraint)
-            and not constraint.constraint_spec.contains(len(self.value))
-        ):
-            raise ValueError(f"got {len(self.value)}, expected {constraint.constraint_spec}")
+    @classmethod
+    def default(cls) -> Self:
+        """Default value: all bits 0"""
+        return cls(())
 
     @classmethod
     def from_bin(cls, bin_str: str) -> Self:
@@ -183,7 +181,7 @@ class BitStringType(BuiltinType):
             if key < 0 or key >= len(self.value):
                 raise IndexError(f"Bit index {key} out of range [0, {len(self.value)-1}]")
             return self.value[key]
-        elif isinstance(key, str):
+        if isinstance(key, str):
             # Доступ по имени бита
             named_bits = self.__class__.named_bits
             if named_bits is None:
@@ -192,12 +190,11 @@ class BitStringType(BuiltinType):
             if position >= len(self.value):
                 return 0  # Бит вне длины считается 0
             return self.value[position]
-        elif isinstance(key, slice):
+        if isinstance(key, slice):
             # Срез битовой строки
             sliced = self.value[key]
             return self.__class__(sliced)
-        else:
-            raise TypeError(f"Expected int, str or slice, got {type(key)}")
+        raise TypeError(f"Expected int, str or slice, got {type(key)}")
 
     def __setitem__(self, key: int | str | slice, value: int | bool | Self) -> None:
         """
@@ -213,13 +210,13 @@ class BitStringType(BuiltinType):
             bits = list(self.value)
             bits[key] = int(value)
             self.value = tuple(bits)
-        
+
         elif isinstance(key, str):
             # Установка по имени
             named_bits = self.__class__.named_bits
             if named_bits is None:
                 raise KeyError(f"Type {self.__class__.__name__} has no named bits")
-            
+
             position = named_bits[key]
             if position >= len(self.value):
                 # Расширяем строку
@@ -231,7 +228,7 @@ class BitStringType(BuiltinType):
                 bits = list(self.value)
                 bits[position] = int(value)
                 self.value = tuple(bits)
-        
+
         elif isinstance(key, slice):
             # Установка среза
             if isinstance(value, (tuple, list)):
@@ -246,7 +243,7 @@ class BitStringType(BuiltinType):
                 self.value = tuple(new_bits)
             else:
                 raise TypeError(f"Expected tuple, list or BitStringType for slice assignment, got {type(value)}")
-        
+
         else:
             raise TypeError(f"Expected int, str or slice, got {type(key)}")
 

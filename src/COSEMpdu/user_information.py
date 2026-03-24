@@ -2,20 +2,20 @@ from dataclasses import dataclass
 from typing import Optional, Self, ClassVar, Any
 from .x680 import tag, TaggingMode
 from .x680.type import (
-    Constraint,
-    SizeConstraint,
     OptionalNamedType,
     DefaultNamedType,
     NamedType
 )
 from .x680.bit_string import NamedBitList, NamedBit
+from .x680.constrained_type import SizeConstraint
+from . import x690
 from . import ber
 from . import axdr
-from .cosem_pdu import Integer8, Unsigned16, Unsigned8, ObjectName
+from .useful_types import Integer8, Unsigned16, Unsigned8, ObjectName
 
 
 @dataclass
-class Conformance_(ber.BitStringType):
+class Conformance_(ber.ConstrainedType[ber.BitStringType]):
     """Conformance"""
     named_bits: ClassVar[Optional[NamedBitList]] = NamedBitList((
         NamedBit("reserved-zero", 0),
@@ -43,21 +43,22 @@ class Conformance_(ber.BitStringType):
         NamedBit("event-notification", 22),
         NamedBit("action", 23),
     ))
-    constraint: ClassVar[Optional[Constraint[Any]]] = Constraint(SizeConstraint(24))
+    constraint_spec = SizeConstraint(24)
+    value: ber.BitStringType
 
 
 @dataclass
-class Conformance(ber.TaggedType):
-    tag = ber.Tag(
+class Conformance(ber.TaggedType[Conformance_]):
+    tag = x690.Tag(
         class_number=31,
         class_=tag.Class.APPLICATION
     )
     mode = TaggingMode.IMPLICIT
-    type_ = Conformance_
+    value: Conformance_
 
 
-LN_REFERENCE = ObjectName(0x0007)
-SN_REFERENCE = ObjectName(0xFA00)
+LN_REFERENCE = ObjectName(axdr.IntegerType(0x0007))
+SN_REFERENCE = ObjectName(axdr.IntegerType(-1536))  # 0xFA00
 
 
 @dataclass

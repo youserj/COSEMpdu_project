@@ -77,6 +77,10 @@ class GeneralizedTime(UsefulType):
     """
     value: STRING
 
+    @classmethod
+    def default(cls) -> Self:
+        return cls("00000101000000Z")  # Default to 0000-01-01T00:00:00Z, though this may be invalid
+
     def __post_init__(self) -> None:
         """
         Validate GeneralizedTime format per X.680 §42.3.
