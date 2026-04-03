@@ -1,7 +1,6 @@
 from .tag import Tag, UniversalClassTagAssignments, Class
 from .bit_string import BitStringType, NamedBitList, NamedBit
 from .boolean_type import BooleanType
-from .restricted_character_string_type import GraphicString, VisibleString, Utf8String
 from .enumerated_type import EnumeratedType, EnumerationList, EnumerationMember
 from .choice_type import ChoiceType
 from .integer_type import IntegerType, NamedNumberList, NamedNumber
@@ -10,14 +9,13 @@ from .sequence_type import SequenceType
 from .object_identifier_type import ObjectIdentifierType
 from .sequence_of_type import SequenceOfType
 from .generalized_time import GeneralizedTime
-from .type import Type, Transcript, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, EDV
+from .type import Type, Transcript, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, GraphicString, VisibleString, Utf8String
 from .constrained_type import ConstrainedType, ValueRange, Elements
 from .null_type import NullType
 from .tagged_type import TaggedType, TaggingMode
 
 
 __all__ = [
-    "EDV",
     "Tag",
     "BuiltinType",
     "UniversalClassTagAssignments",

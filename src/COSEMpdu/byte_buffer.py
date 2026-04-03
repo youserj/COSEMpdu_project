@@ -1,4 +1,5 @@
 from typing import Self, Optional, Protocol
+from StructResult.result import ValueOrError, Fallible, Error, OK
 
 
 class _ByteBuffer[T: (bytearray, bytes)](Protocol):
@@ -22,43 +23,54 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
             pos = self._pos
         return len(self.buf) - pos
 
-    def _check_space(self, space: int, pos: Optional[int] = None) -> None:
+    def _check_space(self, space: int, pos: Optional[int] = None) -> Fallible:
         """check whether this buffer has enough `space` left for r/w op"""
         if pos is None:
             pos = self._pos
         if self.remaining(pos) < space:
-            raise BufferError(F"{self} not enough more {space=}")
+            return Error.from_e(BufferError(F"{self} not enough more {space=}"))
+        return OK
 
-    def read(self, length: int = 1) -> T:
+    def read(self, length: int = 1) -> ValueOrError[T]:
         """return view to position, increase position"""
         ret = self.read_pos(self._pos, length)
-        self._pos += length
+        if not isinstance(ret, Error):
+            self._pos += length
         return ret
 
     def read_pos(self,
                  pos: int,
-                 length: int = 1) -> T:
+                 length: int = 1) -> ValueOrError[T]:
         """return view to position"""
-        self._check_space(length, pos)
+        if isinstance(r_check := self._check_space(length, pos), Error):
+            return r_check
         return self.buf[pos: pos + length]
 
-    def get_uint(self, length: int) -> int:
+    def get_uint(self, length: int) -> ValueOrError[int]:
         """get INTEGER, increase position"""
-        return int.from_bytes(self.read(length), "big")
+        if isinstance(r_value := self.read(length), Error):
+            return r_value
+        return int.from_bytes(r_value, "big")
 
     def get_uint_pos(self,
                      pos: int,
-                     length: int) -> int:
+                     length: int) -> ValueOrError[int]:
         """get INTEGER"""
-        return int.from_bytes(self.read_pos(pos, length), "big")
+        if isinstance(r_value := self.read_pos(pos, length), Error):
+            return r_value
+        return int.from_bytes(r_value, "big")
 
-    def get_uint8(self) -> int:
+    def get_uint8(self) -> ValueOrError[int]:
         """get integer8, increase position"""
-        return self.read(1)[0]
+        if isinstance(value := self.read(1), Error):
+            return value
+        return value[0]
 
-    def get(self) -> bytes:
+    def get(self) -> ValueOrError[bytes]:
         """get one byte, increase position"""
-        return bytes(self.read(1))
+        if isinstance(r_value := self.read(1), Error):
+            return r_value
+        return bytes(r_value)
 
     def __bytes__(self) -> bytes:
         return bytes(self.buf)
@@ -79,21 +91,23 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
     def get_pos(self) -> int:
         return self._pos
 
-    def set_pos(self, index: int) -> None:
+    def set_pos(self, index: int) -> Fallible:
         """set new position, with check"""
         if (len_ := len(self)) == 0:
             """skip NullTypes"""
         elif 0 <= index < len_:
             self._pos = index
         else:
-            raise BufferError(f"overflow, {self} can't set {index=}")
+            return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
+        return OK
 
-    def shift_pos(self, value: int) -> int:
+    def shift_pos(self, value: int) -> ValueOrError[int]:
         """shift and return old position"""
-        self.set_pos((ret := self._pos) + value)
+        if isinstance(err := self.set_pos((ret := self._pos) + value), Error):
+            return err
         return ret
 
-    def peek(self, length: int = 1) -> T:
+    def peek(self, length: int = 1) -> ValueOrError[T]:
         return self.read_pos(self._pos, length)
 
     def extract(self) -> Self:
@@ -135,24 +149,26 @@ class ByteBuffer(_ByteBuffer[bytearray]):
     def wrap(cls, data: bytes | bytearray) -> Self:
         return cls(bytearray(data))
 
-    def write(self,
-              value: memoryview | bytes) -> int:
+    def write(self, value: bytes) -> ValueOrError[int]:
         """keep data to position, increase position"""
-        self._pos += (length := self.write_pos(value, self._pos))
+        if not isinstance(length := self.write_pos(value, self._pos), Error):
+            self._pos += length
         return length
 
     def write_pos(self,
                   value: bytes,
-                  pos: int) -> int:
+                  pos: int) -> ValueOrError[int]:
         """keep data to position, return length data"""
         length = len(value)
-        self._check_space(length, pos)
+        if isinstance(err := self._check_space(length, pos), Error):
+            return err
         self.buf[pos: pos + length] = value
         return length
 
-    def put_uint8(self, value: int) -> int:
+    def put_uint8(self, value: int) -> ValueOrError[int]:
         """put builtin int, increase position"""
-        self._check_space(1)
+        if isinstance(err := self._check_space(1), Error):
+            return err
         self.buf[self._pos] = value
         self._pos += 1
         return 1
@@ -161,7 +177,7 @@ class ByteBuffer(_ByteBuffer[bytearray]):
         """Allocate a new ByteBuffer with a zero-initialized buffer of given size"""
         return ByteBufferFrozen(bytes(self))
 
-    def shift_right(self, pos: int, length: int, step: int) -> int:
+    def shift_right(self, pos: int, length: int, step: int) -> ValueOrError[int]:
         """
         Shift data in the buffer right by `step` bytes.
 
@@ -178,17 +194,17 @@ class ByteBuffer(_ByteBuffer[bytearray]):
         """
         # Validate parameters
         if step < 0:
-            raise ValueError(f"Step must be non-negative, got {step}")
+            return Error.from_e(ValueError(f"Step must be non-negative, got {step}"))
         if length < 0:
-            raise ValueError(f"Length must be non-negative, got {length}")
+            return Error.from_e(ValueError(f"Length must be non-negative, got {length}"))
         if pos < 0 or pos > len(self.buf):
-            raise ValueError(f"Position {pos} out of range [0, {len(self.buf)}]")
+            return Error.from_e(ValueError(f"Position {pos} out of range [0, {len(self.buf)}]"))
         # Nothing to shift or zero shift - just return next position
         if length == 0 or step == 0:
             return pos + length
         # Check if shifted data fits in buffer
         if pos + length + step > len(self.buf):
-            raise BufferError(f"Not enough space: need {pos + length + step}, have {len(self.buf)}")
+            return Error.from_e(BufferError(f"Not enough space: need {pos + length + step}, have {len(self.buf)}"))
         # Write data to new position
         for i in range(length - 1, -1, -1):
             self.buf[pos + step + i] = self.buf[pos + i]

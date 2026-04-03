@@ -7,6 +7,7 @@ from .integer_type import IntegerType
 from .bit_string import BitStringType
 from .octet_string_type import OctetStringType
 from .enumerated_type import EnumeratedType
+from .sequence_of_type import SequenceOfType
 
 
 class ConstraintSpec(Protocol):
@@ -146,6 +147,13 @@ class ConstrainedType[T: Type](Type, Protocol):
                 raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
             return
         elif isinstance(self.value, OctetStringType):
+            if (
+                isinstance(self.constraint_spec, SizeConstraint)
+                and not self.constraint_spec.contains(len(self.value.value))
+            ):
+                raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
+            return
+        elif isinstance(self.value, SequenceOfType):
             if (
                 isinstance(self.constraint_spec, SizeConstraint)
                 and not self.constraint_spec.contains(len(self.value.value))

@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from typing import Self, TypeAlias, Protocol, Optional, Any, runtime_checkable
+from StructResult.result import ValueOrError
+from mypy.errorcodes import VALID_TYPE
 from ..byte_buffer import ByteBuffer
 
 # Transcript represents minimal data needed for string parsing/reconstruction.
@@ -10,14 +12,14 @@ Transcript: TypeAlias = str | list["Transcript"]
 
 class EDTLV(Protocol):
     @classmethod
-    def get(cls, buf: ByteBuffer) -> Self:
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode with full TLV (Tag + Length + Contents).
         MUST validate tag before decoding.
         """
         ...
 
-    def put(self, buf: ByteBuffer) -> int:
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode with full TLV (Tag + Length + Contents).
         Returns number of bytes written.
@@ -26,57 +28,27 @@ class EDTLV(Protocol):
 
 
 type INTEGER = int
+type REAL = float
 type STRING = str
 type BIT_STRING = tuple[int, ...]
 type BOOLEAN = bool
 type NULL = None
 type OCTET_STRING = bytes
 type OBJECT_IDENTIFIER = tuple[int, ...]
-type SIMPLE = INTEGER | STRING | BIT_STRING | BOOLEAN | OCTET_STRING | OBJECT_IDENTIFIER | NULL | "SEQUENCE"
-type COMPLEX[T: "TYPE_VALUE"] = tuple[T, ...]
-type TYPE_VALUE = SIMPLE | COMPLEX[Any]
+type SIMPLE = INTEGER | STRING | BIT_STRING | BOOLEAN | OCTET_STRING | OBJECT_IDENTIFIER | NULL
+type COMPLEX = "SEQUENCE" | "SEQUENCE_OF[Any]"
+type TYPE_VALUE = SIMPLE | COMPLEX
 
 
-class EDV(EDTLV, Protocol):
+@runtime_checkable
+class Type(Protocol):
     """
     Encoding Data Value component per X.690 §8.1.2
 
     Provides two levels of encoding interface:
     1. Full TLV: get()/put() - Tag + Length + Contents
-    2. Contents only: get_contents()/put_contents() - Length + Contents only
+    2. Contents only: get_lc()/put_lc() - Length + Contents only
 
-    Used for:
-    - Standard BER: use get()/put()
-    - CHOICE alternatives: use get_contents()/put_contents()
-    - SEQUENCE components in A-XDR: use get_contents()/put_contents()
-    """
-
-    @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
-        """
-        Decode with Length + Contents ONLY (no Tag validation).
-
-        Used for:
-        - CHOICE alternatives (X.690 §8.13)
-        - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
-        - Explicitly tagged types where outer tag already validated
-        """
-        ...
-
-    def put_lc(self, buf: ByteBuffer) -> int:
-        """
-        Encode with Length + Contents ONLY (no Tag).
-
-        Used for:
-        - CHOICE alternatives (X.690 §8.13)
-        - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
-        """
-        ...
-
-
-@runtime_checkable
-class Type(EDV, Protocol):
-    """
     Base protocol for ASN.1 types with A-XDR/BER encoding support.
 
     IMPORTANT DESIGN NOTES:
@@ -101,9 +73,40 @@ class Type(EDV, Protocol):
     value: Any
 
     @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """
+        Decode with Length + Contents ONLY (no Tag validation).
+
+        Used for:
+        - CHOICE alternatives (X.690 §8.13)
+        - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+        - Explicitly tagged types where outer tag already validated
+        """
+        ...
+
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """
+        Encode with Length + Contents ONLY (no Tag).
+
+        Used for:
+        - CHOICE alternatives (X.690 §8.13)
+        - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+        """
+        ...
+
+    @classmethod
     def default(cls) -> Self:
         """Return default value instance for this type, if defined."""
         ...
+
+#     def normalize(self) -> TYPE_VALUE: ...
+
+
+# class Simple[T: SIMPLE](Type, Protocol):
+#     value: T
+
+#     def normalize(self) -> T:
+#         return self.value
 
 
 type SEQUENCE = tuple[Optional[Type], ...]
@@ -212,8 +215,24 @@ class RestrictedCharacterStringType(CharacterStringType, Protocol):
         return cls("")
 
 
+@dataclass
+class GraphicString(RestrictedCharacterStringType):
+    ...
+
+
+@dataclass
+class VisibleString(RestrictedCharacterStringType):
+    ...
+
+
+@dataclass
+class Utf8String(RestrictedCharacterStringType):
+    ...
+
+
 __all__ = [
     "INTEGER",
+    "REAL",
     "STRING",
     "BIT_STRING",
     "BOOLEAN",

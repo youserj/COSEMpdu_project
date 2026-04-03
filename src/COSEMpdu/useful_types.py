@@ -11,11 +11,6 @@ from .x680 import (
 from .axdr import ConstrainedIntegerType, IntegerType
 
 
-# ============================================================================
-# -- Useful types
-# ============================================================================
-
-
 @dataclass
 class Integer8(ConstrainedIntegerType):
     constraint_spec = ValueRange(-128, 127)

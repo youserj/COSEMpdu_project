@@ -4,8 +4,8 @@ Based on COSEMpdu_GB83.txt (Green Book 8.3) and IEC 61334-6
 Tests only put/get (encode/decode) operations for XDLMS_APDU elements
 """
 import unittest
-from COSEMpdu import apdu
-from src.COSEMpdu.axdr import IntegerType, Type
+from src.COSEMpdu import apdu
+from src.COSEMpdu.axdr import IntegerType, Type, NullType
 from src.COSEMpdu.apdu import (
     # XDLMS-APDU Choice Type
     InitialRequest1, InitialResponse8,
@@ -103,28 +103,28 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_read_request_tag_5(self) -> None:
         """Test ReadRequest5 encode/decode (tag 5)"""
-        from COSEMpdu.types_used import VariableAccessSpecification
+        from src.COSEMpdu.types_used import VariableAccessSpecification
         value = [VariableAccessSpecification(variable_name=ObjectName.from_int(16))]
         self._encode_decode_roundtrip(ReadRequest5, value, 5)
 
     def test_read_response_tag_12(self) -> None:
         """Test ReadResponse12 encode/decode (tag 12)"""
-        from COSEMpdu.apdu import ReadResponseChoice, Data0
+        from src.COSEMpdu.apdu import ReadResponseChoice, Data0
         value = [ReadResponseChoice(0, Data0(Data.unsigned(100)))]
         self._encode_decode_roundtrip(ReadResponse12, value, 12)
 
     def test_write_request_tag_6(self) -> None:
         """Test WriteRequest6 encode/decode (tag 6)"""
-        from COSEMpdu.types_used import VariableAccessSpecification
+        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName2
         value = {
-            "variable_access_specification": [VariableAccessSpecification(variable_name=ObjectName.from_int(16))],
+            "variable_access_specification": [VariableAccessSpecification(VariableName2(ObjectName.from_int(16)))],
             "list_of_data": [Data.unsigned(50)]
         }
         self._encode_decode_roundtrip(WriteRequest6, value, 6)
 
     def test_write_response_tag_13(self) -> None:
         """Test WriteResponse13 encode/decode (tag 13)"""
-        from COSEMpdu.apdu import WriteResponseChoice
+        from src.COSEMpdu.apdu import WriteResponseChoice
         value = apdu.WriteResponse([WriteResponseChoice.SUCCESS])
         self._encode_decode_roundtrip(writeResponse, value, 13)
 
@@ -138,7 +138,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_data_notification_tag_15(self) -> None:
         """Test DataNotification15 encode/decode (tag 15)"""
-        from COSEMpdu.apdu import NotificationBody
+        from src.COSEMpdu.apdu import NotificationBody
         value = {
             "long_invoke_id_and_priority": LongInvokeIdAndPriority.from_bits(1),
             "date_time": bytes(12),
@@ -156,7 +156,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_unconfirmed_write_request_tag_22(self) -> None:
         """Test UnconfirmedWriteRequest22 encode/decode (tag 22)"""
-        from COSEMpdu.types_used import VariableAccessSpecification
+        from src.COSEMpdu.types_used import VariableAccessSpecification
         value = {
             "variable_access_specification": [VariableAccessSpecification(variable_name=ObjectName.from_int(16))],
             "list_of_data": [Data(unsigned=Unsigned8(50))]
@@ -165,7 +165,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_information_report_request_tag_24(self) -> None:
         """Test InformationReportRequest24 encode/decode (tag 24)"""
-        from COSEMpdu.types_used import VariableAccessSpecification
+        from src.COSEMpdu.types_used import VariableAccessSpecification
         value = {
             "current_time": None,
             "variable_access_specification": [VariableAccessSpecification(variable_name=ObjectName.from_int(16))],
@@ -179,7 +179,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_get_request_normal_tag_192(self) -> None:
         """Test GetRequest (get-request-normal) encode/decode (tag 192)"""
-        from COSEMpdu.apdu import GetRequestNormal1
+        from src.COSEMpdu.apdu import GetRequestNormal1
         value = GetRequestNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "cosem_attribute_descriptor": CosemAttributeDescriptor(1, bytes(6), 1),
@@ -190,7 +190,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_get_response_normal_tag_196(self) -> None:
         """Test GetResponse (get-response-normal) encode/decode (tag 196)"""
-        from COSEMpdu.apdu import GetResponseNormal1
+        from src.COSEMpdu.apdu import GetResponseNormal1
         value = GetResponseNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "result": GetDataResult(0, Data.unsigned(100))
@@ -200,7 +200,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_set_request_normal_tag_193(self) -> None:
         """Test SetRequest (set-request-normal) encode/decode (tag 193)"""
-        from COSEMpdu.apdu import SetRequestNormal1
+        from src.COSEMpdu.apdu import SetRequestNormal1
         value = SetRequestNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "cosem_attribute_descriptor": CosemAttributeDescriptor(1, bytes(6), 1),
@@ -212,7 +212,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_set_response_normal_tag_197(self) -> None:
         """Test SetResponse (set-response-normal) encode/decode (tag 197)"""
-        from COSEMpdu.apdu import SetResponseNormal1
+        from src.COSEMpdu.apdu import SetResponseNormal1
         value = SetResponseNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "result": DataAccessResult(0)
@@ -222,7 +222,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_action_request_normal_tag_195(self) -> None:
         """Test ActionRequest (action-request-normal) encode/decode (tag 195)"""
-        from COSEMpdu.apdu import ActionRequestNormal1
+        from src.COSEMpdu.apdu import ActionRequestNormal1
         value = ActionRequestNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "cosem_method_descriptor": CosemMethodDescriptor(1, bytes(6), 1),
@@ -233,7 +233,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_action_response_normal_tag_199(self) -> None:
         """Test ActionResponse (action-response-normal) encode/decode (tag 199)"""
-        from COSEMpdu.apdu import ActionResponseNormal1
+        from src.COSEMpdu.apdu import ActionResponseNormal1
         value = ActionResponseNormal1({
             "invoke_id_and_priority": InvokeIdAndPriority.from_int(1),
             "single_response": ActionResponseWithOptionalData(

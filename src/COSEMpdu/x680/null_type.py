@@ -39,3 +39,8 @@ class NullType(BuiltinType):
     def __bool__(self) -> bool:
         """Always False (semantic convention for NULL)"""
         return False
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, self.__class__):
+            return True
+        return super().__eq__(value)

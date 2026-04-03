@@ -275,13 +275,13 @@ class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
 @dataclass
 class VariableAccessSpecification(axdr.ChoiceType):
     """Variable-Access-Specification"""
-    alternatives = axdr.create_alternatives(
-        NamedType("variable-name", VariableName2),
-        NamedType("parameterized-access", ParameterizedAccess4),
-        NamedType("block-number-access", BlockNumberAccess5),
-        NamedType("read-data-block-access", ReadDataBlockAccess6),
-        NamedType("write-data-block-access", WriteDataBlockAccess7),
-    )
+    alternatives = {
+        2: NamedType("variable-name", VariableName2),
+        4: NamedType("parameterized-access", ParameterizedAccess4),
+        5: NamedType("block-number-access", BlockNumberAccess5),
+        6: NamedType("read-data-block-access", ReadDataBlockAccess6),
+        7: NamedType("write-data-block-access", WriteDataBlockAccess7),
+    }
 
     # Convenience constructors
     @classmethod

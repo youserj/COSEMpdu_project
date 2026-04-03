@@ -11,6 +11,7 @@ from src.COSEMpdu.x690 import Tag, Length
 from src.COSEMpdu.x680 import NamedType, TaggingMode, OptionalNamedType, DefaultNamedType, NamedBit, NamedBitList
 from src.COSEMpdu.ber import (
     create_alternatives,
+    TagError,
     TaggedType,
     BitStringType,
     BooleanType,
@@ -141,8 +142,7 @@ class TestTag(unittest.TestCase):
 
         # Wrong tag should raise
         buf = ByteBuffer.wrap(b"\x03\x01\x00")
-        with self.assertRaises(ValueError):
-            expected_tag.validate(buf)
+        expected_tag.validate(buf).has(exception_type=ValueError)
 
 
 class TestBooleanType(unittest.TestCase):
@@ -315,8 +315,7 @@ class TestBitStringType(unittest.TestCase):
     def test_invalid_unused_bits(self) -> None:
         """unused_bits must be 0-7"""
         buf = ByteBuffer.wrap(b"\x03\x02\x08\x00")
-        with self.assertRaises(ValueError):
-            BitStringType.get(buf)
+        self.assertTrue(BitStringType.get(buf).has(exception_type=ValueError))
 
 
 class TestBitStringType2(unittest.TestCase):
@@ -386,8 +385,7 @@ class TestBitStringType2(unittest.TestCase):
     def test_invalid_unused_bits(self) -> None:
         """unused_bits must be 0-7"""
         buf = ByteBuffer.wrap(b"\x03\x02\x08\x00")
-        with self.assertRaises(ValueError):
-            BitStringType.get(buf)
+        self.assertTrue(BitStringType.get(buf).has(exception_type=ValueError))
 
     # =====================================================================
     # Named Bits Tests
@@ -709,8 +707,7 @@ class TestNullType(unittest.TestCase):
     def test_invalid_length(self) -> None:
         """Length must be 0"""
         buf = ByteBuffer.wrap(b"\x05\x01\x00")
-        with self.assertRaises(ValueError):
-            NullType.get(buf)
+        self.assertTrue(NullType.get(buf).has(exception_type=ValueError))
 
     def test_length_calculation(self) -> None:
         """__len__ should return 2"""
@@ -1352,14 +1349,12 @@ class TestEdgeCases(unittest.TestCase):
         buf = ByteBuffer.allocate(1)
         integer = IntegerType(1000)  # Requires multiple bytes
 
-        with self.assertRaises(BufferError):
-            integer.put(buf)
+        self.assertTrue(integer.put(buf).has(exception_type=BufferError))
 
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise"""
         buf = ByteBuffer.wrap(b"\x02\x05\x00\x00")  # Claims 5 bytes, has 2
-        with self.assertRaises(BufferError):
-            IntegerType.get(buf)
+        self.assertTrue(IntegerType.get(buf).has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Indefinite length not supported for primitive types"""
@@ -1605,28 +1600,24 @@ class TestSequenceOfType(unittest.TestCase):
     def test_invalid_tag(self) -> None:
         """Invalid tag should raise"""
         buf = ByteBuffer.wrap(b"\x31\x00")  # SET OF tag instead of SEQUENCE OF
-        with self.assertRaises(ValueError):
-            self.IntegerSequence.get(buf)
+        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=TagError))
 
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise"""
         buf = ByteBuffer.wrap(b"\x30\x05\x02\x01\x01")  # Claims 5 bytes, has 3
-        with self.assertRaises(BufferError):
-            self.IntegerSequence.get(buf)
+        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=BufferError))
 
     def test_buffer_overflow(self) -> None:
         """Buffer overflow protection"""
         seq = self.IntegerSequence((IntegerType(1000), IntegerType(2000)))
         buf = ByteBuffer.allocate(1)  # Too small
 
-        with self.assertRaises(BufferError):
-            seq.put(buf)
+        self.assertTrue(seq.put(buf).has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Indefinite length not supported"""
         buf = ByteBuffer.wrap(b"\x30\x80")  # SEQUENCE OF with indefinite length
-        with self.assertRaises(ValueError):
-            self.IntegerSequence.get(buf)
+        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=ValueError))
 
     def test_large_sequence(self) -> None:
         """Test large SEQUENCE OF"""
@@ -1845,18 +1836,17 @@ class TestTaggedType(unittest.TestCase):
 
         # Decode with wrong tag number (6 instead of 5)
         @dataclass
-        class WrongTag(TaggedType):
+        class WrongTag(TaggedType[IntegerType]):
             tag = Tag(6, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
 
-        with self.assertRaises(ValueError):
-            WrongTag.get(buf)
+        self.assertTrue(WrongTag.get(buf).has(exception_type=TagError))
 
     def test_tag_validation_error_class(self) -> None:
         """Test tag validation raises on tag class mismatch"""
         @dataclass
-        class TaggedInt(TaggedType):
+        class TaggedInt(TaggedType[IntegerType]):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
@@ -1874,8 +1864,7 @@ class TestTaggedType(unittest.TestCase):
             mode = TaggingMode.IMPLICIT
             value: IntegerType
 
-        with self.assertRaises(ValueError):
-            WrongClass.get(buf)
+        self.assertTrue(WrongClass.get(buf).has(exception_type=TagError))
 
     def test_get_contents_implicit(self) -> None:
         """Test get_contents for IMPLICIT tagged type (CHOICE alternative)"""
@@ -2211,15 +2200,13 @@ class TestObjectIdentifierType(unittest.TestCase):
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise BufferError"""
         buf = ByteBuffer.wrap(b"\x06\x05\x28\x01\x81")  # Missing last octet
-        with self.assertRaises(BufferError):
-            ObjectIdentifierType.get(buf)
+        self.assertTrue(ObjectIdentifierType.get(buf).has(exception_type=BufferError))
 
     def test_invalid_base128_continuation(self) -> None:
         """Invalid base-128 continuation should raise"""
         # Continuation bit set but no more octets
         buf = ByteBuffer.wrap(b"\x06\x02\x28\x81")
-        with self.assertRaises(BufferError):
-            ObjectIdentifierType.get(buf)
+        self.assertTrue(ObjectIdentifierType.get(buf).has(exception_type=BufferError))
 
 
 class TestGeneralizedTime(unittest.TestCase):
@@ -2433,14 +2420,12 @@ class TestGeneralizedTime(unittest.TestCase):
         gt = GeneralizedTime("20240115120000Z")
         buf = ByteBuffer.allocate(1)  # Too small
 
-        with self.assertRaises(BufferError):
-            gt.put(buf)
+        self.assertTrue(gt.put(buf).has(exception_type=BufferError))
 
     def test_truncated_encoding(self) -> None:
         """Test truncated encoding raises"""
         buf = ByteBuffer.wrap(b"\x18\x0F2024011512")  # Truncated
-        with self.assertRaises(BufferError):
-            GeneralizedTime.get(buf)
+        self.assertTrue(GeneralizedTime.get(buf).has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Test indefinite length not supported"""

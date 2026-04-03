@@ -24,7 +24,7 @@ class Conformance_(ber.ConstrainedType[ber.BitStringType]):
         NamedBit("read", 3),
         NamedBit("write", 4),
         NamedBit("unconfirmed-write", 5),
-        NamedBit("reserved-six", 6),
+        NamedBit("delta-value-encoding", 6),
         NamedBit("reserved-seven", 7),
         NamedBit("attribute0-supported-with-set", 8),
         NamedBit("priority-mgmt-supported", 9),

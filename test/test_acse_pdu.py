@@ -66,26 +66,26 @@ class TestACSEBaseTypes(unittest.TestCase):
     def test_ap_invocation_identifier(self) -> None:
         """Test APInvocationIdentifier (INTEGER)"""
         identifier = APInvocationIdentifier(42)
-        self.assertEqual(identifier, 42)
+        self.assertEqual(identifier.value, 42)
 
     def test_protocol_version(self) -> None:
         """Test ProtocolVersion (BIT STRING)"""
         version = ProtocolVersion((0,))  # version1
-        self.assertEqual(version, (0,))
+        self.assertEqual(version.value, (0,))
 
     def test_acse_requirements(self) -> None:
         """Test ACSERequirements (BIT STRING with named bits)"""
         requirements = ACSERequirements((1,))  # authentication bit set
-        self.assertEqual(requirements, (1,))
+        self.assertEqual(requirements.value, (1,))
 
     def test_association_result(self) -> None:
         """Test AssociationResult (ENUMERATED)"""
         accepted = AssociationResult(0)  # accepted
         rejected_permanent = AssociationResult(1)  # rejected-permanent
         rejected_transient = AssociationResult(2)  # rejected-transient
-        self.assertEqual(accepted, 0)
-        self.assertEqual(rejected_permanent, 1)
-        self.assertEqual(rejected_transient, 2)
+        self.assertEqual(accepted.value, 0)
+        self.assertEqual(rejected_permanent.value, 1)
+        self.assertEqual(rejected_transient.value, 2)
 
 
 class TestTaggedTypes(unittest.TestCase):
@@ -165,7 +165,7 @@ class TestAARQApdu(unittest.TestCase):
 
         self.assertIsNotNone(aarq)
         # Check default protocol version is set
-        self.assertEqual(aarq.value[0], ProtocolVersion((0,)))
+        self.assertEqual(aarq.value[0].value, ProtocolVersion((0,)))
 
     def test_from_components_with_optional_fields(self) -> None:
         """Test AARQApdu.from_components with optional fields"""

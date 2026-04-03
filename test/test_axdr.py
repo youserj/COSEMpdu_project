@@ -9,10 +9,10 @@ from src.COSEMpdu import x680
 from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
     create_alternatives,
-    ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType,
+    ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
     BooleanType, IntegerType, BitStringType, OctetStringType, TaggedType,
     ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
-    _encode_variable_length_integer, _decode_variable_length_integer
+    _encode_variable_length_integer, get_length
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x680 import NamedType, OptionalNamedType, DefaultNamedType
@@ -59,24 +59,23 @@ class TestVariableLengthInteger(unittest.TestCase):
     def test_decode_short_form(self) -> None:
         """Decode short form values (0-127)"""
         buf = ByteBuffer.wrap(b"\x00")
-        self.assertEqual(_decode_variable_length_integer(buf), 0)
+        self.assertEqual(get_length(buf), 0)
 
         buf = ByteBuffer.wrap(b"\x7F")
-        self.assertEqual(_decode_variable_length_integer(buf), 127)
+        self.assertEqual(get_length(buf), 127)
 
     def test_decode_long_form(self) -> None:
         """Decode long form values (>127)"""
         buf = ByteBuffer.wrap(b"\x81\x80")
-        self.assertEqual(_decode_variable_length_integer(buf), 128)
+        self.assertEqual(get_length(buf), 128)
 
         buf = ByteBuffer.wrap(b"\x82\x01\x00")
-        self.assertEqual(_decode_variable_length_integer(buf), 256)
+        self.assertEqual(get_length(buf), 256)
 
     def test_decode_invalid(self) -> None:
         """Invalid length octet (0x80) raises ValueError"""
         buf = ByteBuffer.wrap(b"\x80")
-        with self.assertRaises(ValueError):
-            _decode_variable_length_integer(buf)
+        self.assertTrue(get_length(buf).has(exception_type=ValueError))
 
 
 class TestBooleanType(unittest.TestCase):
@@ -538,13 +537,13 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_encode_fixed_length(self) -> None:
         """Fixed-length SEQUENCE OF encodes components only (§6.10.1)"""
-        class TestSeqOf(SequenceOfType[IntegerType]):
+        class TestSeqOf(ConstrainedSequenceOfType[IntegerType]):
             component_type = IntegerType
-            fixed_length = 2
+            constraint_spec = SizeConstraint(2)
 
-        val = TestSeqOf(
+        val = TestSeqOf(SequenceOfType(
             value=[IntegerType(value=1), IntegerType(value=2)]
-        )
+        ))
         buf = ByteBuffer.allocate(2)
         written = val.put(buf)
         self.assertEqual(written, 2)
@@ -568,9 +567,14 @@ class TestSequenceOfType(unittest.TestCase):
     def test_decode_fixed_length(self) -> None:
         """Decode fixed-length SEQUENCE OF"""
         @dataclass
-        class TestSeqOf(SequenceOfType[IntegerType]):
+        class SequenceOfIntegerType(SequenceOfType[IntegerType]):
             component_type = IntegerType
-            fixed_length = 2
+
+
+        @dataclass
+        class TestSeqOf(ConstrainedSequenceOfType[SequenceOfIntegerType]):
+            constraint_spec = SizeConstraint(2)
+            value: SequenceOfIntegerType
 
         buf = ByteBuffer.wrap(b"\x01\x02")
         val = TestSeqOf.get(buf)
@@ -591,11 +595,11 @@ class TestSequenceOfType(unittest.TestCase):
     def test_encode_empty_fixed(self) -> None:
         """Empty fixed-length SEQUENCE OF encodes nothing"""
         @dataclass
-        class TestSeqOf(SequenceOfType[IntegerType]):
+        class TestSeqOf(ConstrainedSequenceOfType[IntegerType]):
             component_type = IntegerType
-            fixed_length = 0
+            constraint_spec = SizeConstraint(0)
 
-        val = TestSeqOf(value=())
+        val = TestSeqOf(SequenceOfType([]))
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 0)

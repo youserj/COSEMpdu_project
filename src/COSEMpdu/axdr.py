@@ -19,7 +19,9 @@ Standards:
 """
 
 from dataclasses import dataclass
+from re import X
 from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any
+from StructResult.result import ValueOrError, Error
 from COSEMpdu import x690
 from .x680.tagged_type import TaggingMode
 from .x680.constrained_type import ValueRange, SizeConstraint
@@ -52,31 +54,32 @@ def _encode_variable_length_integer(value: int) -> bytes:
     return bytes([length_octet]) + value_bytes
 
 
-def _decode_variable_length_integer(buf: ByteBuffer) -> int:
+def get_length(buf: ByteBuffer) -> ValueOrError[int]:
     """
     Decode variable-length integer per IEC 61334-6 §6.1.2.
 
     Returns:
         Decoded integer value
     """
-    first = buf.get_uint8()
+    if isinstance(first := buf.get_uint8(), Error):
+        return first
     if not (first & 0x80):
         # Short form: bits 7-1 = value (0-127)
         return first
     # Long form: bits 7-1 = number of value bytes
     num_bytes = first & 0x7F
     if num_bytes == 0:
-        raise ValueError("Invalid variable-length integer encoding")
+        return Error.from_e(ValueError("Invalid variable-length integer encoding"))
     return buf.get_uint(num_bytes)
 
 
 class Type(x680.Type, Protocol):
     @classmethod
-    def get(cls, buf: ByteBuffer) -> Self:
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """Decode with Length + Contents"""
         return cls.get_lc(buf)  # Then decode length + contents
 
-    def put(self, buf: ByteBuffer) -> int:
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode with Length + Contents"""
         return self.put_lc(buf)
 
@@ -103,7 +106,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
     value: T
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> Self:
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode tagged type from A-XDR
 
@@ -114,13 +117,14 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             [Tag(1)] [Contents with inner tag if CHOICE]
         """
         # Read tag number (1 byte for A-XDR)
-        tag_number = buf.get_uint8()
+        if isinstance(tag_number := buf.get_uint8(), Error):
+            return tag_number
         if tag_number != cls.tag:
-            raise ValueError(f"Expected tag {cls.tag}, got {tag_number}")
+            return Error.from_e(ValueError(f"Expected tag {cls.tag}, got {tag_number}"))
         return cls.get_lc(buf)
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode tagged type from A-XDR
 
@@ -135,13 +139,19 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             value = cls.get_type().get_lc(buf)  # IMPLICIT: contents without inner tag
         else:
             value = cls.get_type().get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
+        if isinstance(value, Error):
+            return value
         return cls(value)
 
-    def put(self, buf: ByteBuffer) -> int:
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode with Length + Contents"""
-        return buf.put_uint8(self.tag) + self.put_lc(buf)
+        if isinstance(t := buf.put_uint8(self.tag), Error):
+            return t
+        if isinstance(lc := self.put_lc(buf), Error):
+            return lc
+        return t + lc
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode tagged type to A-XDR
 
@@ -188,17 +198,18 @@ class BooleanType(Type, x680.BooleanType):
     """
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode BOOLEAN from A-XDR (IEC 61334-6 §6.2)
 
         Returns instance and advances buffer position.
         """
         # Single octet, no tag/length
-        content = buf.get_uint8()
+        if isinstance(content := buf.get_uint8(), Error):
+            return content
         return cls(content != 0)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode BOOLEAN to A-XDR (IEC 61334-6 §6.2)
 
@@ -244,9 +255,10 @@ class IntegerType(Type, x680.IntegerType):
         - More compact than BER for constrained types
     """
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """Variable-length encoding (§6.1.2)"""
-        first = buf.get_uint8()
+        if isinstance(first := buf.get_uint8(), Error):
+            return first
         if not (first & 0x80):
             # Short form: 0-127
             return cls(first)
@@ -255,13 +267,14 @@ class IntegerType(Type, x680.IntegerType):
         return cls.get_c(buf, num_bytes)
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
-        content = buf.read(length)
+    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
+        if isinstance(content := buf.read(length), Error):
+            return content
         # Decode as two's complement
         value = int.from_bytes(content, byteorder="big", signed=True)
         return cls(value)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Variable-length encoding"""
         if 0 <= self.value <= 127:
             return buf.put_uint8(self.value)
@@ -301,33 +314,39 @@ class BitStringType(Type, x680.BitStringType):
         - DLMS uses fixed-length for conformance blocks
     """
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
-        num_bits = _decode_variable_length_integer(buf)
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        if isinstance(num_bits := get_length(buf), Error):
+            return num_bits
         if num_bits == 0:
             return cls(())
         return cls.get_c(buf, num_bits)
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
+    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         bits: list[int] = []
         num_octets = (length + 7) // 8
-        data = buf.read(num_octets)
+        if isinstance(data := buf.read(num_octets), Error):
+            return data
         for byte in data:
             for i in range(8):
                 bits.append(1 if (byte & (1 << (7 - i))) else 0)
         bits = bits[:length]  # Trim to exact bit length
         return cls(tuple(bits))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         n = len(self.value)
         if n == 0:
             # Length = 0 bits
             return buf.put_uint8(0)
         # Encode length (number of BITS)
         length_bytes = _encode_variable_length_integer(len(self.value))
-        return buf.write(length_bytes) + self.put_c(buf)
+        if isinstance(l := buf.write(length_bytes), Error):
+            return l
+        if isinstance(c := self.put_c(buf), Error):
+            return c
+        return l + c
 
-    def put_c(self, buf: ByteBuffer) -> int:
+    def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         n = len(self.value)
         unused_bits = (8 - (n % 8)) % 8
         # Pad to octet boundary
@@ -366,23 +385,29 @@ class OctetStringType(Type, x680.OctetStringType):
     """
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
-        num_octets = _decode_variable_length_integer(buf)
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        if isinstance(num_octets := get_length(buf), Error):
+            return num_octets
         if num_octets == 0:
             return cls(b"")
         return cls.get_c(buf, num_octets)
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, length: int) -> Self:
+    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         """decode content"""
-        data = bytes(buf.read(length))
-        return cls(data)
+        if isinstance(data := buf.read(length), Error):
+            return data
+        return cls(bytes(data))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         length_bytes = _encode_variable_length_integer(len(self.value))
-        return buf.write(length_bytes) + self.put_c(buf)
+        if isinstance(l := buf.write(length_bytes), Error):
+            return l
+        if isinstance(c := self.put_c(buf), Error):
+            return c
+        return l + c
 
-    def put_c(self, buf: ByteBuffer) -> int:
+    def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         return buf.write(self.value)
 
 
@@ -390,17 +415,23 @@ class OctetStringType(Type, x680.OctetStringType):
 class VisibleString(Type, x680.VisibleString):
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         # Variable-length encoding (§6.5.2) only
-        num_octets = _decode_variable_length_integer(buf)
+        if isinstance(num_octets := get_length(buf), Error):
+            return num_octets
         if num_octets == 0:
             return cls("")
-        data = bytes(buf.read(num_octets))
+        if isinstance(data := buf.read(num_octets), Error):
+            return data
         return cls(data.decode(encoding="ascii"))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         length_bytes = _encode_variable_length_integer(len(self.value))
-        return buf.write(length_bytes) + buf.write(self.value.encode("ascii"))
+        if isinstance(l := buf.write(length_bytes), Error):
+            return l
+        if isinstance(c := buf.write(self.value.encode("ascii")), Error):
+            return c
+        return l + c
 
     def __str__(self) -> str:
         return repr(self.value)
@@ -413,18 +444,22 @@ class VisibleString(Type, x680.VisibleString):
 class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
-        # Variable-length encoding (§6.5.2) only
-        num_octets = _decode_variable_length_integer(buf)
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        if isinstance(num_octets := get_length(buf), Error):
+            return num_octets
         if num_octets == 0:
             return cls("")
-        data = bytes(buf.read(num_octets))
+        if isinstance(data := buf.read(num_octets), Error):
+            return data
         return cls(data.decode(encoding="utf-8"))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
-        data = self.value.encode("utf-8")
-        length_bytes = _encode_variable_length_integer(len(data))
-        return buf.write(length_bytes) + buf.write(data)
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        length_bytes = _encode_variable_length_integer(len(self.value))
+        if isinstance(l := buf.write(length_bytes), Error):
+            return l
+        if isinstance(c := buf.write(self.value.encode("utf-8")), Error):
+            return c
+        return l + c
 
     def __str__(self) -> str:
         return repr(self.value)
@@ -463,18 +498,21 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
     value: TaggedType[Type]
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode CHOICE from A-XDR (IEC 61334-6 §6.6)
 
         Returns instance with chosen alternative and advances buffer position.
         """
-        tag = buf.get_uint8()
+        if isinstance(tag := buf.get_uint8(), Error):
+            return tag
         if (n_t := cls.alternatives.get(tag)) is None:
             raise ValueError(f"{tag} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
-        return cls(n_t.type_.get_lc(buf))
+        if isinstance(value := n_t.type_.get_lc(buf), Error):
+            return value
+        return cls(value)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode CHOICE to A-XDR (IEC 61334-6 §6.6)
 
@@ -517,9 +555,10 @@ class SequenceType(Type, x680.SequenceType):
         - Component order fixed by ASN.1 definition
         - DLMS uses extensively for APDUs
     """
+    components: ClassVar[tuple[NamedType[Type], ...]]
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode SEQUENCE from A-XDR (IEC 61334-6 §6.9)
 
@@ -529,7 +568,8 @@ class SequenceType(Type, x680.SequenceType):
         for n_t in cls.components:
             # Check for OPTIONAL/DEFAULT presence flag
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
-                presence_flag = buf.get_uint8()
+                if isinstance(presence_flag := buf.get_uint8(), Error):
+                    return presence_flag
                 if presence_flag == 0:
                     # Component absent
                     if isinstance(n_t, x680.DefaultNamedType):
@@ -538,11 +578,12 @@ class SequenceType(Type, x680.SequenceType):
                         components_data.append(None)
                     continue
             # Decode the component using its A-XDR get_contents()
-            value = n_t.type_.get_lc(buf)
+            if isinstance(value := n_t.type_.get_lc(buf), Error):
+                return value
             components_data.append(value)
         return cls(tuple(components_data))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode SEQUENCE to A-XDR (IEC 61334-6 §6.9)
 
@@ -553,17 +594,21 @@ class SequenceType(Type, x680.SequenceType):
             # Handle OPTIONAL/DEFAULT with presence flag
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
                 if value is None or (
-                    isinstance(n_t, DefaultNamedType) and
-                    value == n_t.default
+                    isinstance(n_t, DefaultNamedType)
+                    and value == n_t.default
                 ):
-                    # Component absent
-                    written += buf.put_uint8(0)
+                    if isinstance(tmp := buf.put_uint8(0), Error):  # Component absent
+                        return tmp
+                    written += tmp
                     continue
-                # Component present
-                written += buf.put_uint8(1)
+                if isinstance(tmp := buf.put_uint8(1), Error):  # Component present
+                    return tmp
+                written += tmp
             if value is None:
-                raise ValueError(f"Required component <{n_t.identifier}> not set")
-            written += value.put_lc(buf)  # Encode component contents (no tag/length)
+                return Error.from_e(ValueError(f"Required component <{n_t.identifier}> not set"))
+            if isinstance(tmp := value.put_lc(buf), Error):  # Component present
+                return tmp
+            written += tmp  # Encode component contents (no tag/length)
         return written
 
 
@@ -596,17 +641,18 @@ class EnumeratedType(Type, x680.EnumeratedType):
     value: ENUM_VALUE
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode ENUMERATED from A-XDR (IEC 61334-6 §6.3)
 
         Returns instance and advances buffer position.
         """
         # Single octet, no tag/length
-        index = buf.get_uint8()
+        if isinstance(index := buf.get_uint8(), Error):
+            return index
         return cls(index)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode ENUMERATED to A-XDR (IEC 61334-6 §6.3)
 
@@ -638,7 +684,7 @@ class NullType(Type, x680.NullType):
     """
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode NULL from A-XDR (IEC 61334-6 §6.13)
 
@@ -647,7 +693,7 @@ class NullType(Type, x680.NullType):
         # NULL has no content in SEQUENCE components
         return cls(None)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode NULL to A-XDR (IEC 61334-6 §6.13)
 
@@ -702,12 +748,10 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         - Each component encoded per its type rules
         - DLMS uses for lists, arrays, etc.
     """
-
-    fixed_length: ClassVar[Optional[int]] = None  # Number of components (None = variable)
     value: SEQUENCE_OF[T]
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode SEQUENCE OF from A-XDR (IEC 61334-6 §6.10)
 
@@ -716,44 +760,41 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
 
         Returns instance and advances buffer position.
         """
+        if isinstance(num_components := get_length(buf), Error):
+            return num_components
+        return cls.get_c(buf, num_components)
+
+    @classmethod
+    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         components: list[T] = []
-        if cls.fixed_length is not None:
-            # Fixed-length encoding (§6.10.1)
-            for _ in range(cls.fixed_length):
-                component = cast("T", cls.component_type.get_lc(buf))
-                components.append(component)
-        else:
-            # Variable-length encoding (§6.10.2)
-            num_components = _decode_variable_length_integer(buf)
-            for _ in range(num_components):
-                component = cast("T", cls.component_type.get_lc(buf))
-                components.append(component)
+        for _ in range(length):
+            if isinstance(component := cast("T", cls.component_type.get_lc(buf)), Error):
+                return component
+            components.append(component)
         return cls(components)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode SEQUENCE OF to A-XDR (IEC 61334-6 §6.10)
 
         Returns number of bytes written.
         """
-        n = len(self.value)
-
-        if self.fixed_length is not None:
-            # Fixed-length encoding (§6.10.1)
-            written = 0
-            for component in self.value:
-                written += component.put_lc(buf)
-            return written
         # Variable-length encoding (§6.10.2)
-        # Encode count
-        count_bytes = _encode_variable_length_integer(n)
-        written = buf.write(count_bytes)
+        count_bytes = _encode_variable_length_integer(len(self.value))
+        if isinstance(written := buf.write(count_bytes), Error):
+            return written
+        if isinstance(written2 := self.put_c(buf), Error):
+            return written2
+        return written + written2
 
-        # Encode components
+    def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
+        written: int = 0
         for component in self.value:
-            written += component.put_lc(buf)
-
+            if isinstance(tmp := component.put_lc(buf), Error):
+                return tmp
+            written += tmp
         return written
+
 
     @property
     def is_empty(self) -> bool:
@@ -776,14 +817,20 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
 class GeneralizedTime(Type, x680.GeneralizedTime):
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
-        length = x690.Length.get(buf)
-        data = buf.read(length.value).tobytes().decode("ascii")
-        return cls(data)
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        if isinstance(length := get_length(buf), Error):
+            return length
+        if isinstance(data := buf.read(length), Error):
+            return data
+        return cls(data.decode("ascii"))
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         data = self.value.encode("ascii")
-        return x690.Length(len(data)).put(buf) + buf.write(data)
+        if isinstance(l := x690.put_length(buf, len(data)), Error):
+            return l
+        if isinstance(c := buf.write(data), Error):
+            return c
+        return l + c
 
 
 @dataclass
@@ -804,7 +851,7 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         return cls(IntegerType(value))
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode INTEGER from A-XDR (IEC 61334-6 §6.1.1)
 
@@ -816,14 +863,17 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         if isinstance(cls.fixed_length, int):
             if cls.fixed_length == 0:
                 return cls(IntegerType(0))
-            content = buf.read(cls.fixed_length)
+            if isinstance(content := buf.read(cls.fixed_length), Error):
+                return content
             # Decode as unsigned for non-negative, signed for negative ranges
             # DLMS typically uses unsigned for constrained types
             value = int.from_bytes(content, byteorder="big", signed=cls.signed)
             return cls(IntegerType(value))
-        return cls(IntegerType.get_lc(buf))
+        if isinstance(value := IntegerType.get_lc(buf), Error):
+            return value
+        return cls(value)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
         Encode INTEGER to A-XDR (IEC 61334-6 §6.1)
 
@@ -855,13 +905,17 @@ class ConstrainedOctetStringType(Type, x680.ConstrainedType[OctetStringType]):
             cls.fixed_length = cls.constraint_spec.max_size
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         type_ = cls.get_type()
         if isinstance(cls.fixed_length, int):
-            return cls(type_.get_c(buf, cls.fixed_length))
-        return cls(type_.get_lc(buf))
+            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
+                return value
+            return cls(value)
+        if isinstance(value := type_.get_lc(buf), Error):
+            return value
+        return cls(value)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if isinstance(self.fixed_length, int):
             return self.value.put_c(buf)
         return self.value.put_lc(buf)
@@ -881,13 +935,47 @@ class ConstrainedBitStringType(Type, x680.ConstrainedType[BitStringType]):
             cls.fixed_length = cls.constraint_spec.max_size
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> Self:
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:  # copypast from other
         type_ = cls.get_type()
         if isinstance(cls.fixed_length, int):
-            return cls(type_.get_c(buf, cls.fixed_length))
-        return cls(type_.get_lc(buf))
+            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
+                return value
+            return cls(value)
+        if isinstance(value := type_.get_lc(buf), Error):
+            return value
+        return cls(value)
 
-    def put_lc(self, buf: ByteBuffer) -> int:
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        if isinstance(self.fixed_length, int):
+            return self.value.put_c(buf)
+        return self.value.put_lc(buf)
+
+
+@dataclass
+class ConstrainedSequenceOfType[T: SequenceOfType[Any]](Type, x680.ConstrainedType[T]):
+    fixed_length: ClassVar[Optional[int]] = None
+    value: T
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        if (  # Fixed-length encoding (§6.4.1)
+            isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size is None
+        ):
+            cls.fixed_length = cls.constraint_spec.max_size
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:  # copypast from other
+        type_ = cls.get_type()
+        if isinstance(cls.fixed_length, int):
+            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
+                return value
+            return cls(value)
+        if isinstance(value := type_.get_lc(buf), Error):
+            return value
+        return cls(value)
+
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if isinstance(self.fixed_length, int):
             return self.value.put_c(buf)
         return self.value.put_lc(buf)

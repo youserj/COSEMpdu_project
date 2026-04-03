@@ -6,7 +6,7 @@ Standards:
     - IEC 61334-6 §6.6: CHOICE encoding (A-XDR)
     - IEC 61334-6 §6.4-6.5: BIT STRING, OCTET STRING encoding
 """
-
+from typing import Any
 import unittest
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.data import (
@@ -478,7 +478,8 @@ class TestDataFloat32(unittest.TestCase):
 
     def test_encode_decode_valid(self) -> None:
         """Test float32 valid 4-byte encoding/decoding"""
-        original = Data(Float32(axdr.OctetStringType(b"\x40\x49\x0F\xDB")))  # π approx
+        original = Data.float32(3.1422341)  # π approx
+        z = float(original.value)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -742,20 +743,20 @@ class TestDataConvenienceConstructors(unittest.TestCase):
 
     def test_structure_constructor(self) -> None:
         """Test structure() constructor"""
-        elements = [Data.integer(1), Data.boolean(True)]
+        elements: list[Data[Any]] = [Data.integer(1), Data.boolean(True)]
         data = Data.structure(elements)
         self.assertEqual(data.selected, "structure")
         self.assertEqual(len(data.value.value), 2)
 
     def test_float32_constructor(self) -> None:
         """Test float32() constructor"""
-        data = Data.float32(b"\x40\x49\x0F\xDB")
+        data = Data.float32(4.0)
         self.assertEqual(data.selected, "float32")
         self.assertEqual(len(data.value.value.value), 4)
 
     def test_float64_constructor(self) -> None:
         """Test float64() constructor"""
-        data = Data.float64(b"\x40\x09\x21\xFB\x54\x44\x2D\x18")
+        data: Data[Float64] = Data.float64(8.0)
         self.assertEqual(data.selected, "float64")
         self.assertEqual(len(data.value.value.value), 8)
 

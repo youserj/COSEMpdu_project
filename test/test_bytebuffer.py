@@ -1,5 +1,6 @@
 import unittest
 from src.COSEMpdu.byte_buffer import ByteBuffer
+from StructResult.result import Error
 
 
 class TestType(unittest.TestCase):
@@ -17,13 +18,11 @@ class TestType(unittest.TestCase):
     def test_read_beyond_raises(self) -> None:
         buf = ByteBuffer.allocate(2)
         buf.write(b"AB")
-        with self.assertRaises(BufferError):
-            buf.read(3)
+        self.assertTrue(buf.read(3).has(exception_type=BufferError))
 
     def test_write_beyond_capacity_raises(self) -> None:
         buf = ByteBuffer.allocate(2)
-        with self.assertRaises(BufferError):
-            buf.write(b"ABC")
+        self.assertIsInstance(buf.write(b"ABC"), Error)
 
     def test_frozen_is_readonly(self) -> None:
         buf = ByteBuffer.allocate(3)
@@ -43,10 +42,8 @@ class TestType(unittest.TestCase):
         self.assertEqual(old, 2)
         self.assertEqual(buf.get_pos(), 4)
 
-        with self.assertRaises(BufferError):
-            buf.set_pos(5)  # equal to len(buf) is invalid per implementation
-        with self.assertRaises(BufferError):
-            buf.set_pos(-1)
+        self.assertTrue(buf.set_pos(5).has(exception_type=BufferError))  # equal to len(buf) is invalid per implementation
+        self.assertTrue(buf.set_pos(-1).has(exception_type=BufferError))
 
     # Additional comprehensive tests
     def test_allocate_and_len_and_bytes(self) -> None:
@@ -60,8 +57,7 @@ class TestType(unittest.TestCase):
         self.assertEqual(len(buf), len(data))
         self.assertEqual(bytes(buf.read(5)), data)
         self.assertEqual(buf.get_pos(), 5)
-        with self.assertRaises(BufferError):
-            buf.read(1)
+        self.assertTrue(buf.read(1).has(exception_type=BufferError))
 
     def test_remaining_and_zero_length_read_write(self) -> None:
         buf = ByteBuffer.allocate(3)
@@ -102,8 +98,7 @@ class TestType(unittest.TestCase):
         self.assertEqual(buf.get_pos(), 2)  # from first get_uint(2)
 
         # reading past end by position should raise
-        with self.assertRaises(BufferError):
-            buf.get_uint_pos(3, 2)
+        self.assertTrue(buf.get_uint_pos(3, 2).has(exception_type=BufferError))
 
     def test_read_pos_and_write_pos_behavior_and_errors(self) -> None:
         buf = ByteBuffer.allocate(4)
@@ -119,8 +114,7 @@ class TestType(unittest.TestCase):
         self.assertEqual(buf.get_pos(), 4)
 
         # writing beyond capacity should raise BufferError
-        with self.assertRaises(BufferError):
-            buf.write_pos(b"ABCD", 2)
+        self.assertTrue(buf.write_pos(b"ABCD", 2).has(exception_type=BufferError))
 
     def test_slice_and_independent_position(self) -> None:
         buf = ByteBuffer.allocate(5)
@@ -161,7 +155,5 @@ class TestType(unittest.TestCase):
 
     def test_shift_pos_invalid_targets(self) -> None:
         buf = ByteBuffer.allocate(2)
-        with self.assertRaises(BufferError):
-            buf.shift_pos(3)  # 0 + 3 > len
-        with self.assertRaises(BufferError):
-            buf.shift_pos(-1)
+        self.assertTrue(buf.shift_pos(3).has(exception_type=BufferError))  # 0 + 3 > len
+        self.assertTrue(buf.shift_pos(-1).has(exception_type=BufferError))

@@ -9,11 +9,12 @@ package-dir = {"" = "src"}
 
 [project]
 name = "COSEMpdu"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     {name="Serj Kotilevski", email="youserj@outlook.com"}
 ]
 dependencies = [
+    "StructResult>=0.9.9",
 ]
 description="cosem-pdu"
 readme = "README.md"
@@ -25,7 +26,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 [project.urls]
-Source = "https://github.com/youserj/SPODESclient_prj"
+Source = "https://github.com/youserj/COSEMpdu_project"
 
 [project.optional-dependencies]
 dev = [
