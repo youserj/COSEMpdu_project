@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Self, TypeAlias, Protocol, Optional, Any, runtime_checkable
 from StructResult.result import ValueOrError
-from mypy.errorcodes import VALID_TYPE
 from ..byte_buffer import ByteBuffer
 
 # Transcript represents minimal data needed for string parsing/reconstruction.
