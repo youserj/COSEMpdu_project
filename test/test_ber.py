@@ -2,10 +2,8 @@
 Unit tests for BER encoding/decoding (X.690)
 Tests cover all type implementations in ber.py
 """
-from re import I
 import unittest
 from typing import Optional, override, Self
-from dataclasses import dataclass
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length
 from src.COSEMpdu.x680 import NamedType, TaggingMode, OptionalNamedType, DefaultNamedType, NamedBit, NamedBitList
@@ -763,21 +761,16 @@ class TestEnumeratedType(unittest.TestCase):
         self.assertEqual(bytes(buf)[1], 2)  # Length = 2 (needs sign bit)
 
 
-@dataclass
 class Integer0(TaggedType[IntegerType]):
     tag = Tag(0, class_=Class.CONTEXT_SPECIFIC)
     mode = TaggingMode.IMPLICIT
-    value: IntegerType
 
 
-@dataclass
 class OctetString1(TaggedType[OctetStringType]):
     tag = Tag(1, class_=Class.CONTEXT_SPECIFIC)
     mode = TaggingMode.IMPLICIT
-    value: OctetStringType
 
 
-@dataclass
 class TestChoice(ChoiceType):
     alternatives = create_alternatives(
         NamedType("first", Integer0),
@@ -840,7 +833,7 @@ class TestSequenceType(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test SEQUENCE type"""
-        @dataclass
+
         class TestSequence(SequenceType):
             components = (
                 NamedType("first", IntegerType),
@@ -850,7 +843,6 @@ class TestSequenceType(unittest.TestCase):
 
         self.TestSequence = TestSequence
 
-        @dataclass
         class TestSequenceWithDefault(SequenceType):
             components = (
                 NamedType("required", IntegerType),
@@ -963,7 +955,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_multiple_default_components(self) -> None:
         """Test SEQUENCE with multiple DEFAULT components"""
-        @dataclass
+
         class MultiDefaultSequence(SequenceType):
             components = (
                 NamedType("first", IntegerType),
@@ -1061,7 +1053,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_mixed_optional_and_default(self) -> None:
         """Test SEQUENCE with both OPTIONAL and DEFAULT components"""
-        @dataclass
+
         class MixedSequence(SequenceType):
             components = (
                 NamedType("required", IntegerType),
@@ -1246,11 +1238,10 @@ class TestIntegration(unittest.TestCase):
 
     def test_nested_sequence(self) -> None:
         """Nested SEQUENCE encoding"""
-        @dataclass
+
         class Inner(SequenceType):
             components = (NamedType("value", IntegerType),)
 
-        @dataclass
         class Outer(SequenceType):
             components = (
                 NamedType("inner", Inner),
@@ -1278,7 +1269,6 @@ class TestIntegration(unittest.TestCase):
                 NamedType("second", BooleanType),
             )
 
-        @dataclass
         class Container(SequenceType):
             components = (
                 NamedType("choice", MyChoice),
@@ -1555,12 +1545,12 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_round_trip(self) -> None:
         """Encode then decode should preserve values"""
-        original = self.IntegerSequence((
+        original = self.IntegerSequence([
             IntegerType(0),
             IntegerType(127),
             IntegerType(-128),
             IntegerType(1000),
-        ))
+        ])
 
         buf = ByteBuffer.allocate(100)
         original.put(buf)
@@ -1646,11 +1636,9 @@ class TestTaggedType(unittest.TestCase):
     def test_implicit_tagged_integer_encode(self) -> None:
         """IMPLICIT tagged INTEGER [2] INTEGER - tag replaces base type's tag"""
         # Define concrete TaggedType subclass (configuration at class level)
-        @dataclass
-        class ImplicitInteger(TaggedType):
+        class ImplicitInteger(TaggedType[IntegerType]):
             mode = TaggingMode.IMPLICIT
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
 
         # Create instance with value
         tagged = ImplicitInteger(value=IntegerType(42))
@@ -1663,11 +1651,9 @@ class TestTaggedType(unittest.TestCase):
 
     def test_implicit_tagged_integer_decode(self) -> None:
         """Decode IMPLICIT tagged INTEGER"""
-        @dataclass
         class ImplicitInteger(TaggedType[IntegerType]):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
             mode = TaggingMode.IMPLICIT
-            value: IntegerType
 
         buf = ByteBuffer.wrap(b"\x82\x01\x2a")
         decoded = ImplicitInteger.get(buf)
@@ -1676,10 +1662,8 @@ class TestTaggedType(unittest.TestCase):
 
     def test_explicit_tagged_integer_encode(self) -> None:
         """EXPLICIT tagged INTEGER [3] EXPLICIT INTEGER - tag wraps base TLV"""
-        @dataclass
-        class ExplicitInteger(TaggedType):
+        class ExplicitInteger(TaggedType[IntegerType]):
             tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
-            type_ = IntegerType
             mode = TaggingMode.EXPLICIT
 
         tagged = ExplicitInteger(value=IntegerType(42))
@@ -1692,11 +1676,9 @@ class TestTaggedType(unittest.TestCase):
 
     def test_explicit_tagged_integer_decode(self) -> None:
         """Decode EXPLICIT tagged INTEGER"""
-        @dataclass
         class ExplicitInteger(TaggedType[IntegerType]):
             tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-            value: IntegerType
 
         buf = ByteBuffer.wrap(b"\xa3\x03\x02\x01\x2a")
         decoded = ExplicitInteger.get(buf)
@@ -1705,11 +1687,10 @@ class TestTaggedType(unittest.TestCase):
 
     def test_implicit_tagged_boolean_encode(self) -> None:
         """IMPLICIT tagged BOOLEAN [0] BOOLEAN"""
-        @dataclass
+
         class ImplicitBoolean(TaggedType[BooleanType]):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
             mode = TaggingMode.IMPLICIT
-            value: BooleanType
 
         tagged = ImplicitBoolean(value=BooleanType(True))
         buf = ByteBuffer.allocate(10)
@@ -1721,11 +1702,10 @@ class TestTaggedType(unittest.TestCase):
 
     def test_explicit_tagged_octetstring_encode(self) -> None:
         """EXPLICIT tagged OCTET STRING [1] EXPLICIT OCTET STRING"""
-        @dataclass
+
         class ExplicitOctetString(TaggedType[OctetStringType]):
             tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-            value: OctetStringType
 
         tagged = ExplicitOctetString(value=OctetStringType(b"AB"))
         buf = ByteBuffer.allocate(20)
@@ -1751,23 +1731,20 @@ class TestTaggedType(unittest.TestCase):
 
         for class_, number, constructed, expected_tag in test_cases:
             with self.subTest(class_=class_, number=number):
-                @dataclass
-                class TestTagged(TaggedType):
+                class TestTagged(TaggedType[IntegerType]):
                     tag = Tag(number, class_, constructed=constructed)
-                    type_ = IntegerType
                     mode = TaggingMode.IMPLICIT
+                    # value: IntegerType
 
-                tagged = TestTagged(value=IntegerType(0))
+                tagged = TestTagged(IntegerType(0))
                 buf = ByteBuffer.allocate(10)
                 tagged.put(buf)
                 self.assertEqual(buf.buf[0], expected_tag)
 
     def test_high_tag_number_encode(self) -> None:
         """Test tagged type with high tag number (>= 31)"""
-        @dataclass
-        class HighTag(TaggedType):
+        class HighTag(TaggedType[IntegerType]):
             tag = Tag(100, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
             mode = TaggingMode.IMPLICIT
 
         tagged = HighTag(value=IntegerType(42))
@@ -1784,13 +1761,11 @@ class TestTaggedType(unittest.TestCase):
 
         for val in test_values:
             with self.subTest(value=val):
-                @dataclass
                 class ImplicitInt(TaggedType[IntegerType]):
                     tag = Tag(5, Class.CONTEXT_SPECIFIC)
                     mode = TaggingMode.IMPLICIT
-                    value: IntegerType
 
-                original = ImplicitInt(value=IntegerType(val))
+                original = ImplicitInt(IntegerType(val))
 
                 buf = ByteBuffer.allocate(50)
                 original.put(buf)
@@ -1805,11 +1780,9 @@ class TestTaggedType(unittest.TestCase):
 
         for val in test_values:
             with self.subTest(value=val):
-                @dataclass
                 class ExplicitInt(TaggedType[IntegerType]):
                     tag = Tag(6, Class.CONTEXT_SPECIFIC, constructed=True)
                     mode = TaggingMode.EXPLICIT
-                    value: IntegerType
 
                 original = ExplicitInt(value=IntegerType(val))
 
@@ -1822,8 +1795,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_number(self) -> None:
         """Test tag validation raises on tag number mismatch"""
-        @dataclass
-        class TaggedInt(TaggedType):
+        class TaggedInt(TaggedType[IntegerType]):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
@@ -1835,7 +1807,6 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
 
         # Decode with wrong tag number (6 instead of 5)
-        @dataclass
         class WrongTag(TaggedType[IntegerType]):
             tag = Tag(6, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
@@ -1845,34 +1816,29 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_class(self) -> None:
         """Test tag validation raises on tag class mismatch"""
-        @dataclass
         class TaggedInt(TaggedType[IntegerType]):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
 
         # Encode with CONTEXT_SPECIFIC
-        tagged = TaggedInt(value=IntegerType(42))
+        tagged = TaggedInt(IntegerType(42))
         buf = ByteBuffer.allocate(10)
         tagged.put(buf)
         buf.set_pos(0)
 
         # Decode with APPLICATION class
-        @dataclass
         class WrongClass(TaggedType[IntegerType]):
             tag = Tag(5, Class.APPLICATION)
             mode = TaggingMode.IMPLICIT
-            value: IntegerType
 
         self.assertTrue(WrongClass.get(buf).has(exception_type=TagError))
 
     def test_get_contents_implicit(self) -> None:
         """Test get_contents for IMPLICIT tagged type (CHOICE alternative)"""
-        @dataclass
         class ImplicitInt(TaggedType[IntegerType]):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
             mode = TaggingMode.IMPLICIT
-            value: IntegerType
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\x80\x01\x2a")
@@ -1885,11 +1851,9 @@ class TestTaggedType(unittest.TestCase):
 
     def test_get_contents_explicit(self) -> None:
         """Test get_contents for EXPLICIT tagged type"""
-        @dataclass
         class ExplicitInt(TaggedType[IntegerType]):
             tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-            value: IntegerType
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\xa1\x03\x02\x01\x2a")
@@ -1903,7 +1867,6 @@ class TestTaggedType(unittest.TestCase):
 
     def test_put_contents_implicit(self) -> None:
         """Test put_contents for IMPLICIT tagged type"""
-        @dataclass
         class ImplicitInt(TaggedType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
@@ -1922,8 +1885,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_put_contents_explicit(self) -> None:
         """Test put_contents for EXPLICIT tagged type"""
-        @dataclass
-        class ExplicitInt(TaggedType):
+        class ExplicitInt(TaggedType[IntegerType]):
             tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
             type_ = IntegerType
             mode = TaggingMode.EXPLICIT
@@ -1941,18 +1903,16 @@ class TestTaggedType(unittest.TestCase):
 
     def test_length_calculation(self) -> None:
         """Test __len__ for tagged types"""
-        @dataclass
-        class ImplicitInt(TaggedType):
+        class ImplicitInt(TaggedType[IntegerType]):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
 
-        tagged = ImplicitInt(value=IntegerType(42))
+        tagged = ImplicitInt(IntegerType(42))
         # Tag (1) + Length (1) + Value (1) = 3
         self.assertEqual(tagged.put(ByteBuffer.allocate(10)), 3)
 
         # EXPLICIT should be longer (outer TLV + inner TLV)
-        @dataclass
         class ExplicitInt(TaggedType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC, constructed=True)
             type_ = IntegerType
@@ -1964,11 +1924,9 @@ class TestTaggedType(unittest.TestCase):
 
     def test_ber_explicit_application_tag(self) -> None:
         """Test ASN.1 explicit tag [APPLICATION 5] - always BER format"""
-        @dataclass
         class ApplicationTagged(TaggedType[IntegerType]):
             tag = Tag(5, Class.APPLICATION, constructed=True)
             mode = TaggingMode.IMPLICIT  # IMPLICIT but APPLICATION = BER
-            value: IntegerType
 
         tagged = ApplicationTagged(value=IntegerType(42))
         buf = ByteBuffer.allocate(20)
@@ -1980,20 +1938,16 @@ class TestTaggedType(unittest.TestCase):
     def test_nested_tagged_types(self) -> None:
         """Test nested tagged types"""
         # Inner: [0] INTEGER
-        @dataclass
         class InnerTagged(TaggedType[IntegerType]):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
             mode = TaggingMode.IMPLICIT
-            value: IntegerType
 
         # Outer: [1] EXPLICIT [0] INTEGER
-        @dataclass
         class OuterTagged(TaggedType[InnerTagged]):
             tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-            value: InnerTagged
 
-        inner = InnerTagged(value=IntegerType(42))
+        inner = InnerTagged(IntegerType(42))
         outer = OuterTagged(value=inner)
 
         buf = ByteBuffer.allocate(50)
@@ -2175,7 +2129,7 @@ class TestObjectIdentifierType(unittest.TestCase):
         """Test string representation"""
         oid = ObjectIdentifierType((1, 0, 1))
         self.assertEqual(str(oid), "1.0.1")
-        self.assertEqual(oid.to_transcript(), "1.0.1")
+        self.assertEqual(oid.normalize(), (1, 0, 1))
 
     def test_contents_only_encode(self) -> None:
         """Test put_contents (no tag)"""

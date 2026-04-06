@@ -9,7 +9,7 @@ from .sequence_type import SequenceType
 from .object_identifier_type import ObjectIdentifierType
 from .sequence_of_type import SequenceOfType
 from .generalized_time import GeneralizedTime
-from .type import Type, Transcript, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, GraphicString, VisibleString, Utf8String
+from .type import Type, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, GraphicString, VisibleString, Utf8String
 from .constrained_type import ConstrainedType, ValueRange, Elements
 from .null_type import NullType
 from .tagged_type import TaggedType, TaggingMode
@@ -48,6 +48,5 @@ __all__ = [
     "NamedType",
     "ValueRange",
     "ConstrainedType",
-    "Transcript",
     "GeneralizedTime"
 ]

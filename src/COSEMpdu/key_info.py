@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from typing import Self
 from .x680.type import NamedType, OCTET_STRING
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.tagged_type import TaggingMode
 from . import axdr
-from .axdr import Type, ChoiceType, SequenceType, TaggedType, EnumeratedType, OctetStringType
+from .axdr import SequenceType, TaggedType, EnumeratedType, OctetStringType
 
 
 # =============================================================================
@@ -12,7 +11,7 @@ from .axdr import Type, ChoiceType, SequenceType, TaggedType, EnumeratedType, Oc
 # Using EnumerationList pattern from service_error.py
 # =============================================================================
 
-@dataclass
+
 class KeyIdList(EnumerationList):
     """KeyId enumeration members"""
     members = (
@@ -21,13 +20,11 @@ class KeyIdList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class KeyId(EnumeratedType):
     """Key-Id"""
     named_members = KeyIdList()
 
 
-@dataclass
 class KekIdList(EnumerationList):
     """KekId enumeration members"""
     members = (
@@ -35,7 +32,6 @@ class KekIdList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class KekId(EnumeratedType):
     """Kek-Id"""
     named_members = KekIdList()
@@ -45,7 +41,7 @@ class KekId(EnumeratedType):
 # SEQUENCE Types (A-XDR: components encoded in order, no identifier)
 # =============================================================================
 
-@dataclass
+
 class IdentifiedKey(SequenceType):
     """Identified-Key"""
     components = (
@@ -53,7 +49,6 @@ class IdentifiedKey(SequenceType):
     )
 
 
-@dataclass
 class IdentifiedKey0(TaggedType[IdentifiedKey]):
     """[0] Identified-Key"""
     tag = 0
@@ -61,7 +56,6 @@ class IdentifiedKey0(TaggedType[IdentifiedKey]):
     value: IdentifiedKey
 
 
-@dataclass
 class WrappedKey(SequenceType):
     """Wrapped-Key"""
     components = (
@@ -70,7 +64,6 @@ class WrappedKey(SequenceType):
     )
 
 
-@dataclass
 class WrappedKey1(TaggedType[WrappedKey]):
     """[1] Wrapped-Key"""
     tag = 1
@@ -78,7 +71,6 @@ class WrappedKey1(TaggedType[WrappedKey]):
     value: WrappedKey
 
 
-@dataclass
 class AgreedKey(SequenceType):
     """Agreed-Key"""
     components = (
@@ -87,7 +79,6 @@ class AgreedKey(SequenceType):
     )
 
 
-@dataclass
 class AgreedKey2(TaggedType[AgreedKey]):
     """[2] Agreed-Key"""
     tag = 2
@@ -99,7 +90,7 @@ class AgreedKey2(TaggedType[AgreedKey]):
 # CHOICE Type (A-XDR: tag (1 byte) + encoding of chosen alternative)
 # =============================================================================
 
-@dataclass
+
 class KeyInfo(axdr.ChoiceType):
     """Key-Info"""
     alternatives = {

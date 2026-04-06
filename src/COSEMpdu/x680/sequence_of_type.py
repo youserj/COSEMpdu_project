@@ -10,16 +10,24 @@ Standards:
 Note:
     - SEQUENCE OF is a BUILTIN type per X.680 §16.2
 """
-from dataclasses import dataclass
-from typing import ClassVar, Iterator
-from .type import BuiltinType, SEQUENCE_OF, Type
+from typing import ClassVar, Iterator, Self
+from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE
 
 
-@dataclass
 class SequenceOfType[T: Type](BuiltinType):
     """ASN.1 SEQUENCE OF type."""
     component_type: ClassVar[type[Type]]
     value: SEQUENCE_OF[T]
+
+    def __init__(self, value: SEQUENCE_OF[T]) -> None:
+        self.value = value
+
+    @classmethod
+    def parse[U: TYPE_VALUE](cls, value: tuple[U]) -> Self:
+        return cls([cls.component_type.parse(val) for val in value])
+
+    def normalize(self) -> tuple[TYPE_VALUE]:
+        return [val.normalize() for val in self.value]
 
     def __class_getitem__(cls, item: type[T]) -> type["SequenceOfType[T]"]:
         """Поддерживает SequenceOfType[int] на уровне класса."""
@@ -79,3 +87,11 @@ class SequenceOfType[T: Type](BuiltinType):
     def last(self) -> T | None:
         """Get last component if present"""
         return self.value[-1] if self.value else None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SequenceOfType):
+            return False
+        return (
+            self.component_type == other.component_type and
+            self.normalize() == other.normalize()
+        )

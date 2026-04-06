@@ -1,11 +1,9 @@
 # src/COSEMpdu/x680/sequence_type.py
-from dataclasses import dataclass
 from typing import ClassVar, Optional, Self
-from .type import BuiltinType, NamedType, Type, SEQUENCE, DefaultNamedType, OptionalNamedType
+from .type import BuiltinType, NamedType, Type, SEQUENCE, DefaultNamedType, OptionalNamedType, TYPE_VALUE
 
 
-@dataclass
-class SequenceType(BuiltinType):
+class SequenceType[T: SEQUENCE](BuiltinType):
     """
     Base class for SEQUENCE types (X.680 §24)
     NATIVE REPRESENTATION: dataclass instance with fields corresponding to components
@@ -22,7 +20,6 @@ class SequenceType(BuiltinType):
     - Explicit tags NOT encoded (redundant information)
 
     Usage pattern (concrete SEQUENCE definition):
-        @dataclass(frozen=True)
         class Credentials(SequenceType):
             userName: VisibleStringType
             password: VisibleStringType
@@ -35,7 +32,17 @@ class SequenceType(BuiltinType):
         cred.accountNumber  # None if absent (OPTIONAL)
     """
     components: ClassVar[tuple[NamedType[Type], ...]]
-    value: SEQUENCE
+    value: T
+
+    def __init__(self, value: T) -> None:
+        self.value = value
+
+    @classmethod
+    def parse[U: TYPE_VALUE](cls, value: tuple[U]) -> Self:
+        return cls(tuple(None if val is None else comp.type_.parse(val) for comp, val in zip(cls.components, value, strict=True)))
+
+    def normalize(self) -> tuple[TYPE_VALUE, ...]:
+        return tuple(None if val is None else val.normalize() for val in self.value)
 
     @classmethod
     def default(cls) -> Self:
@@ -48,15 +55,7 @@ class SequenceType(BuiltinType):
         Omits components with value None (absent OPTIONAL components).
         DEFAULT values are ALWAYS included (cannot distinguish explicit vs default assignment in native representation).
         """
-        components: list[str] = []
-        # Preserve field definition order (critical for SEQUENCE semantics)
-        for field_name in self.__dataclass_fields__:
-            if field_name == "tag":  # Skip ClassVar metadata
-                continue
-            value = getattr(self, field_name)
-            if value is not None:  # Skip absent OPTIONAL components
-                components.append(f"{field_name} {value}")
-        return "{" + ", ".join(components) + "}"
+        return f"{self.__class__.__name__}[{len(self.value)}]"
 
     def __getitem__(self, key: int | str) -> Optional[Type]:
         if isinstance(key, int):
@@ -67,70 +66,7 @@ class SequenceType(BuiltinType):
         else:
             raise KeyError(f"not find component with name: {key}")
 
-    @classmethod
-    def _from_components(cls, **kwargs: Optional[Type]) -> Self:
-        """
-        Create SequenceType instance from named component values.
-
-        Maps keyword arguments to component positions based on 
-        cls.components definition (X.680 §24.2).
-
-        Args:
-            **kwargs: Field name → Type value mappings.
-                    OPTIONAL fields can be None (absent).
-                    DEFAULT fields omitted → default value used.
-
-        Returns:
-            Self: New SequenceType instance with ordered value tuple.
-
-        Raises:
-            ValueError: Unknown field name or missing REQUIRED component.
-            TypeError: Value type doesn't match component type.
-
-        Example:
-            >>> cred = Credentials.from_components(
-            ...     userName=VisibleString("admin"),
-            ...     password=VisibleString("secret"),
-            ...     accountNumber=Integer(123)  # OPTIONAL
-            ... )
-            >>> cred.value  # Tuple in definition order
-            (VisibleString("admin"), VisibleString("secret"), Integer(123))
-        """
-        values: list[Optional[Type]] = []
-        used_fields: set[str] = set()
-        for component in cls.components:
-            field_name = component.identifier
-            field_value = kwargs.get(field_name)
-            # Track which fields were provided
-            if field_name in kwargs:
-                used_fields.add(field_name)
-            # Handle component based on type
-            if isinstance(component, DefaultNamedType):
-                # DEFAULT: use provided value or default
-                if field_value is None:
-                    if field_name in kwargs:
-                        # Explicitly set to None → use default
-                        values.append(component.default)
-                    else:
-                        # Not provided → use default
-                        values.append(component.default)
-                else:
-                    values.append(field_value)
-            elif isinstance(component, OptionalNamedType):
-                # OPTIONAL: None means absent
-                values.append(field_value)  # Can be None
-            else:
-                # REQUIRED: must be provided
-                if field_value is None:
-                    if field_name not in kwargs:
-                        raise ValueError(f"Missing required component '{field_name}' in {cls.__name__}")
-                if isinstance(field_value, component.type_):
-                    values.append(field_value)
-                else:
-                    raise TypeError(f"got Required component '{field_name}' type: {field_value.__class__.__name__}, expected {component.type_}")
-        # Check for unknown fields
-        expected_fields = {c.identifier for c in cls.components}
-        unknown_fields = used_fields - expected_fields
-        if unknown_fields:
-            raise ValueError(f"Unknown component(s): {unknown_fields} in {cls.__name__}. Expected: {expected_fields}")
-        return cls(value=tuple(values))
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SequenceType):
+            return False
+        return self.normalize() == other.normalize()

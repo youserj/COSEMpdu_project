@@ -1,13 +1,12 @@
-from dataclasses import dataclass, field
-from tkinter import E
-from typing import ClassVar, Optional, Protocol, Any, Self
-from COSEMpdu.byte_buffer import ByteBuffer
-from .type import Type
+from dataclasses import dataclass
+from typing import ClassVar, Optional, Protocol, Any, Self, get_type_hints
+from StructResult.result import ValueOrError
+from .type import Type, TYPE_VALUE
 from .integer_type import IntegerType
 from .bit_string import BitStringType
 from .octet_string_type import OctetStringType
-from .enumerated_type import EnumeratedType
 from .sequence_of_type import SequenceOfType
+from .enumerated_type import EnumeratedType
 
 
 class ConstraintSpec(Protocol):
@@ -119,21 +118,13 @@ class SizeConstraint(SubtypeElements):
         return f"SIZE({inner})"
 
 
-@dataclass
 class ConstrainedType[T: Type](Type, Protocol):
     constraint_spec: ClassVar[ConstraintSpec]
     exception_spec: ClassVar[Optional[ExceptionSpec]] = None
     value: T
 
-    @classmethod
-    def default(cls) -> Self:
-        return cls(cls.get_type().default())
-
-    @classmethod
-    def get_type(cls) -> type[T]:
-        return cls.__annotations__["value"]
-
-    def __post_init__(self) -> None:
+    def __init__(self, value: T) -> None:
+        self.value = value
         if isinstance(self.value, (IntegerType, EnumeratedType)):
             if isinstance(v_r := self.constraint_spec, ValueRange):
                 if not v_r.contains(self.value.value):
@@ -161,3 +152,23 @@ class ConstrainedType[T: Type](Type, Protocol):
                 raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
             return
         raise NotImplementedError(f"Validation {self.get_type().__name__} not implemented for {self.constraint_spec.__class__.__name__}")
+
+    @classmethod
+    def parse(cls, value: Any) -> Self:
+        return cls(cls.get_type().parse(value))
+
+    def normalize(self) -> TYPE_VALUE:
+        return self.value.normalize()
+
+    @classmethod
+    def default(cls) -> Self:
+        return cls(cls.get_type().default())
+
+    @classmethod
+    def get_type(cls) -> type[T]:
+        return get_type_hints(cls)["value"]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+        return self.value == other.value

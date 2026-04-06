@@ -1,10 +1,8 @@
-from dataclasses import dataclass
 from typing import Self
-from .type import BuiltinType, OCTET_STRING
+from .type import BuiltinType, OCTET_STRING, Simple
 
 
-@dataclass
-class OctetStringType(BuiltinType):
+class OctetStringType(Simple[OCTET_STRING], BuiltinType):
     """
     OCTET STRING type (X.680 §22, X.690 §8.7)
     NATIVE REPRESENTATION: bytes

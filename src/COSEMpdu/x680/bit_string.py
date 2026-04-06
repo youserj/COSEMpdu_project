@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Iterator, Optional, Self, ClassVar, overload
-from .type import BuiltinType, BIT_STRING
+from .type import BuiltinType, BIT_STRING, Simple
 
 
 @dataclass(frozen=True)
@@ -61,8 +61,7 @@ class NamedBitList:
         return "{" + ", ".join(str(b) for b in self.bits) + "}"
 
 
-@dataclass
-class BitStringType(BuiltinType):
+class BitStringType(Simple[BIT_STRING], BuiltinType):
     """
     BIT STRING type (X.680 22)
     NATIVE REPRESENTATION:

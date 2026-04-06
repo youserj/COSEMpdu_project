@@ -1,8 +1,7 @@
 # src/COSEMpdu/x690/bit_string.py
-from dataclasses import dataclass
-from typing import ClassVar, Self, cast, Optional, Protocol
+from typing import ClassVar, Self, cast, Optional, Protocol, Any
 from StructResult.result import ValueOrError, Error
-from .x680.type import SEQUENCE_OF, NamedType, OBJECT_IDENTIFIER
+from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
 from . import x680
 from .x680 import TaggingMode, UniversalClassTagAssignments
 from .byte_buffer import ByteBuffer
@@ -20,6 +19,7 @@ def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
 
 class Type(x680.Type, Protocol):
     tag: ClassVar[Tag]
+    value: Any
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -37,10 +37,10 @@ class Type(x680.Type, Protocol):
         return ret + ret2
 
 
+type NamedType = x680.NamedType[Type]
 type SEQUENCE = tuple[Optional[Type], ...]
 
 
-@dataclass
 class TaggedType[T: Type](Type, x680.TaggedType[T]):
     tag: ClassVar[Tag]
     value: T
@@ -59,7 +59,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         if cls.is_implicit():
-            if isinstance(value := cls.get_type().get_lc(buf), Error):  # IMPLICIT: decode base type contents directly (no inner tag)
+            if isinstance(value := cls._T.get_lc(buf), Error):  # IMPLICIT: decode base type contents directly (no inner tag)
                 return value
         else:
             if isinstance(length := Length.get(buf), Error):  # EXPLICIT: decode length, then complete base encoding (TLV)
@@ -67,7 +67,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             if length.value == -1:
                 raise ValueError("Indefinite length not supported for tagged types")
             # Decode inner value (with its own tag)
-            if isinstance(value := cls.get_type().get(buf), Error):
+            if isinstance(value := cls._T.get(buf), Error):
                 return value
         return cls(value)
 
@@ -78,7 +78,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             mode_str = "IMPLICIT"
         elif self.mode == TaggingMode.EXPLICIT:
             mode_str = "EXPLICIT"
-        return f"[{int(self.tag)}] {mode_str} {self.get_type().__name__}"
+        return f"[{int(self.tag)}] {mode_str} {self._T.__name__}"
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -131,7 +131,6 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         return self.value.put_lc(buf)
 
 
-@dataclass
 class BitStringType(Type, x680.BitStringType):
     """
     BIT STRING with BER encoding/decoding (X.690 §8.6)
@@ -212,7 +211,6 @@ class BitStringType(Type, x680.BitStringType):
         return length + u + v
 
 
-@dataclass
 class BooleanType(Type, x680.BooleanType):
     """
     BOOLEAN with BER encoding/decoding (X.690 §8.2)
@@ -267,7 +265,6 @@ class BooleanType(Type, x680.BooleanType):
         return length + value
 
 
-@dataclass
 class GraphicString(Type, x680.GraphicString):
     """GRAPHIC STRING with BER encoding/decoding (X.690 §8.21)"""
 
@@ -332,11 +329,10 @@ class GraphicString(Type, x680.GraphicString):
         return f"{self.__class__.__name__}({self.value!r})"
 
 
-def create_alternatives(*values: NamedType[Type]) -> dict[Tag, NamedType[Type]]:
-    return {value.type_.tag: value for value in values}
+def create_alternatives(*values: NamedType) -> dict[int, NamedType]:
+    return {hash(value.type_.tag): value for value in values}
 
 
-@dataclass
 class ChoiceType(Type, x680.ChoiceType[Type]):
     """
     CHOICE with BER encoding/decoding (X.690 §8.13)
@@ -354,8 +350,17 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
         - Tag identifies which alternative was selected
         - For DLMS/COSEM, alternatives use CONTEXT SPECIFIC class
     """
-    alternatives: ClassVar[dict[Tag, NamedType[Type]]]
+    alternatives: ClassVar[dict[int, NamedType]]
     value: Type
+
+    @classmethod
+    def parse(cls, value: CHOICE) -> Self:
+        if (n_t := cls.alternatives.get(value.select)) is not None:
+            return cls(n_t.type_.parse(value.value))
+        raise ValueError("not find type in choice")
+
+    def normalize(self) -> CHOICE:
+        return CHOICE(hash(self.value.tag), self.value.normalize())
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -365,7 +370,7 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
         """
         if isinstance(tag := Tag.get(buf), Error):
             return tag
-        if (n_t := cls.alternatives.get(tag)) is None:
+        if (n_t := cls.alternatives.get(hash(tag))) is None:
             raise ValueError(f"{tag=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
         # tag_byte = buf.get_uint8()
         # tag_number = tag_byte & 0x1F
@@ -397,12 +402,11 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
 
     @property
     def selected(self) -> str:
-        if (n_t := self.alternatives.get(self.value.tag)) is None:
+        if (n_t := self.alternatives.get(hash(self.value.tag))) is None:
             raise ValueError(f"Value {self.value} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in self.alternatives.values())))}")
         return n_t.identifier
 
 
-@dataclass(frozen=True)
 class EnumeratedType(Type, x680.EnumeratedType):
     """
     ENUMERATED with BER encoding/decoding (X.690 §8.4)
@@ -476,7 +480,6 @@ class EnumeratedType(Type, x680.EnumeratedType):
         return put_lc(buf, num_bytes, content_bytes)
 
 
-@dataclass
 class IntegerType(Type, x680.IntegerType):
     """
     INTEGER with BER encoding/decoding (X.690 §8.3)
@@ -547,7 +550,6 @@ class IntegerType(Type, x680.IntegerType):
         return put_lc(buf, len(content_bytes), content_bytes)
 
 
-@dataclass
 class NullType(Type, x680.NullType):
     """
     NULL with BER encoding/decoding (X.690 §8.8)
@@ -602,7 +604,6 @@ class NullType(Type, x680.NullType):
         return isinstance(other, NullType)
 
 
-@dataclass
 class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
     """
     OBJECT IDENTIFIER with BER encoding/decoding (X.690 §8.19).
@@ -715,7 +716,6 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
         return put_lc(buf, len(content_bytes), content_bytes)
 
 
-@dataclass
 class OctetStringType(Type, x680.OctetStringType):
     """
     OCTET STRING with BER encoding/decoding (X.690 §8.7)
@@ -769,8 +769,7 @@ class OctetStringType(Type, x680.OctetStringType):
         return put_lc(buf, len(self.value), self.value)
 
 
-@dataclass
-class SequenceType(Type, x680.SequenceType):
+class SequenceType(Type, x680.SequenceType[SEQUENCE]):
     """
     SEQUENCE with BER encoding/decoding (X.690 §8.9)
 
@@ -795,8 +794,7 @@ class SequenceType(Type, x680.SequenceType):
         class_number=x680.UniversalClassTagAssignments.Sequence,
         constructed=True
     )
-    components: ClassVar[tuple[NamedType[Type], ...]]
-    value: SEQUENCE
+    components: ClassVar[tuple[NamedType, ...]]
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -871,7 +869,6 @@ class SequenceType(Type, x680.SequenceType):
         return step + 1 + counter
 
 
-@dataclass
 class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     """
     SEQUENCE OF with BER encoding/decoding (X.690 §8.10)
@@ -959,16 +956,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(component={self.component_type.__name__}, count={len(self.value)})"
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, SequenceOfType):
-            return False
-        return (
-            self.component_type == other.component_type and
-            self.value == other.value
-        )
 
-
-@dataclass
 class GeneralizedTime(Type, x680.GeneralizedTime):
     """GeneralizedTime with BER encoding (X.690 §8.23)"""
     tag: ClassVar[Tag] = Tag(class_number=UniversalClassTagAssignments.GeneralizedTime, constructed=False)
@@ -989,7 +977,6 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
         return put_lc(buf, len(data), data)
 
 
-@dataclass
 class ConstrainedType[T: Type](Type, x680.ConstrainedType[T]):
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:

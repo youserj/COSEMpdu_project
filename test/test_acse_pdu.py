@@ -33,7 +33,7 @@ from COSEMpdu.acse import (
     ResponseReason,
     ProtocolVersion0,
     # APDU types
-    AARQApdu,
+    AARQApdu, AARQ,
     AAREApdu,
     RLRQApdu,
     RLREApdu,
@@ -224,10 +224,10 @@ class TestAARQApdu(unittest.TestCase):
     def test_aarq_tagged_type_config(self) -> None:
         """Test AARQApdu TaggedType configuration"""
         self.assertEqual(
-            AARQApdu.tag,
+            AARQ.tag,
             x690.Tag(class_=Class.APPLICATION, class_number=0, constructed=True)
         )
-        self.assertEqual(AARQApdu.mode, TaggingMode.IMPLICIT)
+        self.assertEqual(AARQ.mode, TaggingMode.IMPLICIT)
 
 
 class TestAAREApdu(unittest.TestCase):

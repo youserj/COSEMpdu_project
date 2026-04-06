@@ -1,11 +1,9 @@
-from dataclasses import dataclass
-from re import A, L
 from typing import Self, Literal, ClassVar
 from .x680.type import (
     NamedType, INTEGER, OCTET_STRING, OptionalNamedType, BOOLEAN
 )
 from .x680.enumerated_type import EnumerationList, EnumerationMember
-from .x680.constrained_type import ConstrainedType, SizeConstraint
+from .x680.constrained_type import SizeConstraint
 from .x680.tagged_type import TaggingMode
 from . import axdr
 from .data import Data
@@ -20,7 +18,7 @@ from .axdr import ConstrainedOctetStringType, TaggedType, IntegerType, OctetStri
 # Using EnumerationList pattern from service_error.py
 # =============================================================================
 
-@dataclass
+
 class DataAccessResultList(EnumerationList):
     """Data-Access-Result enumeration members"""
     members = (
@@ -43,7 +41,6 @@ class DataAccessResultList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class DataAccessResult(axdr.EnumeratedType):
     """Data-Access-Result"""
     named_members = DataAccessResultList()
@@ -53,7 +50,6 @@ class DataAccessResult(axdr.EnumeratedType):
 DataAccessResult.SUCCESS = DataAccessResult(0)
 
 
-@dataclass
 class DataAccessResult1(TaggedType[DataAccessResult]):
     """ [1] IMPLICIT Data-Access-Result"""
     tag = 1
@@ -61,7 +57,6 @@ class DataAccessResult1(TaggedType[DataAccessResult]):
     value: DataAccessResult
 
 
-@dataclass
 class ActionResultList(EnumerationList):
     """Action-Result enumeration members"""
     members = (
@@ -81,7 +76,6 @@ class ActionResultList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class ActionResult(axdr.EnumeratedType):
     """Action-Result"""
     named_members = ActionResultList()
@@ -91,23 +85,20 @@ class ActionResult(axdr.EnumeratedType):
 # Basic Types (from COSEMpdu_GB83.txt)
 # =============================================================================
 
-@dataclass
+
 class CosemClassId(Unsigned16):
     """Cosem-Class-Id"""
 
 
-@dataclass
 class CosemObjectInstanceId(ConstrainedOctetStringType):
     """Cosem-Object-Instance-Id"""
     constraint_spec = SizeConstraint(6)
 
 
-@dataclass
 class CosemObjectAttributeId(Integer8):
     """Cosem-Object-Attribute-Id"""
 
 
-@dataclass
 class CosemObjectMethodId(Integer8):
     """Cosem-Object-Method-Id"""
 
@@ -116,7 +107,7 @@ class CosemObjectMethodId(Integer8):
 # SEQUENCE Types for xDLMS Data Transfer Services
 # =============================================================================
 
-@dataclass
+
 class CosemAttributeDescriptor(axdr.SequenceType):
     """Cosem-Attribute-Descriptor"""
     components = (
@@ -139,7 +130,6 @@ class CosemAttributeDescriptor(axdr.SequenceType):
         ))
 
 
-@dataclass
 class CosemMethodDescriptor(axdr.SequenceType):
     """Cosem-Method-Descriptor"""
     components = (
@@ -162,7 +152,6 @@ class CosemMethodDescriptor(axdr.SequenceType):
         ))
 
 
-@dataclass
 class SelectiveAccessDescriptor(axdr.SequenceType):
     """Selective-Access-Descriptor"""
     components = (
@@ -182,7 +171,6 @@ class SelectiveAccessDescriptor(axdr.SequenceType):
         ))
 
 
-@dataclass
 class CosemAttributeDescriptorWithSelection(axdr.SequenceType):
     """Cosem-Attribute-Descriptor-With-Selection"""
     components = (
@@ -195,7 +183,7 @@ class CosemAttributeDescriptorWithSelection(axdr.SequenceType):
 # Variable-Access-Specification CHOICE
 # =============================================================================
 
-@dataclass
+
 class VariableName2(TaggedType[ObjectName]):
     """variable-name [2] IMPLICIT ObjectName"""
     tag = 2
@@ -203,7 +191,6 @@ class VariableName2(TaggedType[ObjectName]):
     value: ObjectName
 
 
-@dataclass
 class ParameterizedAccess(axdr.SequenceType):
     """Parameterized-Access"""
     components = (
@@ -213,7 +200,6 @@ class ParameterizedAccess(axdr.SequenceType):
     )
 
 
-@dataclass
 class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
     """[4] IMPLICIT Parameterized-Access"""
     tag = 4
@@ -221,7 +207,6 @@ class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
     value: ParameterizedAccess
 
 
-@dataclass
 class BlockNumberAccess(axdr.SequenceType):
     """Block-Number-Access"""
     components = (
@@ -229,7 +214,6 @@ class BlockNumberAccess(axdr.SequenceType):
     )
 
 
-@dataclass
 class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
     """[5] IMPLICIT Block-Number-Access"""
     tag = 5
@@ -237,7 +221,6 @@ class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
     value: BlockNumberAccess
 
 
-@dataclass
 class ReadDataBlockAccess(axdr.SequenceType):
     """Read-Data-Block-Access"""
     components = (
@@ -247,7 +230,6 @@ class ReadDataBlockAccess(axdr.SequenceType):
     )
 
 
-@dataclass
 class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
     """[6] IMPLICIT Read-Data-Block-Access"""
     tag = 6
@@ -255,7 +237,6 @@ class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
     value: ReadDataBlockAccess
 
 
-@dataclass
 class WriteDataBlockAccess(axdr.SequenceType):
     """Write-Data-Block-Access"""
     components = (
@@ -264,7 +245,6 @@ class WriteDataBlockAccess(axdr.SequenceType):
     )
 
 
-@dataclass
 class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
     """[7] IMPLICIT Write-Data-Block-Access"""
     tag = 7
@@ -272,7 +252,6 @@ class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
     value: WriteDataBlockAccess
 
 
-@dataclass
 class VariableAccessSpecification(axdr.ChoiceType):
     """Variable-Access-Specification"""
     alternatives = {
@@ -332,7 +311,7 @@ class VariableAccessSpecification(axdr.ChoiceType):
 # Invoke-Id-And-Priority Types
 # =============================================================================
 
-@dataclass
+
 class InvokeIdAndPriority(Unsigned8):
     """Invoke-Id-And-Priority"""
 
@@ -363,7 +342,6 @@ class InvokeIdAndPriority(Unsigned8):
         return bool(self.value.value & 0x01)
 
 
-@dataclass
 class LongInvokeIdAndPriority(Unsigned32):
     """Long-Invoke-Id-And-Priority"""
 
@@ -414,7 +392,7 @@ class LongInvokeIdAndPriority(Unsigned32):
 # Get-Data-Result CHOICE
 # =============================================================================
 
-@dataclass
+
 class Data0(TaggedType[Data]):
     """[0] Data"""
     tag = 0
@@ -422,7 +400,6 @@ class Data0(TaggedType[Data]):
     value: Data
 
 
-@dataclass
 class DataAccesResult1(TaggedType[DataAccessResult1]):
     """[1] IMPLICIT Data-Access-Result"""
     tag = 1
@@ -430,7 +407,6 @@ class DataAccesResult1(TaggedType[DataAccessResult1]):
     value: DataAccessResult1
 
 
-@dataclass
 class GetDataResult(axdr.ChoiceType):
     """Get-Data-Result"""
     alternatives = {
@@ -451,7 +427,7 @@ class GetDataResult(axdr.ChoiceType):
 # Data Block Types
 # =============================================================================
 
-@dataclass
+
 class DataBlockResult(axdr.SequenceType):
     """Data-Block-Result"""
     components = (
@@ -468,7 +444,6 @@ class RawData(TaggedType[axdr.OctetStringType]):
     value: axdr.OctetStringType
 
 
-@dataclass
 class DataBlockGResult(axdr.ChoiceType):
     """
     DataBlock-G result CHOICE:
@@ -483,7 +458,6 @@ class DataBlockGResult(axdr.ChoiceType):
     )
 
 
-@dataclass
 class DataBlockG(axdr.SequenceType):
     """DataBlock-G"""
     components = (
@@ -493,7 +467,6 @@ class DataBlockG(axdr.SequenceType):
     )
 
 
-@dataclass
 class DataBlockSA(axdr.SequenceType):
     """DataBlock-SA"""
     components = (
@@ -507,7 +480,7 @@ class DataBlockSA(axdr.SequenceType):
 # Action Response Types
 # =============================================================================
 
-@dataclass
+
 class ActionResponseWithOptionalData(axdr.SequenceType):
     """Action-Response-With-Optional-Data"""
     components = (
@@ -520,7 +493,7 @@ class ActionResponseWithOptionalData(axdr.SequenceType):
 # Notification Types
 # =============================================================================
 
-@dataclass
+
 class NotificationBody(axdr.SequenceType):
     """Notification-Body"""
     components = (
@@ -532,7 +505,7 @@ class NotificationBody(axdr.SequenceType):
 # List Types (SEQUENCE OF)
 # =============================================================================
 
-@dataclass
+
 class ListOfData(SequenceOfType[Data]):
     """List-Of-Data"""
     component_type = Data
@@ -542,7 +515,7 @@ class ListOfData(SequenceOfType[Data]):
 # Access Request Types
 # =============================================================================
 
-@dataclass
+
 class AccessRequestGet(axdr.SequenceType):
     """Access-Request-Get"""
     components = (
@@ -550,7 +523,6 @@ class AccessRequestGet(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessRequestGet1(TaggedType[AccessRequestGet]):
     """[1] Access-Request-Get"""
     tag = 1
@@ -558,7 +530,6 @@ class AccessRequestGet1(TaggedType[AccessRequestGet]):
     value: AccessRequestGet
 
 
-@dataclass
 class AccessRequestGetWithSelection(axdr.SequenceType):
     """Access-Request-Get-With-Selection"""
     components = (
@@ -567,7 +538,6 @@ class AccessRequestGetWithSelection(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
     """[4] Access-Request-Get-With-Selection"""
     tag = 4
@@ -575,7 +545,6 @@ class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
     value: AccessRequestGetWithSelection
 
 
-@dataclass
 class AccessRequestSet(axdr.SequenceType):
     """Access-Request-Set"""
     components = (
@@ -583,7 +552,6 @@ class AccessRequestSet(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessRequestSet2(TaggedType[AccessRequestSet]):
     """[2] Access-Request-Set"""
     tag = 2
@@ -591,7 +559,6 @@ class AccessRequestSet2(TaggedType[AccessRequestSet]):
     value: AccessRequestSet
 
 
-@dataclass
 class AccessRequestSetWithSelection(axdr.SequenceType):
     """Access-Request-Set-With-Selection"""
     components = (
@@ -600,7 +567,6 @@ class AccessRequestSetWithSelection(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
     """[5] Access-Request-Set-With-Selection"""
     tag = 5
@@ -608,7 +574,6 @@ class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
     value: AccessRequestSetWithSelection
 
 
-@dataclass
 class AccessRequestAction(axdr.SequenceType):
     """Access-Request-Action"""
     components = (
@@ -616,7 +581,6 @@ class AccessRequestAction(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessRequestAction3(TaggedType[AccessRequestAction]):
     """[3] Access-Request-Action"""
     tag = 3
@@ -624,7 +588,6 @@ class AccessRequestAction3(TaggedType[AccessRequestAction]):
     value: AccessRequestAction
 
 
-@dataclass
 class AccessRequestSpecification(axdr.ChoiceType):
     """Access-Request-Specification"""
     alternatives = {
@@ -636,20 +599,17 @@ class AccessRequestSpecification(axdr.ChoiceType):
     }
 
 
-@dataclass
 class ListOfAccessRequestSpecification(SequenceOfType[AccessRequestSpecification]):
     """List-Of-Access-Request-Specification"""
     component_type = AccessRequestSpecification
 
 
-@dataclass
 class ListOfAccessRequestSpecification0(TaggedType[ListOfAccessRequestSpecification]):
     tag = 0
     mode = TaggingMode.DEFAULT
     value: ListOfAccessRequestSpecification
 
 
-@dataclass
 class AccessRequestBody(axdr.SequenceType):
     """Access-Request-Body"""
     components = (
@@ -662,7 +622,7 @@ class AccessRequestBody(axdr.SequenceType):
 # Access Response Types
 # =============================================================================
 
-@dataclass
+
 class AccessResponseGet(axdr.SequenceType):
     """Access-Response-Get"""
     components = (
@@ -670,7 +630,6 @@ class AccessResponseGet(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessResponseGet1(TaggedType[AccessResponseGet]):
     """[1] Access-Response-Get"""
     tag = 1
@@ -678,7 +637,6 @@ class AccessResponseGet1(TaggedType[AccessResponseGet]):
     value: AccessResponseGet
 
 
-@dataclass
 class AccessResponseSet(axdr.SequenceType):
     """Access-Response-Set"""
     components = (
@@ -686,7 +644,6 @@ class AccessResponseSet(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessResponseSet2(axdr.TaggedType[AccessResponseSet]):
     """[2] Access-Response-Set"""
     tag = 2
@@ -694,7 +651,6 @@ class AccessResponseSet2(axdr.TaggedType[AccessResponseSet]):
     value: AccessResponseSet
 
 
-@dataclass
 class AccessResponseAction(axdr.SequenceType):
     """Access-Response-Action"""
     components = (
@@ -702,7 +658,6 @@ class AccessResponseAction(axdr.SequenceType):
     )
 
 
-@dataclass
 class AccessResponseAction3(TaggedType[AccessResponseAction]):
     """[3] Access-Response-Action"""
     tag = 3
@@ -710,7 +665,6 @@ class AccessResponseAction3(TaggedType[AccessResponseAction]):
     value: AccessResponseAction
 
 
-@dataclass
 class AccessResponseSpecification(axdr.ChoiceType):
     """Access-Response-Specification"""
     alternatives = {
@@ -720,13 +674,11 @@ class AccessResponseSpecification(axdr.ChoiceType):
     }
 
 
-@dataclass
 class ListOfAccessResponseSpecification(SequenceOfType[AccessResponseSpecification]):
     """List-Of-Access-Response-Specification"""
     component_type = AccessResponseSpecification
 
 
-@dataclass
 class AccessResponseBody(axdr.SequenceType):
     """Access-Response-Body"""
     components = (

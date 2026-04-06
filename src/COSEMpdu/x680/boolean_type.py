@@ -1,10 +1,8 @@
-from dataclasses import dataclass
 from typing import Self
-from .type import BuiltinType, BOOLEAN
+from .type import BuiltinType, BOOLEAN, Simple
 
 
-@dataclass
-class BooleanType(BuiltinType):
+class BooleanType(Simple[BOOLEAN], BuiltinType):
     """
     BOOLEAN type (X.680 §17)
     NATIVE REPRESENTATION: bool

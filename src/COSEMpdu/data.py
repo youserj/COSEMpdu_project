@@ -1,22 +1,19 @@
-from dataclasses import dataclass
-from operator import ge
 from typing import Self, ClassVar, TypeAlias, Optional
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
 from .byte_buffer import ByteBuffer
 from .x680.constrained_type import SizeConstraint
 from .x680.type import (
-    NamedType, REAL,
+    NamedType, REAL, TYPE_VALUE,
     BIT_STRING, BOOLEAN, OCTET_STRING, INTEGER, STRING
     )
-from .x690 import Length
 from .x680.tagged_type import TaggingMode
 from . import axdr
 from .useful_types import (
     Integer8, Integer16, Integer32, Integer64,
     Unsigned8, Unsigned16, Unsigned32, Unsigned64
 )
-from .axdr import ConstrainedOctetStringType, IntegerType, OctetStringType, NullType, BooleanType, BitStringType, SequenceOfType, ChoiceType, TaggedType, NullType0, Type, get_length
+from .axdr import ConstrainedOctetStringType, IntegerType, OctetStringType, NullType, BooleanType, TaggedType, NullType0, Type, get_length
 
 # =============================================================================
 # TypeDescription CHOICE
@@ -26,7 +23,7 @@ from .axdr import ConstrainedOctetStringType, IntegerType, OctetStringType, Null
 # Some have structure (array, structure)
 # =============================================================================
 
-@dataclass
+
 class TypeDescriptionNullData(TaggedType[NullType]):
     """[0] IMPLICIT NULL"""
     tag = 0
@@ -34,12 +31,10 @@ class TypeDescriptionNullData(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionArrayContent(axdr.SequenceType):
     """array content: SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }"""
 
 
-@dataclass
 class TypeDescriptionArray(TaggedType[TypeDescriptionArrayContent]):
     """[1] IMPLICIT SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }"""
     tag = 1
@@ -47,7 +42,6 @@ class TypeDescriptionArray(TaggedType[TypeDescriptionArrayContent]):
     value: TypeDescriptionArrayContent
 
 
-@dataclass
 class TypeDescriptionStructure(TaggedType["TypeDescriptionSequenceOf"]):
     """[2] IMPLICIT SEQUENCE OF TypeDescription"""
     tag = 2
@@ -55,7 +49,6 @@ class TypeDescriptionStructure(TaggedType["TypeDescriptionSequenceOf"]):
     value: "TypeDescriptionSequenceOf"  # Forward reference
 
 
-@dataclass
 class TypeDescriptionBoolean(TaggedType[NullType]):
     """[3] IMPLICIT NULL"""
     tag = 3
@@ -63,7 +56,6 @@ class TypeDescriptionBoolean(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionBitString(TaggedType[NullType]):
     """[4] IMPLICIT NULL"""
     tag = 4
@@ -71,7 +63,6 @@ class TypeDescriptionBitString(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionDoubleLong(TaggedType[NullType]):
     """[5] IMPLICIT NULL"""
     tag = 5
@@ -79,7 +70,6 @@ class TypeDescriptionDoubleLong(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionDoubleLongUnsigned(TaggedType[NullType]):
     """[6] IMPLICIT NULL"""
     tag = 6
@@ -87,7 +77,6 @@ class TypeDescriptionDoubleLongUnsigned(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionOctetString(TaggedType[NullType]):
     """[9] IMPLICIT NULL"""
     tag = 9
@@ -95,7 +84,6 @@ class TypeDescriptionOctetString(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionVisibleString(TaggedType[NullType]):
     """[10] IMPLICIT NULL"""
     tag = 10
@@ -103,7 +91,6 @@ class TypeDescriptionVisibleString(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionUtf8String(TaggedType[NullType]):
     """[12] IMPLICIT NULL"""
     tag = 12
@@ -111,7 +98,6 @@ class TypeDescriptionUtf8String(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionBcd(TaggedType[NullType]):
     """[13] IMPLICIT NULL"""
     tag = 13
@@ -119,7 +105,6 @@ class TypeDescriptionBcd(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionInteger(TaggedType[NullType]):
     """[15] IMPLICIT NULL"""
     tag = 15
@@ -127,7 +112,6 @@ class TypeDescriptionInteger(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionLong(TaggedType[NullType]):
     """[16] IMPLICIT NULL"""
     tag = 16
@@ -135,7 +119,6 @@ class TypeDescriptionLong(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionUnsigned(TaggedType[NullType]):
     """[17] IMPLICIT NULL"""
     tag = 17
@@ -143,7 +126,6 @@ class TypeDescriptionUnsigned(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionLongUnsigned(TaggedType[NullType]):
     """[18] IMPLICIT NULL"""
     tag = 18
@@ -151,7 +133,6 @@ class TypeDescriptionLongUnsigned(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionLong64(TaggedType[NullType]):
     """[20] IMPLICIT NULL"""
     tag = 20
@@ -159,7 +140,6 @@ class TypeDescriptionLong64(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionLong64Unsigned(TaggedType[NullType]):
     """[21] IMPLICIT NULL"""
     tag = 21
@@ -167,7 +147,6 @@ class TypeDescriptionLong64Unsigned(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionEnum(TaggedType[NullType]):
     """[22] IMPLICIT NULL"""
     tag = 22
@@ -175,7 +154,6 @@ class TypeDescriptionEnum(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionFloat32(TaggedType[NullType]):
     """[23] IMPLICIT NULL"""
     tag = 23
@@ -183,7 +161,6 @@ class TypeDescriptionFloat32(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionFloat64(TaggedType[NullType]):
     """[24] IMPLICIT NULL"""
     tag = 24
@@ -191,7 +168,6 @@ class TypeDescriptionFloat64(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionDateTime(TaggedType[NullType]):
     """[25] IMPLICIT NULL"""
     tag = 25
@@ -199,7 +175,6 @@ class TypeDescriptionDateTime(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionDate(TaggedType[NullType]):
     """[26] IMPLICIT NULL"""
     tag = 26
@@ -207,7 +182,6 @@ class TypeDescriptionDate(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionTime(TaggedType[NullType]):
     """[27] IMPLICIT NULL"""
     tag = 27
@@ -215,7 +189,6 @@ class TypeDescriptionTime(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescriptionDontCare(TaggedType[NullType]):
     """[255] IMPLICIT NULL"""
     tag = 255
@@ -223,7 +196,6 @@ class TypeDescriptionDontCare(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class TypeDescription(axdr.ChoiceType):
     """TypeDescription"""
     alternatives = {
@@ -299,7 +271,6 @@ class TypeDescription(axdr.ChoiceType):
         return cls(TypeDescriptionDontCare(NullType(None)))
 
 
-@dataclass
 class TypeDescriptionSequenceOf(axdr.SequenceOfType[TypeDescription]):
     component_type = TypeDescription
 
@@ -318,11 +289,9 @@ setattr(TypeDescriptionStructure, "type_", TypeDescriptionSequenceOf)
 NullData = NullType0
 
 
-@dataclass
 class SequenceOfData(axdr.SequenceOfType[axdr.Type]): ...  # Forward declaration for recursive types
 
 
-@dataclass
 class Array(TaggedType["SequenceOfData"]):
     """[1] IMPLICIT SEQUENCE OF Data"""
     tag = 1
@@ -330,13 +299,78 @@ class Array(TaggedType["SequenceOfData"]):
     value: SequenceOfData
 
 
-@dataclass
 class Structure(TaggedType["SequenceOfData"]):
     """[2] IMPLICIT SEQUENCE OF Data"""
     tag = 2
     mode = TaggingMode.IMPLICIT
     value: SequenceOfData
-    components: ClassVar[Optional[tuple[NamedType[Type], ...]]] = None  # 4.1.5 Common data types Table 2
+    components: ClassVar[Optional[tuple[NamedType[Type], ...]]]  # 4.1.5 Common data types Table 2
+
+    @property
+    def get_el0(self):
+        return self.value[0]
+
+    @property
+    def get_el1(self):
+        return self.value[1]
+
+    @property
+    def get_el2(self):
+        return self.value[2]
+
+    @property
+    def get_el3(self):
+        return self.value[3]
+
+    @property
+    def get_el4(self):
+        return self.value[4]
+
+    @property
+    def get_el5(self):
+        return self.value[5]
+
+    @property
+    def get_el6(self):
+        return self.value[6]
+
+    @property
+    def get_el7(self):
+        return self.value[7]
+
+    @property
+    def get_el8(self):
+        return self.value[8]
+
+    @property
+    def get_el9(self):
+        return self.value[9]
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        """create <components> from annotations"""
+        elements: list[NamedType[Type]] = []
+        if hasattr(cls, "components"):
+            elements.extend(cls.components)
+            for identifier, type_ in cls.__annotations__.items():
+                for i, el in enumerate(cls.components):
+                    if identifier == el.identifier:
+                        elements[i] = NamedType(identifier, type_)
+                        break
+        else:
+            for (identifier, type_), f in zip(cls.__annotations__.items(), (
+                    Structure.get_el0, Structure.get_el1, Structure.get_el2, Structure.get_el3, Structure.get_el4, Structure.get_el5, Structure.get_el6, Structure.get_el7,
+                    Structure.get_el8, Structure.get_el9)):
+                elements.append((NamedType(identifier, type_)))
+                setattr(cls, identifier, f)
+        cls.components = tuple(elements)
+
+    @classmethod
+    def parse(cls, value: TYPE_VALUE) -> Self:
+        if not isinstance(value, tuple):
+            raise ValueError(f"in Structure.parse got {value}, expected <tuple>")
+        if cls.components:
+            return cls(SequenceOfData([comp.type_.parse(val) for comp, val in zip(cls.components, value, strict=True)]))
+        return super().parse(value)
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -358,7 +392,6 @@ class Structure(TaggedType["SequenceOfData"]):
         return cls(SequenceOfData(components_data))
 
 
-@dataclass
 class Boolean(TaggedType[BooleanType]):
     """[3] IMPLICIT BOOLEAN"""
     tag = 3
@@ -366,7 +399,6 @@ class Boolean(TaggedType[BooleanType]):
     value: BooleanType
 
 
-@dataclass
 class BitString(TaggedType[axdr.BitStringType]):
     """[4] IMPLICIT BIT STRING"""
     tag = 4
@@ -374,7 +406,6 @@ class BitString(TaggedType[axdr.BitStringType]):
     value: axdr.BitStringType
 
 
-@dataclass
 class DoubleLong(TaggedType[Integer32]):
     """[5] IMPLICIT Integer32"""
     tag = 5
@@ -382,7 +413,6 @@ class DoubleLong(TaggedType[Integer32]):
     value: Integer32
 
 
-@dataclass
 class DoubleLongUnsigned(TaggedType[Unsigned32]):
     """[6] IMPLICIT Unsigned32"""
     tag = 6
@@ -390,7 +420,6 @@ class DoubleLongUnsigned(TaggedType[Unsigned32]):
     value: Unsigned32
 
 
-@dataclass
 class OctetString(TaggedType[OctetStringType]):
     """[9] IMPLICIT OCTET STRING"""
     tag = 9
@@ -398,7 +427,6 @@ class OctetString(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class VisibleString(TaggedType[axdr.VisibleString]):
     """[10] IMPLICIT VisibleString"""
     tag = 10
@@ -406,7 +434,6 @@ class VisibleString(TaggedType[axdr.VisibleString]):
     value: axdr.VisibleString
 
 
-@dataclass
 class Utf8String(TaggedType[axdr.Utf8String]):
     """[12] IMPLICIT UTF8String"""
     tag = 12
@@ -414,7 +441,6 @@ class Utf8String(TaggedType[axdr.Utf8String]):
     value: axdr.Utf8String
 
 
-@dataclass
 class Bcd(TaggedType[Integer8]):
     """[13] IMPLICIT Integer8"""
     tag = 13
@@ -422,7 +448,6 @@ class Bcd(TaggedType[Integer8]):
     value: Integer8
 
 
-@dataclass
 class Integer(TaggedType[Integer8]):
     """[15] IMPLICIT Integer8"""
     tag = 15
@@ -430,7 +455,6 @@ class Integer(TaggedType[Integer8]):
     value: Integer8
 
 
-@dataclass
 class Long(TaggedType[Integer16]):
     """[16] IMPLICIT Integer16"""
     tag = 16
@@ -438,7 +462,6 @@ class Long(TaggedType[Integer16]):
     value: Integer16
 
 
-@dataclass
 class Unsigned(TaggedType[Unsigned8]):
     """[17] IMPLICIT Unsigned8"""
     tag = 17
@@ -446,7 +469,6 @@ class Unsigned(TaggedType[Unsigned8]):
     value: Unsigned8
 
 
-@dataclass
 class LongUnsigned(TaggedType[Unsigned16]):
     """[18] IMPLICIT Unsigned16"""
     tag = 18
@@ -454,7 +476,6 @@ class LongUnsigned(TaggedType[Unsigned16]):
     value: Unsigned16
 
 
-@dataclass
 class ContentsDescription(TaggedType[TypeDescription]):
     """[0] TypeDescription"""
     tag = 0
@@ -462,7 +483,6 @@ class ContentsDescription(TaggedType[TypeDescription]):
     value: TypeDescription
 
 
-@dataclass
 class ArrayContents(TaggedType[OctetStringType]):
     """[1] IMPLICIT   OCTET STRING"""
     tag = 1
@@ -470,7 +490,6 @@ class ArrayContents(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class CompactArrayContent(axdr.SequenceType):
     """compact-array content: SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }"""
     components = (
@@ -501,7 +520,6 @@ class CompactArrayContent(axdr.SequenceType):
         return cls((contents, array_contents))
 
 
-@dataclass
 class CompactArray(TaggedType[CompactArrayContent]):
     """[19] IMPLICIT SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }"""
     tag = 19
@@ -509,7 +527,6 @@ class CompactArray(TaggedType[CompactArrayContent]):
     value: CompactArrayContent
 
 
-@dataclass
 class Long64(TaggedType[Integer64]):
     """[20] IMPLICIT Integer64"""
     tag = 20
@@ -517,7 +534,6 @@ class Long64(TaggedType[Integer64]):
     value: Integer64
 
 
-@dataclass
 class Long64Unsigned(TaggedType[Unsigned64]):
     """[21] IMPLICIT Unsigned64"""
     tag = 21
@@ -525,7 +541,6 @@ class Long64Unsigned(TaggedType[Unsigned64]):
     value: Unsigned64
 
 
-@dataclass
 class Enum(TaggedType[Unsigned8]):
     """[22] IMPLICIT Unsigned8"""
     tag = 22
@@ -555,13 +570,12 @@ class _Float[T: (OctetStringTypeSize4, OctetStringTypeSize8)](TaggedType[T]):
 
     @classmethod
     def from_float(cls, value: float) -> Self:
-        return cls(cls.get_type()(OctetStringType(pack(cls.fmt, value))))
+        return cls(cls._T(OctetStringType(pack(cls.fmt, value))))
 
     def __float__(self) -> float:
         return unpack(self.fmt, bytes(self.value.value))[0]
 
 
-@dataclass
 class Float32(_Float[OctetStringTypeSize4]):
     """[23] IMPLICIT OCTET STRING (SIZE(4))"""
     tag = 23
@@ -570,7 +584,6 @@ class Float32(_Float[OctetStringTypeSize4]):
     fmt = ">f"
 
 
-@dataclass
 class Float64(_Float[OctetStringTypeSize8]):
     """[24] IMPLICIT OCTET STRING (SIZE(8))"""
     tag = 24
@@ -579,7 +592,6 @@ class Float64(_Float[OctetStringTypeSize8]):
     fmt = ">d"
 
 
-@dataclass
 class DateTime(TaggedType[OctetStringTypeSize12]):
     """[25] IMPLICIT OCTET STRING (SIZE(12))"""
     tag = 25
@@ -587,7 +599,6 @@ class DateTime(TaggedType[OctetStringTypeSize12]):
     value: OctetStringTypeSize12
 
 
-@dataclass
 class Date(TaggedType[OctetStringTypeSize5]):
     """[26] IMPLICIT OCTET STRING (SIZE(5))"""
     tag = 26
@@ -595,7 +606,6 @@ class Date(TaggedType[OctetStringTypeSize5]):
     value: OctetStringTypeSize5
 
 
-@dataclass
 class Time(TaggedType[OctetStringTypeSize4]):
     """[27] IMPLICIT OCTET STRING (SIZE(4))"""
     tag = 27
@@ -603,7 +613,6 @@ class Time(TaggedType[OctetStringTypeSize4]):
     value: OctetStringTypeSize4
 
 
-@dataclass
 class DeltaInteger(TaggedType[Integer8]):
     """[28] IMPLICIT Integer8"""
     tag = 28
@@ -611,7 +620,6 @@ class DeltaInteger(TaggedType[Integer8]):
     value: Integer8
 
 
-@dataclass
 class DeltaLong(TaggedType[Integer16]):
     """[29] IMPLICIT Integer16"""
     tag = 29
@@ -619,7 +627,6 @@ class DeltaLong(TaggedType[Integer16]):
     value: Integer16
 
 
-@dataclass
 class DeltaDoubleLong(TaggedType[Integer32]):
     """[30] IMPLICIT Integer32"""
     tag = 30
@@ -627,7 +634,6 @@ class DeltaDoubleLong(TaggedType[Integer32]):
     value: Integer32
 
 
-@dataclass
 class DeltaUnsigned(TaggedType[Unsigned8]):
     """[31] IMPLICIT Unsigned8"""
     tag = 31
@@ -635,7 +641,6 @@ class DeltaUnsigned(TaggedType[Unsigned8]):
     value: Unsigned8
 
 
-@dataclass
 class DeltaLongUnsigned(TaggedType[Unsigned16]):
     """[32] IMPLICIT Unsigned16"""
     tag = 32
@@ -643,7 +648,6 @@ class DeltaLongUnsigned(TaggedType[Unsigned16]):
     value: Unsigned16
 
 
-@dataclass
 class DeltaDoubleLongUnsigned(TaggedType[Unsigned32]):
     """[33] IMPLICIT Unsigned32"""
     tag = 33
@@ -651,7 +655,6 @@ class DeltaDoubleLongUnsigned(TaggedType[Unsigned32]):
     value: Unsigned32
 
 
-@dataclass
 class DontCare(TaggedType[axdr.NullType]):
     """[255] IMPLICIT NULL"""
     tag = 255
@@ -667,7 +670,6 @@ ComplexDataType: TypeAlias = Array | Structure | CompactArray
 CDT: TypeAlias = SimpleDataType | ComplexDataType
 
 
-@dataclass
 class Data[T: CDT](axdr.ChoiceType):
     """Data"""
     alternatives = {

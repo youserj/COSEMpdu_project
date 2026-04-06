@@ -3,11 +3,6 @@ from typing import Self, TypeAlias, Protocol, Optional, Any, runtime_checkable
 from StructResult.result import ValueOrError
 from ..byte_buffer import ByteBuffer
 
-# Transcript represents minimal data needed for string parsing/reconstruction.
-# Contains ONLY values (str or list of str), NO field names or structural metadata.
-# Structural context (field names, types) is maintained by the concrete Type implementation.
-Transcript: TypeAlias = str | list["Transcript"]
-
 
 class EDTLV(Protocol):
     @classmethod
@@ -36,7 +31,18 @@ type OCTET_STRING = bytes
 type OBJECT_IDENTIFIER = tuple[int, ...]
 type SIMPLE = INTEGER | STRING | BIT_STRING | BOOLEAN | OCTET_STRING | OBJECT_IDENTIFIER | NULL
 type COMPLEX = "SEQUENCE" | "SEQUENCE_OF[Any]"
-type TYPE_VALUE = SIMPLE | COMPLEX
+
+
+@dataclass
+class CHOICE:
+    select: int
+    value: "TYPE_VALUE"
+
+    def __repr__(self) -> str:
+        return f"[{self.select}] {self.value!r}"
+
+
+type TYPE_VALUE = SIMPLE | COMPLEX | CHOICE
 
 
 @runtime_checkable
@@ -98,14 +104,34 @@ class Type(Protocol):
         """Return default value instance for this type, if defined."""
         ...
 
-#     def normalize(self) -> TYPE_VALUE: ...
+    def normalize(self) -> TYPE_VALUE: ...
+
+    @classmethod
+    def parse(cls, value: Any) -> Self: ...
+
+    def __eq__(self, value: object) -> bool: ...
 
 
-# class Simple[T: SIMPLE](Type, Protocol):
-#     value: T
+class Simple[T: SIMPLE](Type, Protocol):
+    value: T
 
-#     def normalize(self) -> T:
-#         return self.value
+    def __init__(self, value: T) -> None:
+        self.value = value
+
+    def normalize(self) -> T:
+        return self.value
+
+    @classmethod
+    def parse(cls, value: T) -> Self:
+        return cls(value)
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Type):
+            raise TypeError(f"unknown value type: {object.__class__}")
+        return (
+            self.__class__ == value.__class__
+            and self.value == value.value
+        )
 
 
 type SEQUENCE = tuple[Optional[Type], ...]
@@ -121,8 +147,7 @@ class ReferencedType(Type, Protocol):
     """Referenced types per X.680 §16.3"""
 
 
-@dataclass
-class UsefulType(ReferencedType, Protocol):
+class UsefulType(Simple[SIMPLE], ReferencedType, Protocol):
     """16.3"""
 
 
@@ -205,7 +230,7 @@ class CharacterStringType(Type, Protocol):
 
 
 @dataclass
-class RestrictedCharacterStringType(CharacterStringType, Protocol):
+class RestrictedCharacterStringType(Simple[STRING], CharacterStringType):
     value: STRING
 
     @classmethod

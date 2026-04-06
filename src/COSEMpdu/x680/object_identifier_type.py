@@ -8,13 +8,11 @@ Standards:
 - X.690 §8.19: OBJECT IDENTIFIER encoding rules (handled in x690)
 - X.680 Table 1: UNIVERSAL tag 6
 """
-from dataclasses import dataclass
 from typing import Self
-from .type import Transcript, OBJECT_IDENTIFIER, BuiltinType
+from .type import OBJECT_IDENTIFIER, BuiltinType, Simple
 
 
-@dataclass
-class ObjectIdentifierType(BuiltinType):
+class ObjectIdentifierType(Simple[OBJECT_IDENTIFIER], BuiltinType):
     """
     ASN.1 OBJECT IDENTIFIER type (X.680 §31).
 
@@ -46,67 +44,29 @@ class ObjectIdentifierType(BuiltinType):
     """
     value: OBJECT_IDENTIFIER
 
-    @classmethod
-    def default(cls) -> Self:
-        return cls((0, 0))  # Default to {0 0}, though this may be invalid
-
-    def __post_init__(self) -> None:
+    def __init__(self, value: OBJECT_IDENTIFIER) -> None:
         """
         Validate OBJECT IDENTIFIER structure per X.680 §31.10.
         Raises:
             ValueError: If OID has less than 2 arcs or invalid arc values
         """
-        if len(self.value) < 2:
-            raise ValueError(f"OBJECT IDENTIFIER must have at least 2 arcs, got {len(self.value)}")
+        if len(value) < 2:
+            raise ValueError(f"OBJECT IDENTIFIER must have at least 2 arcs, got {len(value)}")
         # Validate first arc (0, 1, or 2)
-        if self.value[0] not in (0, 1, 2):
-            raise ValueError(f"First arc must be 0, 1, or 2, got {self.value[0]}")
+        if value[0] not in (0, 1, 2):
+            raise ValueError(f"First arc must be 0, 1, or 2, got {value[0]}")
         # Validate second arc (0-39 if first arc is 0 or 1)
-        if self.value[0] in (0, 1) and self.value[1] > 39:
-            raise ValueError(f"Second arc must be 0-39 when first arc is {self.value[0]}, got {self.value[1]}")
+        if value[0] in (0, 1) and value[1] > 39:
+            raise ValueError(f"Second arc must be 0-39 when first arc is {value[0]}, got {value[1]}")
         # Validate all arcs are non-negative
-        for i, arc in enumerate(self.value):
+        for i, arc in enumerate(value):
             if arc < 0:
                 raise ValueError(f"Arc {i} must be non-negative, got {arc}")
+        self.value = value
 
     @classmethod
-    def parse(cls, value: Transcript) -> Self:
-        """
-        Construct OBJECT IDENTIFIER from transcript representation.
-
-        Args:
-            value: String representation like "1.0.1" or "iso.standard.asn1"
-
-        Returns:
-            ObjectIdentifierType instance
-
-        Raises:
-            ValueError: If string cannot be parsed as OID
-
-        Example:
-            >>> ObjectIdentifierType.parse("1.0.1")
-            ObjectIdentifierType(value=(1, 0, 1))
-        """
-        if isinstance(value, list):
-            # Handle list of arc names
-            raise NotImplementedError("Named arc resolution not implemented")
-
-        # Parse dotted decimal notation
-        arcs = tuple(int(arc.strip()) for arc in value.split("."))
-        return cls(arcs)
-
-    def to_transcript(self) -> Transcript:
-        """
-        Convert to dotted decimal string representation.
-
-        Returns:
-            String like "1.0.1"
-
-        Example:
-            >>> ObjectIdentifierType((1, 0, 1)).to_transcript()
-            '1.0.1'
-        """
-        return str(self)
+    def default(cls) -> Self:
+        return cls((0, 0))  # Default to {0 0}, though this may be invalid
 
     def __str__(self) -> str:
         """

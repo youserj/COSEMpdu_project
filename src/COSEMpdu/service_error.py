@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Self
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.tagged_type import TaggingMode
@@ -11,7 +10,6 @@ from . import axdr
 # application-reference [0] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
 class ApplicationReferenceList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -24,13 +22,11 @@ class ApplicationReferenceList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class ApplicationReferenceEnum(axdr.EnumeratedType):
     """application-reference"""
     named_members = ApplicationReferenceList()
 
 
-@dataclass
 class ApplicationReference(TaggedType[ApplicationReferenceEnum]):
     """application-reference"""
     tag = 0
@@ -42,7 +38,6 @@ class ApplicationReference(TaggedType[ApplicationReferenceEnum]):
 # hardware-resource [1] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
 class HardwareResourceList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -53,13 +48,11 @@ class HardwareResourceList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class HardwareResourceEnum(axdr.EnumeratedType):
     """hardware-resource"""
     named_members = HardwareResourceList()
 
 
-@dataclass
 class HardwareResource(TaggedType[HardwareResourceEnum]):
     """hardware-resource"""
     tag = 1
@@ -71,7 +64,6 @@ class HardwareResource(TaggedType[HardwareResourceEnum]):
 # vde-state-error [2] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
 class VDEStateErrorList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -82,13 +74,11 @@ class VDEStateErrorList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class VDEStateErrorEnum(axdr.EnumeratedType):
     """vde-state-error"""
     named_members = VDEStateErrorList()
 
 
-@dataclass
 class VDEStateError(TaggedType[VDEStateErrorEnum]):
     """vde-state-error"""
     tag = 2
@@ -100,7 +90,6 @@ class VDEStateError(TaggedType[VDEStateErrorEnum]):
 # service [3] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
 class ServiceList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -109,13 +98,11 @@ class ServiceList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class ServiceEnum(axdr.EnumeratedType):
     """service"""
     named_members = ServiceList()
 
 
-@dataclass
 class Service(TaggedType[ServiceEnum]):
     """service"""
     tag = 3
@@ -127,7 +114,7 @@ class Service(TaggedType[ServiceEnum]):
 # definition [4] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
+
 class DefinitionList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -137,13 +124,11 @@ class DefinitionList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class DefinitionEnum(axdr.EnumeratedType):
     """definition"""
     named_members = DefinitionList()
 
 
-@dataclass
 class Definition(TaggedType[DefinitionEnum]):
     """definition"""
     tag = 4
@@ -155,7 +140,7 @@ class Definition(TaggedType[DefinitionEnum]):
 # access [5] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
+
 class AccessList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -166,13 +151,11 @@ class AccessList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class AccessEnum(axdr.EnumeratedType):
     """access"""
     named_members = AccessList()
 
 
-@dataclass
 class Access(TaggedType[AccessEnum]):
     """access"""
     tag = 5
@@ -184,7 +167,7 @@ class Access(TaggedType[AccessEnum]):
 # initiate [6] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
+
 class InitiateList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -195,13 +178,11 @@ class InitiateList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class InitiateEnum(axdr.EnumeratedType):
     """initiate"""
     named_members = InitiateList()
 
 
-@dataclass
 class Initiate(TaggedType[InitiateEnum]):
     """initiate"""
     tag = 6
@@ -213,7 +194,7 @@ class Initiate(TaggedType[InitiateEnum]):
 # load-data-set [7] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
+
 class LoadDataSetList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -227,13 +208,11 @@ class LoadDataSetList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class LoadDataSetEnum(axdr.EnumeratedType):
     """load-data-set"""
     named_members = LoadDataSetList()
 
 
-@dataclass
 class LoadDataSet(TaggedType[LoadDataSetEnum]):
     """load-data-set"""
     tag = 7
@@ -245,7 +224,7 @@ class LoadDataSet(TaggedType[LoadDataSetEnum]):
 # task [9] IMPLICIT ENUMERATED
 # =============================================================================
 
-@dataclass
+
 class TaskList(EnumerationList):
     members = (
         EnumerationMember("other", 0),
@@ -256,13 +235,11 @@ class TaskList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class TaskEnum(axdr.EnumeratedType):
     """task"""
     named_members = TaskList()
 
 
-@dataclass
 class Task(TaggedType[TaskEnum]):
     """task"""
     tag = 9
@@ -270,11 +247,9 @@ class Task(TaggedType[TaskEnum]):
     value: TaskEnum
 
 
-@dataclass(frozen=True)
 class ChangeScopeEnum(axdr.EnumeratedType): ...
 
 
-@dataclass
 class Changescope(TaggedType[ChangeScopeEnum]):
     """change-scope"""
     tag = 8
@@ -282,11 +257,9 @@ class Changescope(TaggedType[ChangeScopeEnum]):
     value: ChangeScopeEnum
 
 
-@dataclass(frozen=True)
 class OtherEnum(axdr.EnumeratedType): ...
 
 
-@dataclass
 class Other(TaggedType[OtherEnum]):
     """Other"""
     tag = 10
@@ -298,7 +271,7 @@ class Other(TaggedType[OtherEnum]):
 # ServiceError CHOICE
 # =============================================================================
 
-@dataclass
+
 class ServiceError(axdr.ChoiceType):
     """ServiceError"""
     alternatives = create_alternatives(
@@ -320,7 +293,6 @@ class ServiceError(axdr.ChoiceType):
         return cls(Access(value))
 
 
-@dataclass
 class InitiateError(TaggedType[ServiceError]):
     """[1] ServiceError"""
     tag = 1
@@ -328,7 +300,6 @@ class InitiateError(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class GetStatus(TaggedType[ServiceError]):
     """[2] ServiceError"""
     tag = 2
@@ -336,7 +307,6 @@ class GetStatus(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class GetNameList(TaggedType[ServiceError]):
     """[3] ServiceError"""
     tag = 3
@@ -344,7 +314,6 @@ class GetNameList(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class GetVariableAttribute(TaggedType[ServiceError]):
     """[4] ServiceError"""
     tag = 4
@@ -352,7 +321,6 @@ class GetVariableAttribute(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class Read(TaggedType[ServiceError]):
     """[5] ServiceError"""
     tag = 5
@@ -360,7 +328,6 @@ class Read(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class Write(TaggedType[ServiceError]):
     """[6] ServiceError"""
     tag = 6
@@ -368,7 +335,6 @@ class Write(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class GetDataSetAttribute(TaggedType[ServiceError]):
     """[7] ServiceError"""
     tag = 7
@@ -376,7 +342,6 @@ class GetDataSetAttribute(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class GetTIAttribute(TaggedType[ServiceError]):
     """[8] ServiceError"""
     tag = 8
@@ -384,7 +349,6 @@ class GetTIAttribute(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class ChangeScope(TaggedType[ServiceError]):
     """[9] ServiceError"""
     tag = 9
@@ -392,7 +356,6 @@ class ChangeScope(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class Start(TaggedType[ServiceError]):
     """[10] ServiceError"""
     tag = 10
@@ -400,7 +363,6 @@ class Start(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class Stop(TaggedType[ServiceError]):
     """[11] ServiceError"""
     tag = 11
@@ -408,7 +370,6 @@ class Stop(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class Resume(TaggedType[ServiceError]):
     """[12] ServiceError"""
     tag = 12
@@ -416,7 +377,6 @@ class Resume(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class MakeUsable(TaggedType[ServiceError]):
     """[13] ServiceError"""
     tag = 13
@@ -424,7 +384,6 @@ class MakeUsable(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class InitiateLoad(TaggedType[ServiceError]):
     """[14] ServiceError"""
     tag = 14
@@ -432,7 +391,6 @@ class InitiateLoad(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class LoadSegment(TaggedType[ServiceError]):
     """[15] ServiceError"""
     tag = 15
@@ -440,7 +398,6 @@ class LoadSegment(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class TerminateLoad(TaggedType[ServiceError]):
     """[16] ServiceError"""
     tag = 16
@@ -448,7 +405,6 @@ class TerminateLoad(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class InitiateUpLoad(TaggedType[ServiceError]):
     """[17] ServiceError"""
     tag = 17
@@ -456,7 +412,6 @@ class InitiateUpLoad(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class UpLoadSegment(TaggedType[ServiceError]):
     """[18] ServiceError"""
     tag = 18
@@ -464,7 +419,6 @@ class UpLoadSegment(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class TerminateUpLoad(TaggedType[ServiceError]):
     """[19] ServiceError"""
     tag = 19
@@ -472,7 +426,6 @@ class TerminateUpLoad(TaggedType[ServiceError]):
     value: ServiceError
 
 
-@dataclass
 class ConfirmedServiceError(axdr.ChoiceType):
     """ConfirmedServiceError"""
     alternatives = create_alternatives(

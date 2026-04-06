@@ -3,19 +3,16 @@ COSEM PDU Types Implementation
 Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6
 """
-from dataclasses import dataclass
-from typing import ClassVar, Optional, Self
-from .data import Data, NullData
+from typing import ClassVar
+from .data import Data
 from .x680.tagged_type import TaggingMode
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .axdr import (
-    ConstrainedIntegerType, EnumeratedType, IntegerType, ConstrainedOctetStringType,
-    OctetStringType, BitStringType, SequenceType, SequenceOfType, create_alternatives,
-    ChoiceType, TaggedType, NullType, BooleanType, VisibleString, Utf8String, GeneralizedTime, NullType0
+    EnumeratedType, OctetStringType, SequenceType, SequenceOfType, create_alternatives,
+    ChoiceType, TaggedType, NullType, GeneralizedTime, NullType0
 )
-from .x680.type import STRING, NamedType, OptionalNamedType
-from .useful_types import Integer8, Unsigned16, Unsigned8, ObjectName, Unsigned32
-from .byte_buffer import ByteBuffer
+from .x680.type import NamedType, OptionalNamedType
+from .useful_types import Unsigned16, Unsigned8, Unsigned32
 from .types_used import (
     CosemAttributeDescriptor,
     CosemAttributeDescriptorWithSelection,
@@ -40,7 +37,6 @@ from .user_information import InitiateRequest, InitiateResponse
 from .key_info import KeyInfo
 
 
-@dataclass
 class InitialRequest1(TaggedType[InitiateRequest]):
     """initialRequest"""
     tag = 1
@@ -48,7 +44,6 @@ class InitialRequest1(TaggedType[InitiateRequest]):
     value: InitiateRequest
 
 
-@dataclass
 class InitialResponse8(TaggedType[InitiateResponse]):
     """initialResponse"""
     tag = 8
@@ -60,13 +55,12 @@ class InitialResponse8(TaggedType[InitiateResponse]):
 # -- Read/Write Request/Response (COSEMpdu_GB83.txt)
 # ============================================================================
 
-@dataclass
+
 class ReadRequest(SequenceOfType[VariableAccessSpecification]):
     """ReadRequest"""
     component_type = VariableAccessSpecification
 
 
-@dataclass
 class ReadRequest5(TaggedType[ReadRequest]):
     """readRequest"""
     tag = 5
@@ -74,7 +68,6 @@ class ReadRequest5(TaggedType[ReadRequest]):
     value: ReadRequest
 
 
-@dataclass
 class DataBlockResult2(TaggedType[DataBlockResult]):
     """[2] IMPLICIT Data-Block-Result"""
     tag = 2
@@ -82,7 +75,6 @@ class DataBlockResult2(TaggedType[DataBlockResult]):
     value: DataBlockResult
 
 
-@dataclass
 class BlockNumber3(TaggedType[Unsigned16]):
     """[3] IMPLICIT Unsigned16"""
     tag = 3
@@ -107,13 +99,11 @@ class ReadResponseChoice(ChoiceType):
     value: DataBlockResult2 | DataAccesResult1 | DataBlockResult2 | BlockNumber3
 
 
-@dataclass
 class ReadResponse(SequenceOfType[ReadResponseChoice]):
     """ReadResponse"""
     component_type = ReadResponseChoice
 
 
-@dataclass
 class ReadResponse12(TaggedType[ReadResponse]):
     """[12] IMPLICIT ReadResponse"""
     tag = 12
@@ -121,7 +111,6 @@ class ReadResponse12(TaggedType[ReadResponse]):
     value: ReadResponse
 
 
-@dataclass
 class WriteRequest(SequenceType):
     """WriteRequest"""
     components = (
@@ -130,7 +119,6 @@ class WriteRequest(SequenceType):
     )
 
 
-@dataclass
 class WriteRequest6(TaggedType[WriteRequest]):
     """writeRequest"""
     tag = 6
@@ -138,7 +126,6 @@ class WriteRequest6(TaggedType[WriteRequest]):
     value: WriteRequest
 
 
-@dataclass
 class BlockNumber2(TaggedType[Unsigned16]):
     """[2] Unsigned16"""
     tag = 2
@@ -146,7 +133,6 @@ class BlockNumber2(TaggedType[Unsigned16]):
     value: Unsigned16
 
 
-@dataclass
 class WriteResponseChoice(ChoiceType):
     """CHOICE {
         success           [0] IMPLICIT NULL,
@@ -166,13 +152,11 @@ class WriteResponseChoice(ChoiceType):
 WriteResponseChoice.SUCCESS = WriteResponseChoice(NullType0(NullType(None)))
 
 
-@dataclass
 class WriteResponse(SequenceOfType[WriteResponseChoice]):
     """WriteResponse"""
     component_type = WriteResponseChoice
 
 
-@dataclass
 class writeResponse(TaggedType[WriteResponse]):
     """writeResponse"""
     tag = 13
@@ -180,7 +164,6 @@ class writeResponse(TaggedType[WriteResponse]):
     value: WriteResponse
 
 
-@dataclass
 class confirmedServiceError(TaggedType[ConfirmedServiceError]):
     """confirmedServiceError"""
     tag = 14
@@ -188,7 +171,6 @@ class confirmedServiceError(TaggedType[ConfirmedServiceError]):
     value: ConfirmedServiceError
 
 
-@dataclass
 class NotificationBody(SequenceType):
     """NotificationBody"""
     components = (
@@ -196,7 +178,6 @@ class NotificationBody(SequenceType):
     )
 
 
-@dataclass
 class DataNotification(SequenceType):
     """DataNotification"""
     components = (
@@ -206,7 +187,6 @@ class DataNotification(SequenceType):
     )
 
 
-@dataclass
 class DataNotification15(TaggedType[DataNotification]):
     """data-notification"""
     tag = 15
@@ -214,7 +194,6 @@ class DataNotification15(TaggedType[DataNotification]):
     value: DataNotification
 
 
-@dataclass
 class DataNotificationConfirm(SequenceType):
     """DataNotificationConfirm"""
     components = (
@@ -223,7 +202,6 @@ class DataNotificationConfirm(SequenceType):
     )
 
 
-@dataclass
 class DataNotificationConfirm16(TaggedType[DataNotificationConfirm]):
     """data-notification-confirm"""
     tag = 16
@@ -231,7 +209,6 @@ class DataNotificationConfirm16(TaggedType[DataNotificationConfirm]):
     value: DataNotificationConfirm
 
 
-@dataclass
 class UnconfirmedWriteRequest(SequenceType):
     """UnconfirmedWriteRequest"""
     components = (
@@ -240,7 +217,6 @@ class UnconfirmedWriteRequest(SequenceType):
     )
 
 
-@dataclass
 class UnconfirmedWriteRequest22(TaggedType[UnconfirmedWriteRequest]):
     """unconfirmedWriteRequest"""
     tag = 22
@@ -248,7 +224,6 @@ class UnconfirmedWriteRequest22(TaggedType[UnconfirmedWriteRequest]):
     value: UnconfirmedWriteRequest
 
 
-@dataclass
 class InformationReportRequest(SequenceType):
     """InformationReportRequest"""
     components = (
@@ -258,7 +233,6 @@ class InformationReportRequest(SequenceType):
     )
 
 
-@dataclass
 class InformationReportRequest24(TaggedType[InformationReportRequest]):
     """informationReportRequest"""
     tag = 24
@@ -266,63 +240,62 @@ class InformationReportRequest24(TaggedType[InformationReportRequest]):
     value: InformationReportRequest
 
 
-@dataclass
 class GloInitiateRequest(TaggedType[OctetStringType]):
     """glo-initiateRequest"""
     tag = 33
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloReadRequest(TaggedType[OctetStringType]):
     """glo-readRequest"""
     tag = 37
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloWriteRequest(TaggedType[OctetStringType]):
     """glo-writeRequest"""
     tag = 38
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloInitiateResponse(TaggedType[OctetStringType]):
     """glo-initiateResponse"""
     tag = 40
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloReadResponse(TaggedType[OctetStringType]):
     """glo-readResponse"""
     tag = 44
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloWriteResponse(TaggedType[OctetStringType]):
     """glo-writeResponse"""
     tag = 45
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloConfirmedServiceError(TaggedType[OctetStringType]):
     """glo-confirmedServiceError"""
     tag = 46
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloUnconfirmedWriteRequest(TaggedType[OctetStringType]):
     """glo-unconfirmedWriteRequest"""
     tag = 54
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class GloInformationReportRequest(TaggedType[OctetStringType]):
     """glo-informationReportRequest"""
     tag = 56
@@ -330,63 +303,62 @@ class GloInformationReportRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class DedInitiateRequest(TaggedType[OctetStringType]):
     """ded-initiateRequest"""
     tag = 65
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedReadRequest(TaggedType[OctetStringType]):
     """ded-readRequest"""
     tag = 69
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedWriteRequest(TaggedType[OctetStringType]):
     """ded-writeRequest"""
     tag = 70
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedInitiateResponse(TaggedType[OctetStringType]):
     """ded-initiateResponse"""
     tag = 72
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedReadResponse(TaggedType[OctetStringType]):
     """ded-readResponse"""
     tag = 76
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedWriteResponse(TaggedType[OctetStringType]):
     """ded-writeResponse"""
     tag = 77
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedConfirmedServiceError(TaggedType[OctetStringType]):
     """ded-confirmedServiceError"""
     tag = 78
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedUnconfirmedWriteRequest(TaggedType[OctetStringType]):
     """ded-unconfirmedWriteRequest"""
     tag = 86
     mode = TaggingMode.IMPLICIT
     value: OctetStringType
 
-@dataclass
+
 class DedInformationReportRequest(TaggedType[OctetStringType]):
     """ded-informationReportRequest"""
     tag = 88
@@ -394,7 +366,6 @@ class DedInformationReportRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class GetRequestNormal(SequenceType):
     """Get-Request-Normal"""
     components = (
@@ -404,7 +375,6 @@ class GetRequestNormal(SequenceType):
     )
 
 
-@dataclass
 class GetRequestNormal1(TaggedType[GetRequestNormal]):
     """[1] IMPLICIT Get-Request-Normal"""
     tag = 1
@@ -412,7 +382,6 @@ class GetRequestNormal1(TaggedType[GetRequestNormal]):
     value: GetRequestNormal
 
 
-@dataclass
 class GetRequestNext(SequenceType):
     """Get-Request-Next"""
     components = (
@@ -421,7 +390,6 @@ class GetRequestNext(SequenceType):
     )
 
 
-@dataclass
 class GetRequestNext2(TaggedType[GetRequestNext]):
     """[2] IMPLICIT Get-Request-Next"""
     tag = 2
@@ -429,7 +397,6 @@ class GetRequestNext2(TaggedType[GetRequestNext]):
     value: GetRequestNext
 
 
-@dataclass
 class GetRequestWithList(SequenceType):
     """Get-Request-With-List"""
     components = (
@@ -438,7 +405,6 @@ class GetRequestWithList(SequenceType):
     )
 
 
-@dataclass
 class GetRequestWithList3(TaggedType[GetRequestWithList]):
     """[3] IMPLICIT Get-Request-With-List"""
     tag = 3
@@ -446,7 +412,6 @@ class GetRequestWithList3(TaggedType[GetRequestWithList]):
     value: GetRequestWithList
 
 
-@dataclass
 class GetRequest(ChoiceType):
     """Get-Request"""
     alternatives = {
@@ -463,7 +428,6 @@ class getRequest(TaggedType[GetRequest]):
     value: GetRequest
 
 
-@dataclass
 class GetResponseNormal(SequenceType):
     """Get-Response-Normal"""
     components = (
@@ -472,7 +436,6 @@ class GetResponseNormal(SequenceType):
     )
 
 
-@dataclass
 class GetResponseNormal1(TaggedType[GetResponseNormal]):
     """[1] IMPLICIT Get-Response-Normal"""
     tag = 1
@@ -480,7 +443,6 @@ class GetResponseNormal1(TaggedType[GetResponseNormal]):
     value: GetResponseNormal
 
 
-@dataclass
 class GetResponseWithDatablock(SequenceType):
     """Get-Response-With-Datablock ::= SEQUENCE {invoke-id-and-priority, result}"""
     components = (
@@ -489,7 +451,6 @@ class GetResponseWithDatablock(SequenceType):
     )
 
 
-@dataclass
 class GetResponseWithDatablock2(TaggedType[GetResponseWithDatablock]):
     """[2] IMPLICIT Get-Response-With-Datablock"""
     tag = 2
@@ -497,7 +458,6 @@ class GetResponseWithDatablock2(TaggedType[GetResponseWithDatablock]):
     value: GetResponseWithDatablock
 
 
-@dataclass
 class GetResponseWithList(SequenceType):
     """Get-Response-With-List ::= SEQUENCE {invoke-id-and-priority, result}"""
     components = (
@@ -506,7 +466,6 @@ class GetResponseWithList(SequenceType):
     )
 
 
-@dataclass
 class GetResponseWithList3(TaggedType[GetResponseWithList]):
     """[3] IMPLICIT Get-Response-With-List"""
     tag = 3
@@ -514,7 +473,6 @@ class GetResponseWithList3(TaggedType[GetResponseWithList]):
     value: GetResponseWithList
 
 
-@dataclass
 class GetResponse(ChoiceType):
     """Get-Response"""
     alternatives = {
@@ -524,7 +482,6 @@ class GetResponse(ChoiceType):
     }
 
 
-@dataclass
 class getResponse(TaggedType[GetResponse]):
     """[196] IMPLICIT Get-Response"""
     tag = 196
@@ -532,7 +489,6 @@ class getResponse(TaggedType[GetResponse]):
     value: GetResponse
 
 
-@dataclass
 class SetRequestNormal(SequenceType):
     """Set-Request-Normal"""
     components = (
@@ -543,7 +499,6 @@ class SetRequestNormal(SequenceType):
     )
 
 
-@dataclass
 class SetRequestNormal1(TaggedType[SetRequestNormal]):
     """[1] IMPLICIT Set-Request-Normal"""
     tag = 1
@@ -551,7 +506,6 @@ class SetRequestNormal1(TaggedType[SetRequestNormal]):
     value: SetRequestNormal
 
 
-@dataclass
 class SetRequestWithFirstDatablock(SequenceType):
     """Set-Request-With-First-Datablock"""
     components = (
@@ -562,7 +516,6 @@ class SetRequestWithFirstDatablock(SequenceType):
     )
 
 
-@dataclass
 class SetRequestWithFirstDatablock2(TaggedType[SetRequestWithFirstDatablock]):
     """[2] IMPLICIT Set-Request-With-First-Datablock"""
     tag = 2
@@ -570,7 +523,6 @@ class SetRequestWithFirstDatablock2(TaggedType[SetRequestWithFirstDatablock]):
     value: SetRequestWithFirstDatablock
 
 
-@dataclass
 class SetRequestWithDatablock(SequenceType):
     """Set-Request-With-Datablock"""
     components = (
@@ -581,7 +533,6 @@ class SetRequestWithDatablock(SequenceType):
     )
 
 
-@dataclass
 class SetRequestWithDatablock3(TaggedType[SetRequestWithDatablock]):
     """[3] IMPLICIT Set-Request-With-Datablock"""
     tag = 3
@@ -589,7 +540,6 @@ class SetRequestWithDatablock3(TaggedType[SetRequestWithDatablock]):
     value: SetRequestWithDatablock
 
 
-@dataclass
 class SetRequestWithList(SequenceType):
     """Set-Request-With-List"""
     components = (
@@ -599,7 +549,6 @@ class SetRequestWithList(SequenceType):
     )
 
 
-@dataclass
 class SetRequestWithList4(TaggedType[SetRequestWithList]):
     """[4] IMPLICIT Set-Request-With-List"""
     tag = 4
@@ -607,7 +556,6 @@ class SetRequestWithList4(TaggedType[SetRequestWithList]):
     value: SetRequestWithList
 
 
-@dataclass
 class SetRequestWithListAndFirstDatablock(SequenceType):
     """Set-Request-With-List-And-First-Datablock"""
     components = (
@@ -617,7 +565,6 @@ class SetRequestWithListAndFirstDatablock(SequenceType):
     )
 
 
-@dataclass
 class SetRequestWithListAndFirstDatablock5(TaggedType[SetRequestWithListAndFirstDatablock]):
     """[5] IMPLICIT Set-Request-With-List-And-First-Datablock"""
     tag = 5
@@ -625,7 +572,6 @@ class SetRequestWithListAndFirstDatablock5(TaggedType[SetRequestWithListAndFirst
     value: SetRequestWithListAndFirstDatablock
 
 
-@dataclass
 class SetRequest(ChoiceType):
     """Set-Request"""
     alternatives = {
@@ -637,7 +583,6 @@ class SetRequest(ChoiceType):
     }
 
 
-@dataclass
 class setRequest(TaggedType[SetRequest]):
     """[193] IMPLICIT Set-Request"""
     tag = 193
@@ -645,7 +590,6 @@ class setRequest(TaggedType[SetRequest]):
     value: SetRequest
 
 
-@dataclass
 class SetResponseNormal(SequenceType):
     """Set-Response-Normal"""
     components = (
@@ -654,7 +598,6 @@ class SetResponseNormal(SequenceType):
     )
 
 
-@dataclass
 class SetResponseNormal1(TaggedType[SetResponseNormal]):
     """[1] IMPLICIT Set-Response-Normal"""
     tag = 1
@@ -662,7 +605,6 @@ class SetResponseNormal1(TaggedType[SetResponseNormal]):
     value: SetResponseNormal
 
 
-@dataclass
 class SetResponseDatablock(SequenceType):
     """Set-Response-Datablock"""
     components = (
@@ -671,7 +613,6 @@ class SetResponseDatablock(SequenceType):
     )
 
 
-@dataclass
 class SetResponseDatablock2(TaggedType[SetResponseDatablock]):
     """[2] IMPLICIT Set-Response-Datablock"""
     tag = 2
@@ -679,7 +620,6 @@ class SetResponseDatablock2(TaggedType[SetResponseDatablock]):
     value: SetResponseDatablock
 
 
-@dataclass
 class SetResponseLastDatablock(SequenceType):
     """Set-Response-Last-Datablock"""
     components = (
@@ -689,7 +629,6 @@ class SetResponseLastDatablock(SequenceType):
     )
 
 
-@dataclass
 class SetResponseLastDatablock3(TaggedType[SetResponseLastDatablock]):
     """[3] IMPLICIT Set-Response-Last-Datablock"""
     tag = 3
@@ -697,7 +636,6 @@ class SetResponseLastDatablock3(TaggedType[SetResponseLastDatablock]):
     value: SetResponseLastDatablock
 
 
-@dataclass
 class SetResponseLastDatablockWithList(SequenceType):
     """Set-Response-Last-Datablock-With-List"""
     components = (
@@ -707,7 +645,6 @@ class SetResponseLastDatablockWithList(SequenceType):
     )
 
 
-@dataclass
 class SetResponseLastDatablockWithList4(TaggedType[SetResponseLastDatablockWithList]):
     """[4] IMPLICIT Set-Response-Last-Datablock-With-List"""
     tag = 4
@@ -715,7 +652,6 @@ class SetResponseLastDatablockWithList4(TaggedType[SetResponseLastDatablockWithL
     value: SetResponseLastDatablockWithList
 
 
-@dataclass
 class SetResponseWithList(SequenceType):
     """Set-Response-With-List"""
     components = (
@@ -724,7 +660,6 @@ class SetResponseWithList(SequenceType):
     )
 
 
-@dataclass
 class SetResponseWithList5(TaggedType[SetResponseWithList]):
     """[5] IMPLICIT Set-Response-With-List"""
     tag = 5
@@ -732,7 +667,6 @@ class SetResponseWithList5(TaggedType[SetResponseWithList]):
     value: SetResponseWithList
 
 
-@dataclass
 class SetResponse(ChoiceType):
     """Set-Response"""
     alternatives = {
@@ -744,7 +678,6 @@ class SetResponse(ChoiceType):
     }
 
 
-@dataclass
 class setResponse(TaggedType[SetResponse]):
     """[197] IMPLICIT Set-Response"""
     tag = 197
@@ -752,7 +685,6 @@ class setResponse(TaggedType[SetResponse]):
     value: SetResponse
 
 
-@dataclass
 class ActionRequestNormal(SequenceType):
     """Action-Request-Normal"""
     components = (
@@ -762,7 +694,6 @@ class ActionRequestNormal(SequenceType):
     )
 
 
-@dataclass
 class ActionRequestNormal1(TaggedType[ActionRequestNormal]):
     """[1] IMPLICIT Action-Request-Normal"""
     tag = 1
@@ -770,7 +701,6 @@ class ActionRequestNormal1(TaggedType[ActionRequestNormal]):
     value: ActionRequestNormal
 
 
-@dataclass
 class ActionRequestNextPblock(SequenceType):
     """Action-Request-Next-Pblock"""
     components = (
@@ -778,7 +708,7 @@ class ActionRequestNextPblock(SequenceType):
         NamedType("block-number", Unsigned32)
     )
 
-@dataclass
+
 class ActionRequestNextPblock2(TaggedType[ActionRequestNextPblock]):
     """[2] IMPLICIT Action-Request-Next-Pblock"""
     tag = 2
@@ -786,7 +716,6 @@ class ActionRequestNextPblock2(TaggedType[ActionRequestNextPblock]):
     value: ActionRequestNextPblock
 
 
-@dataclass
 class ActionRequestWithList(SequenceType):
     """Action-Request-With-List"""
     components = (
@@ -795,7 +724,7 @@ class ActionRequestWithList(SequenceType):
         NamedType("method-invocation-parameters", SequenceOfType[Data])
     )
 
-@dataclass
+
 class ActionRequestWithList3(TaggedType[ActionRequestWithList]):
     """[3] IMPLICIT Action-Request-With-List"""
     tag = 3
@@ -803,7 +732,6 @@ class ActionRequestWithList3(TaggedType[ActionRequestWithList]):
     value: ActionRequestWithList
 
 
-@dataclass
 class ActionRequestWithFirstPblock(SequenceType):
     """Action-Request-With-First-Pblock"""
     components = (
@@ -812,7 +740,7 @@ class ActionRequestWithFirstPblock(SequenceType):
         NamedType("pblock", DataBlockSA)
     )
 
-@dataclass
+
 class ActionRequestWithFirstPblock4(TaggedType[ActionRequestWithFirstPblock]):
     """[4] IMPLICIT Action-Request-With-First-Pblock"""
     tag = 4
@@ -820,7 +748,6 @@ class ActionRequestWithFirstPblock4(TaggedType[ActionRequestWithFirstPblock]):
     value: ActionRequestWithFirstPblock
 
 
-@dataclass
 class ActionRequestWithListAndFirstPblock(SequenceType):
     """Action-Request-With-List-And-First-Pblock"""
     components = (
@@ -829,7 +756,7 @@ class ActionRequestWithListAndFirstPblock(SequenceType):
         NamedType("pblock", DataBlockSA)
     )
 
-@dataclass
+
 class ActionRequestWithListAndFirstPblock5(TaggedType[ActionRequestWithListAndFirstPblock]):
     """[5] IMPLICIT Action-Request-With-List-And-First-Pblock"""
     tag = 5
@@ -837,7 +764,6 @@ class ActionRequestWithListAndFirstPblock5(TaggedType[ActionRequestWithListAndFi
     value: ActionRequestWithListAndFirstPblock
 
 
-@dataclass
 class ActionRequestWithPblock(SequenceType):
     """Action-Request-With-Pblock"""
     components = (
@@ -845,7 +771,7 @@ class ActionRequestWithPblock(SequenceType):
         NamedType("pblock", DataBlockSA)
     )
 
-@dataclass
+
 class ActionRequestWithPblock6(TaggedType[ActionRequestWithPblock]):
     """[6] IMPLICIT Action-Request-With-Pblock"""
     tag = 6
@@ -853,7 +779,6 @@ class ActionRequestWithPblock6(TaggedType[ActionRequestWithPblock]):
     value: ActionRequestWithPblock
 
 
-@dataclass
 class ActionRequest(ChoiceType):
     """Action-Request"""
     alternatives = {
@@ -866,7 +791,6 @@ class ActionRequest(ChoiceType):
     }
 
 
-@dataclass
 class actionRequest(TaggedType[ActionRequest]):
     """[195] IMPLICIT Action-Request"""
     tag = 195
@@ -874,7 +798,6 @@ class actionRequest(TaggedType[ActionRequest]):
     value: ActionRequest
 
 
-@dataclass
 class ActionResponseNormal(SequenceType):
     """Action-Response-Normal"""
     components = (
@@ -883,7 +806,6 @@ class ActionResponseNormal(SequenceType):
     )
 
 
-@dataclass
 class ActionResponseNormal1(TaggedType[ActionResponseNormal]):
     """[1] IMPLICIT Action-Response-Normal"""
     tag = 1
@@ -891,7 +813,6 @@ class ActionResponseNormal1(TaggedType[ActionResponseNormal]):
     value: ActionResponseNormal
 
 
-@dataclass
 class ActionResponseWithPblock(SequenceType):
     """Action-Response-With-Pblock"""
     components = (
@@ -899,7 +820,7 @@ class ActionResponseWithPblock(SequenceType):
         NamedType("pblock", DataBlockSA)
     )
 
-@dataclass
+
 class ActionResponseWithPblock2(TaggedType[ActionResponseWithPblock]):
     """[2] IMPLICIT Action-Response-With-Pblock"""
     tag = 2
@@ -907,7 +828,6 @@ class ActionResponseWithPblock2(TaggedType[ActionResponseWithPblock]):
     value: ActionResponseWithPblock
 
 
-@dataclass
 class ActionResponseWithList(SequenceType):
     """Action-Response-With-List"""
     components = (
@@ -915,7 +835,7 @@ class ActionResponseWithList(SequenceType):
         NamedType("list-of-responses", SequenceOfType[ActionResponseWithOptionalData])
     )
 
-@dataclass
+
 class ActionResponseWithList3(TaggedType[ActionResponseWithList]):
     """[3] IMPLICIT Action-Response-With-List"""
     tag = 3
@@ -923,7 +843,6 @@ class ActionResponseWithList3(TaggedType[ActionResponseWithList]):
     value: ActionResponseWithList
 
 
-@dataclass
 class ActionResponseNextPblock(SequenceType):
     """Action-Response-Next-Pblock"""
     components = (
@@ -931,7 +850,7 @@ class ActionResponseNextPblock(SequenceType):
         NamedType("block-number", Unsigned32)
     )
 
-@dataclass
+
 class ActionResponseNextPblock4(TaggedType[ActionResponseNextPblock]):
     """[4] IMPLICIT Action-Response-Next-Pblock"""
     tag = 4
@@ -939,7 +858,6 @@ class ActionResponseNextPblock4(TaggedType[ActionResponseNextPblock]):
     value: ActionResponseNextPblock
 
 
-@dataclass
 class ActionResponse(ChoiceType):
     """Action-Response"""
     alternatives = {
@@ -950,7 +868,6 @@ class ActionResponse(ChoiceType):
     }
 
 
-@dataclass
 class actionResponse(TaggedType[ActionResponse]):
     """[199] IMPLICIT Action-Response"""
     tag = 199
@@ -958,7 +875,6 @@ class actionResponse(TaggedType[ActionResponse]):
     value: ActionResponse
 
 
-@dataclass
 class EventNotificationRequest(SequenceType):
     """EventNotificationRequest"""
     components = (
@@ -968,7 +884,6 @@ class EventNotificationRequest(SequenceType):
     )
 
 
-@dataclass
 class eventNotificationRequest(TaggedType[EventNotificationRequest]):
     """[194] IMPLICIT EventNotificationRequest"""
     tag = 194
@@ -976,7 +891,6 @@ class eventNotificationRequest(TaggedType[EventNotificationRequest]):
     value: EventNotificationRequest
 
 
-@dataclass
 class gloGetRequest(TaggedType[OctetStringType]):
     """[200] IMPLICIT glo-get-request"""
     tag = 200
@@ -984,7 +898,6 @@ class gloGetRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloSetRequest(TaggedType[OctetStringType]):
     """[201] IMPLICIT glo-set-request"""
     tag = 201
@@ -992,7 +905,6 @@ class gloSetRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloEventNotificationRequest(TaggedType[OctetStringType]):
     """[202] IMPLICIT glo-event-notification-request"""
     tag = 202
@@ -1000,7 +912,6 @@ class gloEventNotificationRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloActionRequest(TaggedType[OctetStringType]):
     """[203] IMPLICIT glo-action-request"""
     tag = 203
@@ -1008,7 +919,6 @@ class gloActionRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloGetResponse(TaggedType[OctetStringType]):
     """[204] IMPLICIT glo-get-response"""
     tag = 204
@@ -1016,7 +926,6 @@ class gloGetResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloSetResponse(TaggedType[OctetStringType]):
     """[205] IMPLICIT glo-set-response"""
     tag = 205
@@ -1024,7 +933,6 @@ class gloSetResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class gloActionResponse(TaggedType[OctetStringType]):
     """[207] IMPLICIT glo-action-response"""
     tag = 207
@@ -1032,7 +940,6 @@ class gloActionResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedGetRequest(TaggedType[OctetStringType]):
     """[208] IMPLICIT ded-get-request"""
     tag = 208
@@ -1040,7 +947,6 @@ class dedGetRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedSetRequest(TaggedType[OctetStringType]):
     """[209] IMPLICIT ded-set-request"""
     tag = 209
@@ -1048,7 +954,6 @@ class dedSetRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedEventNotificationRequest(TaggedType[OctetStringType]):
     """[210] IMPLICIT ded-event-notification-request"""
     tag = 210
@@ -1056,7 +961,6 @@ class dedEventNotificationRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedActionRequest(TaggedType[OctetStringType]):
     """[211] IMPLICIT ded-action-request"""
     tag = 211
@@ -1064,7 +968,6 @@ class dedActionRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedGetResponse(TaggedType[OctetStringType]):
     """[212] IMPLICIT ded-get-response"""
     tag = 212
@@ -1072,7 +975,6 @@ class dedGetResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedSetResponse(TaggedType[OctetStringType]):
     """[213] IMPLICIT ded-set-response"""
     tag = 213
@@ -1080,7 +982,6 @@ class dedSetResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class dedActionResponse(TaggedType[OctetStringType]):
     """[215] IMPLICIT ded-action-response"""
     tag = 215
@@ -1088,7 +989,6 @@ class dedActionResponse(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
-@dataclass
 class StateErrorList(EnumerationList):
     members = (
         EnumerationMember("service-not-allowed", 1),
@@ -1096,12 +996,10 @@ class StateErrorList(EnumerationList):
     )
 
 
-@dataclass(frozen=True)
 class StateErrorEnum(EnumeratedType):
     named_members = StateErrorList()
 
 
-@dataclass
 class StateError(TaggedType[StateErrorEnum]):
     """[0] IMPLICIT state-error"""
     tag = 0
@@ -1115,7 +1013,6 @@ StateError.SERVICE_NOT_ALLOWED = StateError(StateErrorEnum(1))
 StateError.SERVICE_UNKNOWN = StateError(StateErrorEnum(2))
 
 
-@dataclass
 class OperationNotPossible(TaggedType[NullType]):
     """operation-not-possible"""
     tag = 1
@@ -1123,7 +1020,6 @@ class OperationNotPossible(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class ServiceNotSupported(TaggedType[NullType]):
     """service-not-supported"""
     tag = 2
@@ -1131,7 +1027,6 @@ class ServiceNotSupported(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class OtherReason(TaggedType[NullType]):
     """other-reason"""
     tag = 3
@@ -1139,7 +1034,6 @@ class OtherReason(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class PduTooLong(TaggedType[NullType]):
     """pdu-too-long"""
     tag = 4
@@ -1147,7 +1041,6 @@ class PduTooLong(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class DecipheringError(TaggedType[NullType]):
     """deciphering-error"""
     tag = 5
@@ -1155,7 +1048,6 @@ class DecipheringError(TaggedType[NullType]):
     value: NullType
 
 
-@dataclass
 class InvocationCounterError(TaggedType[Unsigned32]):
     """invocation-counter-error"""
     tag = 6
@@ -1163,7 +1055,6 @@ class InvocationCounterError(TaggedType[Unsigned32]):
     value: Unsigned32
 
 
-@dataclass
 class ServiceErrorChoice(ChoiceType):
     """service-error"""
     alternatives = {
@@ -1176,7 +1067,6 @@ class ServiceErrorChoice(ChoiceType):
     }
 
 
-@dataclass
 class ServiceError(TaggedType[ServiceErrorChoice]):
     """[1] IMPLICIT service-error"""
     tag = 1
@@ -1196,7 +1086,6 @@ ServiceError.PDU_TOO_LONG = ServiceError(ServiceErrorChoice(PduTooLong(NullType(
 ServiceError.DECIPHERING_ERROR = ServiceError(ServiceErrorChoice(DecipheringError(NullType(None))))
 
 
-@dataclass
 class ExceptionResponse(SequenceType):
     """ExceptionResponse"""
     components = (
@@ -1205,7 +1094,6 @@ class ExceptionResponse(SequenceType):
     )
 
 
-@dataclass
 class exceptionResponse(TaggedType[ExceptionResponse]):
     """[216] IMPLICIT exception-response"""
     tag = 216
@@ -1213,7 +1101,6 @@ class exceptionResponse(TaggedType[ExceptionResponse]):
     value: ExceptionResponse
 
 
-@dataclass
 class AccessRequest(SequenceType):
     """Access-Request"""
     components = (
@@ -1223,7 +1110,6 @@ class AccessRequest(SequenceType):
     )
 
 
-@dataclass
 class accessRequest(TaggedType[AccessRequest]):
     """[217] IMPLICIT Access-Request"""
     tag = 217
@@ -1231,7 +1117,6 @@ class accessRequest(TaggedType[AccessRequest]):
     value: AccessRequest
 
 
-@dataclass
 class AccessResponse(SequenceType):
     """Access-Response"""
     components = (
@@ -1241,7 +1126,6 @@ class AccessResponse(SequenceType):
     )
 
 
-@dataclass
 class accessResponse(TaggedType[AccessResponse]):
     """[218] IMPLICIT Access-Response"""
     tag = 218
@@ -1249,7 +1133,6 @@ class accessResponse(TaggedType[AccessResponse]):
     value: AccessResponse
 
 
-@dataclass
 class BlockControl(Unsigned8):
     """Block-Control"""
 
@@ -1266,7 +1149,6 @@ class BlockControl(Unsigned8):
         return bool(self.value.value & 0x80)
 
 
-@dataclass
 class GeneralDedCiphering(SequenceType):
     """General-Ded-Ciphering"""
     components = (
@@ -1275,7 +1157,6 @@ class GeneralDedCiphering(SequenceType):
     )
 
 
-@dataclass
 class generalDedCiphering(TaggedType[GeneralDedCiphering]):
     """[220] IMPLICIT generalDedCiphering"""
     tag = 220
@@ -1283,7 +1164,6 @@ class generalDedCiphering(TaggedType[GeneralDedCiphering]):
     value: GeneralDedCiphering
 
 
-@dataclass
 class GeneralGloCiphering(SequenceType):
     """General-Glo-Ciphering"""
     components = (
@@ -1291,7 +1171,7 @@ class GeneralGloCiphering(SequenceType):
         NamedType("ciphered-content", OctetStringType)
     )
 
-@dataclass
+
 class generalGloCiphering(TaggedType[GeneralGloCiphering]):
     """[219] IMPLICIT generalGloCiphering"""
     tag = 219
@@ -1299,7 +1179,6 @@ class generalGloCiphering(TaggedType[GeneralGloCiphering]):
     value: GeneralGloCiphering
 
 
-@dataclass
 class GeneralCiphering(SequenceType):
     """General-Ciphering"""
     components = (
@@ -1313,7 +1192,6 @@ class GeneralCiphering(SequenceType):
     )
 
 
-@dataclass
 class generalCiphering(TaggedType[GeneralCiphering]):
     """[221] IMPLICIT generalCiphering"""
     tag = 221
@@ -1321,7 +1199,6 @@ class generalCiphering(TaggedType[GeneralCiphering]):
     value: GeneralCiphering
 
 
-@dataclass
 class GeneralSigning(SequenceType):
     """General-Signing"""
     components = (
@@ -1342,7 +1219,6 @@ class generalSigning(TaggedType[GeneralSigning]):
     value: GeneralSigning
 
 
-@dataclass
 class GeneralBlockTransfer(SequenceType):
     """General-Block-Transfer"""
     components = (
@@ -1353,7 +1229,6 @@ class GeneralBlockTransfer(SequenceType):
     )
 
 
-@dataclass
 class generalBlockTransfer(TaggedType[GeneralBlockTransfer]):
     """[224] IMPLICIT generalBlockTransfer"""
     tag = 224
@@ -1366,7 +1241,6 @@ class generalBlockTransfer(TaggedType[GeneralBlockTransfer]):
 # ============================================================================
 
 
-@dataclass
 class XDLMS_APDU(ChoiceType):
     """XDLMS-APDU"""
     alternatives = {

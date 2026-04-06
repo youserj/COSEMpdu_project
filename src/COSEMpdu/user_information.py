@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Optional, Self, ClassVar, Any
+from typing import Optional, Self, ClassVar
 from .x680 import tag, TaggingMode
 from .x680.type import (
     OptionalNamedType,
@@ -14,7 +13,6 @@ from . import axdr
 from .useful_types import Integer8, Unsigned16, Unsigned8, ObjectName
 
 
-@dataclass
 class Conformance_(ber.ConstrainedType[ber.BitStringType]):
     """Conformance"""
     named_bits: ClassVar[Optional[NamedBitList]] = NamedBitList((
@@ -47,7 +45,6 @@ class Conformance_(ber.ConstrainedType[ber.BitStringType]):
     value: ber.BitStringType
 
 
-@dataclass
 class Conformance(ber.TaggedType[Conformance_]):
     tag = x690.Tag(
         class_number=31,
@@ -61,7 +58,6 @@ LN_REFERENCE = ObjectName(axdr.IntegerType(0x0007))
 SN_REFERENCE = ObjectName(axdr.IntegerType(-1536))  # 0xFA00
 
 
-@dataclass
 class InitiateRequest(axdr.SequenceType):
     """InitiateRequest"""
     components = (
@@ -92,7 +88,6 @@ class InitiateRequest(axdr.SequenceType):
         ))
 
 
-@dataclass
 class InitiateResponse(axdr.SequenceType):
     """InitiateResponse"""
     components = (

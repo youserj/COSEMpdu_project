@@ -435,6 +435,7 @@ class TestDataUtf8String(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test utf8-string encoding/decoding"""
+        z = Data.parse(axdr.CHOICE(5, 1))
         original = Data(Utf8String(axdr.Utf8String("Привет")))
         buf = ByteBuffer.allocate(20)
         original.put(buf)

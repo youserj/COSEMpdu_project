@@ -19,13 +19,12 @@ Standards:
 """
 
 from dataclasses import dataclass
-from re import X
 from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any
 from StructResult.result import ValueOrError, Error
 from COSEMpdu import x690
 from .x680.tagged_type import TaggingMode
 from .x680.constrained_type import ValueRange, SizeConstraint
-from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF
+from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
 from . import x680
 from .byte_buffer import ByteBuffer
 
@@ -85,9 +84,9 @@ class Type(x680.Type, Protocol):
 
 
 TagNumber: TypeAlias = Annotated[int, "0-255"]
+type SEQUENCE = tuple[Optional[Type], ...]
 
 
-@dataclass
 class TaggedType[T: Type](Type, x680.TaggedType[T]):
     """
     TaggedType for A-XDR encoding (IEC 61334-6 §6.6, §6.7)
@@ -136,9 +135,9 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         """
         # Decode contents based on tagging mode
         if cls.mode == TaggingMode.IMPLICIT:
-            value = cls.get_type().get_lc(buf)  # IMPLICIT: contents without inner tag
+            value = cls._T.get_lc(buf)  # IMPLICIT: contents without inner tag
         else:
-            value = cls.get_type().get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
+            value = cls._T.get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
         if isinstance(value, Error):
             return value
         return cls(value)
@@ -175,7 +174,6 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
 # =============================================================================
 
 
-@dataclass
 class BooleanType(Type, x680.BooleanType):
     """
     BOOLEAN with A-XDR encoding/decoding (IEC 61334-6 §6.2)
@@ -226,7 +224,6 @@ class BooleanType(Type, x680.BooleanType):
 # INTEGER Type (IEC 61334-6 §6.1)
 # =============================================================================
 
-@dataclass
 class IntegerType(Type, x680.IntegerType):
     """
     INTEGER with A-XDR encoding/decoding (IEC 61334-6 §6.1)
@@ -286,7 +283,6 @@ class IntegerType(Type, x680.IntegerType):
 # BIT STRING Type (IEC 61334-6 §6.4)
 # =============================================================================
 
-@dataclass
 class BitStringType(Type, x680.BitStringType):
     """
     BIT STRING with A-XDR encoding/decoding (IEC 61334-6 §6.4)
@@ -366,7 +362,6 @@ class BitStringType(Type, x680.BitStringType):
 # OCTET STRING Type (IEC 61334-6 §6.5)
 # =============================================================================
 
-@dataclass
 class OctetStringType(Type, x680.OctetStringType):
     """
     OCTET STRING with A-XDR encoding/decoding (IEC 61334-6 §6.5)
@@ -411,7 +406,6 @@ class OctetStringType(Type, x680.OctetStringType):
         return buf.write(self.value)
 
 
-@dataclass
 class VisibleString(Type, x680.VisibleString):
 
     @classmethod
@@ -440,7 +434,6 @@ class VisibleString(Type, x680.VisibleString):
         return f"{self.__class__.__name__}({self.value})"
 
 
-@dataclass
 class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 
     @classmethod
@@ -472,7 +465,6 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
 
-@dataclass
 class ChoiceType(Type, x680.ChoiceType[Type]):
     """
     CHOICE with A-XDR encoding/decoding (IEC 61334-6 §6.6)
@@ -496,6 +488,15 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
     """
     alternatives: ClassVar[dict[int, NamedType[TaggedType[Any]]]]
     value: TaggedType[Type]
+
+    @classmethod
+    def parse(cls, value: CHOICE) -> Self:
+        if (n_t := cls.alternatives.get(value.select)) is not None:
+            return cls(n_t.type_.parse(value.value))
+        raise ValueError("not find type in choice")
+
+    def normalize(self) -> CHOICE:
+        return CHOICE(hash(self.value.tag), self.value.normalize())
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -532,8 +533,7 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
 # SEQUENCE Type (IEC 61334-6 §6.9)
 # =============================================================================
 
-@dataclass
-class SequenceType(Type, x680.SequenceType):
+class SequenceType(Type, x680.SequenceType[SEQUENCE]):
     """
     SEQUENCE with A-XDR encoding/decoding (IEC 61334-6 §6.9)
 
@@ -614,12 +614,7 @@ class SequenceType(Type, x680.SequenceType):
 
 ENUM_VALUE: TypeAlias = Annotated[INTEGER, "0-255"]
 
-# =============================================================================
-# ENUMERATED Type (IEC 61334-6 §6.3)
-# =============================================================================
 
-
-@dataclass(frozen=True)
 class EnumeratedType(Type, x680.EnumeratedType):
     """
     ENUMERATED with A-XDR encoding/decoding (IEC 61334-6 §6.3)
@@ -661,11 +656,6 @@ class EnumeratedType(Type, x680.EnumeratedType):
         return buf.put_uint8(self.value)
 
 
-# =============================================================================
-# NULL Type (IEC 61334-6 §6.13)
-# =============================================================================
-
-@dataclass
 class NullType(Type, x680.NullType):
     """
     NULL with A-XDR encoding/decoding (IEC 61334-6 §6.13)
@@ -710,7 +700,6 @@ class NullType(Type, x680.NullType):
         return isinstance(other, NullType)
 
 
-@dataclass
 class NullType0(TaggedType[NullType]):
     """[0] IMPLICIT NULL"""
     tag = 0
@@ -720,12 +709,7 @@ class NullType0(TaggedType[NullType]):
 
 null = NullType(None)
 
-# =============================================================================
-# SEQUENCE OF Type (IEC 61334-6 §6.10)
-# =============================================================================
 
-
-@dataclass
 class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     """
     SEQUENCE OF with A-XDR encoding/decoding (IEC 61334-6 §6.10)
@@ -804,16 +788,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}[{len(self.value)}].{self.component_type.__name__}"
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, SequenceOfType):
-            return False
-        return (
-            self.component_type == other.component_type and
-            self.value == other.value
-        )
 
-
-@dataclass
 class GeneralizedTime(Type, x680.GeneralizedTime):
 
     @classmethod
@@ -833,7 +808,6 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
         return l + c
 
 
-@dataclass
 class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
     fixed_length: ClassVar[Optional[int]] = None
     signed: ClassVar[bool] = True
@@ -891,7 +865,6 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         return self.value.put_lc(buf)
 
 
-@dataclass
 class ConstrainedOctetStringType(Type, x680.ConstrainedType[OctetStringType]):
     fixed_length: ClassVar[Optional[int]] = None
     value: OctetStringType
@@ -921,7 +894,6 @@ class ConstrainedOctetStringType(Type, x680.ConstrainedType[OctetStringType]):
         return self.value.put_lc(buf)
 
 
-@dataclass
 class ConstrainedBitStringType(Type, x680.ConstrainedType[BitStringType]):
     fixed_length: ClassVar[Optional[int]] = None
     value: BitStringType
@@ -951,7 +923,6 @@ class ConstrainedBitStringType(Type, x680.ConstrainedType[BitStringType]):
         return self.value.put_lc(buf)
 
 
-@dataclass
 class ConstrainedSequenceOfType[T: SequenceOfType[Any]](Type, x680.ConstrainedType[T]):
     fixed_length: ClassVar[Optional[int]] = None
     value: T

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import ClassVar, Iterator, Optional, Self
-from .type import BuiltinType, INTEGER
+from .type import BuiltinType, INTEGER, Simple
 
 
 @dataclass(frozen=True)
@@ -57,8 +57,7 @@ class EnumerationList:
         return "{" + ", ".join(str(m) for m in self.members) + "}"
 
 
-@dataclass(frozen=True)
-class EnumeratedType(BuiltinType):
+class EnumeratedType(Simple[INTEGER], BuiltinType):
     """
     ENUMERATED type (X.680 §19)
     NATIVE REPRESENTATION: int (non-negative enumeration index)

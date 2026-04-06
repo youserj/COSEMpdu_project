@@ -1,7 +1,8 @@
 # src/COSEMpdu/x680/integer_type.py
 from dataclasses import dataclass
 from typing import ClassVar, Iterator, Optional, Self, Any, Protocol
-from .type import BuiltinType, INTEGER
+from StructResult.result import Error, ValueOrError
+from .type import BuiltinType, INTEGER, Simple
 
 
 @dataclass(frozen=True)
@@ -66,8 +67,7 @@ class NamedNumberList:
         return "{" + ", ".join(str(nn) for nn in self.members) + "}"
 
 
-@dataclass
-class IntegerType(BuiltinType):
+class IntegerType(Simple[INTEGER], BuiltinType, Protocol):
     """
     INTEGER type (X.680 §18)
     NATIVE REPRESENTATION: int (arbitrary precision)
@@ -91,7 +91,6 @@ class IntegerType(BuiltinType):
     - A-XDR constraint: 0..255 for ENUMERATED (IEC 61334-6 §6.77), NOT for INTEGER
     """
     named_numbers: ClassVar[Optional[NamedNumberList]] = None
-    value: INTEGER
 
     @classmethod
     def default(cls) -> Self:

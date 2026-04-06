@@ -9,11 +9,9 @@ Standards:
 - X.680 Table 1: UNIVERSAL tag 24
 """
 from typing import Self, Optional
-from dataclasses import dataclass
-from .type import Transcript, UsefulType, STRING
+from .type import UsefulType, STRING
 
 
-@dataclass
 class GeneralizedTime(UsefulType):
     """
     ASN.1 GeneralizedTime type (X.680 §42).
@@ -77,17 +75,13 @@ class GeneralizedTime(UsefulType):
     """
     value: STRING
 
+    def __init__(self, value: STRING) -> None:
+        self.value = value
+        self._validate_format()
+
     @classmethod
     def default(cls) -> Self:
         return cls("00000101000000Z")  # Default to 0000-01-01T00:00:00Z, though this may be invalid
-
-    def __post_init__(self) -> None:
-        """
-        Validate GeneralizedTime format per X.680 §42.3.
-        Raises:
-            ValueError: If format is invalid or components out of range
-        """
-        self._validate_format()
 
     def _validate_format(self) -> None:
         """
@@ -182,50 +176,6 @@ class GeneralizedTime(UsefulType):
             raise ValueError("Fractional seconds must have at least one digit")
         if not frac.isdigit():
             raise ValueError(f"Fractional seconds must be numeric: {frac}")
-
-    @classmethod
-    def parse(cls, value: Transcript) -> Self:
-        """
-        Construct GeneralizedTime from transcript representation.
-
-        Args:
-            value: String representation like "20240115120000Z"
-
-        Returns:
-            GeneralizedTimeType instance
-
-        Raises:
-            ValueError: If string cannot be parsed as GeneralizedTime
-            TypeError: If value is not a string
-
-        Example:
-            >>> GeneralizedTimeType.parse("20240115120000Z")
-            GeneralizedTimeType(value='20240115120000Z')
-        """
-        if isinstance(value, list):
-            raise TypeError(
-                "GeneralizedTime cannot be parsed from list, expected string"
-            )
-
-        if not isinstance(value, str):
-            raise TypeError(
-                f"GeneralizedTime requires string value, got {type(value)}"
-            )
-
-        return cls(value)
-
-    def to_transcript(self) -> Transcript:
-        """
-        Convert to string representation.
-
-        Returns:
-            String in ASN.1 GeneralizedTime format
-
-        Example:
-            >>> GeneralizedTimeType("20240115120000Z").to_transcript()
-            '20240115120000Z'
-        """
-        return self.value
 
     def __str__(self) -> str:
         """

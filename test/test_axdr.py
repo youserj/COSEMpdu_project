@@ -2,9 +2,7 @@
 Unit tests for A-XDR encoding rules (IEC 61334-6:2000)
 Tests cover all type encodings per standard specifications.
 """
-from re import I
 import unittest
-from dataclasses import dataclass
 from src.COSEMpdu import x680
 from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
@@ -18,21 +16,18 @@ from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x680 import NamedType, OptionalNamedType, DefaultNamedType
 
 
-@dataclass
 class Integer0(TaggedType[IntegerType]):
     tag = 0
     mode = x680.TaggingMode.IMPLICIT
     value: IntegerType
 
 
-@dataclass
 class OctetString1(TaggedType[OctetStringType]):
     tag = 1
     mode = x680.TaggingMode.IMPLICIT
     value: OctetStringType
 
 
-@dataclass
 class TestChoice(ChoiceType):
     alternatives = create_alternatives(
         NamedType("first", Integer0),
@@ -123,7 +118,7 @@ class TestIntegerType(unittest.TestCase):
 
     def test_encode_fixed_length_1byte(self) -> None:
         """Fixed-length INTEGER(0..255) encodes as 1 byte (§6.1.1)"""
-        @dataclass
+
         class OneByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 255)
             value: IntegerType
@@ -136,7 +131,7 @@ class TestIntegerType(unittest.TestCase):
 
     def test_encode_fixed_length_2bytes(self) -> None:
         """Fixed-length INTEGER(0..65535) encodes as 2 bytes"""
-        @dataclass
+
         class TwoByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 20000)
             value: IntegerType
@@ -165,7 +160,7 @@ class TestIntegerType(unittest.TestCase):
 
     def test_decode_fixed_length(self) -> None:
         """Decode fixed-length INTEGER"""
-        @dataclass
+
         class TwoByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 65535)
             value: IntegerType
@@ -189,7 +184,7 @@ class TestIntegerType(unittest.TestCase):
 
     def test_encode_zero_fixed(self) -> None:
         """Fixed-length 0 bytes encodes nothing"""
-        @dataclass
+
         class Empty(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 0)
 
@@ -204,7 +199,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_encode_fixed_length(self) -> None:
         """Fixed-length BIT STRING encodes content only (§6.4.1)"""
-        @dataclass
+
         class OctetBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(8)
             value: BitStringType
@@ -217,7 +212,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_encode_fixed_length_padded(self) -> None:
         """Fixed-length BIT STRING pads to octet boundary"""
-        @dataclass
+
         class FourBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(4)
             value: BitStringType
@@ -239,7 +234,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_decode_fixed_length(self) -> None:
         """Decode fixed-length BIT STRING"""
-        @dataclass
+
         class OctetBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(8)
             value: BitStringType
@@ -256,7 +251,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_encode_empty_fixed(self) -> None:
         """Empty fixed-length BIT STRING encodes nothing"""
-        @dataclass
+
         class Empty(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(0)
             value: BitStringType
@@ -275,7 +270,6 @@ class TestBitStringType(unittest.TestCase):
         self.assertEqual(bytes(buf), b"\x00")
 
 
-@dataclass
 class Octet(ConstrainedOctetStringType):
     constraint_spec = SizeConstraint(4)
     value: OctetStringType
@@ -314,7 +308,7 @@ class TestOctetStringType(unittest.TestCase):
 
     def test_encode_empty_fixed(self) -> None:
         """Empty fixed-length OCTET STRING encodes nothing"""
-        @dataclass
+
         class Octet(ConstrainedOctetStringType):
             constraint_spec = SizeConstraint(0)
 
@@ -427,7 +421,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_no_optional(self) -> None:
         """SEQUENCE without OPTIONAL encodes components consecutively (§6.9)"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -443,7 +437,6 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_with_optional_present(self) -> None:
         """SEQUENCE with OPTIONAL present encodes presence flag=1"""
-        @dataclass
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -458,7 +451,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_with_optional_absent(self) -> None:
         """SEQUENCE with OPTIONAL absent encodes presence flag=0"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -474,7 +467,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_with_default_present(self) -> None:
         """SEQUENCE with DEFAULT present encodes presence flag=1"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -489,7 +482,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_with_default_absent(self) -> None:
         """SEQUENCE with DEFAULT absent encodes presence flag=0"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -505,7 +498,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_decode_with_optional_present(self) -> None:
         """Decode SEQUENCE with OPTIONAL present"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -519,7 +512,7 @@ class TestSequenceType(unittest.TestCase):
 
     def test_decode_with_optional_absent(self) -> None:
         """Decode SEQUENCE with OPTIONAL absent"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("a", IntegerType),
@@ -551,7 +544,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_encode_variable_length(self) -> None:
         """Variable-length SEQUENCE OF encodes count + components (§6.10.2)"""
-        @dataclass
+
         class TestSeqOf(SequenceOfType):
             component_type = IntegerType
 
@@ -566,12 +559,10 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_decode_fixed_length(self) -> None:
         """Decode fixed-length SEQUENCE OF"""
-        @dataclass
+
         class SequenceOfIntegerType(SequenceOfType[IntegerType]):
             component_type = IntegerType
 
-
-        @dataclass
         class TestSeqOf(ConstrainedSequenceOfType[SequenceOfIntegerType]):
             constraint_spec = SizeConstraint(2)
             value: SequenceOfIntegerType
@@ -584,7 +575,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_decode_variable_length(self) -> None:
         """Decode variable-length SEQUENCE OF"""
-        @dataclass
+
         class TestSeqOf(SequenceOfType[IntegerType]):
             component_type = IntegerType
 
@@ -594,7 +585,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_encode_empty_fixed(self) -> None:
         """Empty fixed-length SEQUENCE OF encodes nothing"""
-        @dataclass
+
         class TestSeqOf(ConstrainedSequenceOfType[IntegerType]):
             component_type = IntegerType
             constraint_spec = SizeConstraint(0)
@@ -606,7 +597,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_encode_empty_variable(self) -> None:
         """Empty variable-length SEQUENCE OF encodes count=0"""
-        @dataclass
+
         class TestSeqOf(SequenceOfType):
             component_type = IntegerType
 
@@ -618,7 +609,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_is_empty(self) -> None:
         """is_empty property"""
-        @dataclass
+
         class TestSeqOf(SequenceOfType):
             component_type = IntegerType
 
@@ -634,13 +625,12 @@ class TestIntegration(unittest.TestCase):
 
     def test_nested_choice_in_sequence(self) -> None:
         """Test CHOICE inside SEQUENCE (common DLMS pattern)"""
-        @dataclass
+
         class Integer0(TaggedType[IntegerType]):
             tag = 0
             mode = x680.TaggingMode.IMPLICIT
             value: IntegerType
 
-        @dataclass
         class Boolean1(TaggedType[BooleanType]):
             tag = 1
             mode = x680.TaggingMode.IMPLICIT
@@ -652,7 +642,6 @@ class TestIntegration(unittest.TestCase):
                 NamedType("second", Boolean1)
             )
 
-        @dataclass
         class OuterSeq(SequenceType):
             components = (
                 NamedType("flag", BooleanType),
@@ -671,19 +660,17 @@ class TestIntegration(unittest.TestCase):
 
     def test_sequence_of_choice(self) -> None:
         """Test SEQUENCE OF CHOICE (DLMS service list pattern)"""
-        @dataclass
+
         class Enumerated0(TaggedType[EnumeratedType]):
             tag = 0
             mode = x680.TaggingMode.IMPLICIT
             value: EnumeratedType
 
-        @dataclass
         class Integer1(TaggedType[IntegerType]):
             tag = 1
             mode = x680.TaggingMode.IMPLICIT
             value: IntegerType
 
-        @dataclass
         class ServiceChoice(ChoiceType):
             alternatives = create_alternatives(
                 NamedType("first", Enumerated0),
@@ -704,7 +691,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_roundtrip_complex(self) -> None:
         """Test encode/decode roundtrip for complex structure"""
-        @dataclass
+
         class TestSeq(SequenceType):
             components = (
                 NamedType("id", IntegerType),

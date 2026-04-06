@@ -10,13 +10,10 @@ Standards:
     - X.690 §8.13: CHOICE encoding rules (handled in x690)
     - IEC 61334-6 §6.6: DLMS/COSEM CHOICE usage
 """
-from dataclasses import dataclass
 from typing import ClassVar, Self
-from .tag import Tag
-from .type import Type, NamedType, BuiltinType
+from .type import Type, NamedType, BuiltinType, CHOICE
 
 
-@dataclass
 class ChoiceType[T: Type](BuiltinType):
     """
     ASN.1 CHOICE type metadata (X.680 §28).
@@ -41,8 +38,18 @@ class ChoiceType[T: Type](BuiltinType):
     """
 
     # Class variable: defines available alternatives for this CHOICE type
-    alternatives: ClassVar[dict[Tag, NamedType[Type]]]
+    alternatives: ClassVar[dict[int, NamedType[Type]]]
     value: T
+
+    def __init__(self, value: T) -> None:
+        self.value = value
+
+    @classmethod
+    def parse(cls, value: CHOICE) -> Self:
+        raise NotImplementedError()
+
+    def normalize(self) -> CHOICE:
+        raise NotImplementedError()
 
     @classmethod
     def default(cls) -> Self:
