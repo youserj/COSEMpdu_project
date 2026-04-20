@@ -2025,14 +2025,14 @@ class TestObjectIdentifierType(unittest.TestCase):
 
     def test_multi_arc_oid_encode(self) -> None:
         """Encode OID with multiple arcs"""
-        oid = ObjectIdentifierType((1, 2, 3, 4, 5))
+        oid = ObjectIdentifierType((2, 10, 0x02f4, 5, 8, 1, 1))
         buf = ByteBuffer.allocate(20)
         written = oid.put(buf)
 
         # Decode and verify
         buf.set_pos(0)
         decoded = ObjectIdentifierType.get(buf)
-        self.assertEqual(decoded.value, (1, 2, 3, 4, 5))
+        self.assertEqual(decoded.value, (2, 10, 0x02f4, 5, 8, 1, 1))
 
     def test_zero_arc_encode(self) -> None:
         """Encode OID with zero arc values"""

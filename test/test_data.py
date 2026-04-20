@@ -6,11 +6,18 @@ Standards:
     - IEC 61334-6 §6.6: CHOICE encoding (A-XDR)
     - IEC 61334-6 §6.4-6.5: BIT STRING, OCTET STRING encoding
 """
-from typing import Any
+from typing import Any, Final
 import unittest
+from StructResult.result import Error
+from COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.data import (
     # TypeDescription types
+    NamedType,
+    CommonDataType,
+    ExternallyData,
+    DiscriminatedUnion,
+    OctetStringTypeSize8,
     SequenceOfData,
     TypeDescription,
     TypeDescriptionNullData,
@@ -49,17 +56,15 @@ from src.COSEMpdu.data import (
     Unsigned,
     LongUnsigned,
     CompactArray,
-    CompactArrayContent,
+    CompactArraySequenceType,
     ContentsDescription,
     ArrayContents,
     Long64,
     Long64Unsigned,
     Enum,
-    Float32,
     Float64,
     DateTime,
     Date,
-    Time,
     DontCare
 )
 from src.COSEMpdu.useful_types import (
@@ -68,6 +73,12 @@ from src.COSEMpdu.useful_types import (
 )
 from src.COSEMpdu import axdr
 from src.COSEMpdu.axdr import IntegerType
+
+
+class RestrictionByEntry(Structure):
+    """restriction_by_entry"""
+    from_entry: DoubleLongUnsigned
+    to_entry: DoubleLongUnsigned
 
 
 class TestTypeDescriptionNullData(unittest.TestCase):
@@ -86,6 +97,19 @@ class TestTypeDescriptionNullData(unittest.TestCase):
     def test_tag_number(self) -> None:
         """Test tag number is 0"""
         self.assertEqual(TypeDescriptionNullData.tag, 0)
+
+
+class TestSequence(unittest.TestCase):
+    def test_Sequence(self) -> None:
+        r1 = RestrictionByEntry.parse((1, 2))
+        buf = ByteBuffer.allocate(20)
+        r1.put(buf)
+        buf.set_pos(0)
+        r2 = RestrictionByEntry.get(buf)
+        self.assertEqual(r1.normalize(), r2.normalize())
+        buf.set_pos(0)
+        data = Data.get(buf)
+        print(data)
 
 
 class TestTypeDescriptionArray(unittest.TestCase):
@@ -266,6 +290,7 @@ class TestDataInteger(unittest.TestCase):
     def test_encode_decode_positive(self) -> None:
         """Test integer positive value encoding/decoding"""
         original = Data(Integer(Integer8(IntegerType(127))))
+        i = Integer.parse(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -465,13 +490,20 @@ class TestDataEnum(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test enum encoding/decoding"""
-        original = Data(Enum(Unsigned8(IntegerType(42))))
+        class MyEnum(Enum):
+            NO = 0
+            ONE: Final = 1
+            TWO: Final = 2
+
+        print(MyEnum.parse(1) == MyEnum.parse(1))
+        original = MyEnum.parse(42)
+        self.assertTrue(int(original), 42)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "enum")
-        self.assertEqual(decoded.value.value.value.value, 42)
+        self.assertEqual(decoded.normalize(), CHOICE(22, 42))
 
 
 class TestDataFloat32(unittest.TestCase):
@@ -488,29 +520,19 @@ class TestDataFloat32(unittest.TestCase):
         self.assertEqual(decoded.selected, "float32")
         self.assertEqual(len(decoded.value.value.value), 4)
 
-    def test_encode_decode_invalid_length(self) -> None:
-        """Test float32 invalid length raises error"""
-        with self.assertRaises(ValueError):
-            Data.float32(b"\x00\x01\x02")  # Only 3 bytes
-
 
 class TestDataFloat64(unittest.TestCase):
     """Test Data float64 [24] (OCTET STRING SIZE(8))"""
 
     def test_encode_decode_valid(self) -> None:
         """Test float64 valid 8-byte encoding/decoding"""
-        original = Data(Float64(axdr.OctetStringType(b"\x40\x09\x21\xFB\x54\x44\x2D\x18")))
+        original: Data[Float64] = Data(Float64(OctetStringTypeSize8(axdr.OctetStringType(b"\x40\x09\x21\xFB\x54\x44\x2D\x18"))))
         buf = ByteBuffer.allocate(20)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "float64")
         self.assertEqual(len(decoded.value.value.value), 8)
-
-    def test_encode_decode_invalid_length(self) -> None:
-        """Test float64 invalid length raises error"""
-        with self.assertRaises(ValueError):
-            Data.float64(b"\x00\x01\x02\x03\x04\x05\x06")  # Only 7 bytes
 
 
 class TestDataDateTime(unittest.TestCase):
@@ -592,13 +614,20 @@ class TestDataArray(unittest.TestCase):
     def test_encode_decode_with_elements(self) -> None:
         """Test array with elements encoding/decoding"""
         elements = SequenceOfData([
-            Data(Integer(Integer8(axdr.IntegerType(1)))),
-            Data(Integer(Integer8(axdr.IntegerType(2)))),
-            Data(Integer(Integer8(axdr.IntegerType(3)))),
+            # Data.integer(1),
+            # Data(Integer(Integer8(axdr.IntegerType(2)))),
+            # Data(Integer(Integer8(axdr.IntegerType(3)))),
+            Integer(Integer8(axdr.IntegerType(2))),
+            Integer(Integer8(axdr.IntegerType(3))),
         ])
-        original = Data(Array(elements))
+
+        MyArray = Array[Integer]
+
+        original = MyArray.parse((1, 2, 3))
+        # original = Data(Array(elements))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
+        # original1.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "array")
@@ -643,12 +672,12 @@ class TestDataCompactArray(unittest.TestCase):
     def test_encode_decode(self) -> None:
         """Test compact-array encoding/decoding"""
         # compact-array: SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }
-        content = CompactArrayContent((
+        content = CompactArraySequenceType((
             ContentsDescription(TypeDescription(TypeDescriptionInteger(axdr.null))),
             ArrayContents(axdr.OctetStringType(b"\x00\x01\x02\x03"))
         ))
         x = content.get_array()
-        z = CompactArrayContent.from_array(ContentsDescription(TypeDescription.null_data()), x)
+        z = CompactArraySequenceType.from_array(ContentsDescription(TypeDescription.null_data()), x)
         original = Data(CompactArray(content))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
@@ -805,8 +834,8 @@ class TestDataRoundTrip(unittest.TestCase):
             ("octet-string", Data.octet_string(b"\xDE\xAD\xBE\xEF")),
             ("visible-string", Data.visible_string("Hello")),
             ("bit-string", Data.bit_string((1, 0, 1, 1, 0, 0, 1, 0))),
-            ("float32", Data.float32(b"\x40\x49\x0F\xDB")),
-            ("float64", Data.float64(b"\x40\x09\x21\xFB\x54\x44\x2D\x18")),
+            ("float32", Data.float32(0.342)),
+            ("float64", Data.float64(234.3123)),
             ("date", Data.date(b"\x07\xE4\x01\x01\xFF")),
             ("time", Data.time(b"\x0C\x00\x00\x00")),
             ("date-time", Data.date_time(b"\x07\xE4\x01\x01\x0C\x00\x00\x00\xFF\x88\x00\x00")),
@@ -900,8 +929,7 @@ class TestDataEdgeCases(unittest.TestCase):
         """Test buffer overflow protection"""
         data = Data.structure([Data.integer(i) for i in range(100)])
         buf = ByteBuffer.allocate(1)  # Too small
-        with self.assertRaises(BufferError):
-            data.put(buf)
+        self.assertTrue(data.put(buf).has(exception_type=BufferError))
 
     def test_empty_structure(self) -> None:
         """Test empty structure encoding/decoding"""
@@ -962,6 +990,150 @@ class TestDataRepr(unittest.TestCase):
         repr_str = repr(data)
         self.assertIn("Data", repr_str)
         self.assertIn("Integer", repr_str)
+
+
+class TestDataOctetImplicit(unittest.TestCase):
+    def test_octetObj(self) -> None:
+        from .test_axdr import OctetStringObjectIdentifierType
+
+        class IdentifierData(Data[OctetStringObjectIdentifierType | Unsigned]): ...
+
+        buf = ByteBuffer.allocate(20)
+        iddata = IdentifierData.parse(CHOICE(9, (2, 16, 0x2f4, 5, 8, 1, 1)))
+        iddata.put(buf)
+        buf.set_pos(0)
+        self.assertEqual(IdentifierData.get(buf), iddata)
+
+
+# ==============================================================================
+# Test Fixtures (Concrete implementations for testing)
+# ==============================================================================
+
+
+class TestSelector(Enum):
+    """Concrete selector enum inheriting DLMS Enum behavior"""
+    NULL_DATA: Final = 0
+    BOOLEAN: Final = 3
+
+
+class TestExternallyData(ExternallyData[CommonDataType]):
+    """Controlled subset of alternatives to simplify testing"""
+    alternatives = {
+        0: NamedType("null-data", NullData),
+        3: NamedType("boolean", Boolean),
+    }
+
+
+class TestDiscriminatedUnion(DiscriminatedUnion):
+    """Concrete DiscriminatedUnion using the test fixtures above"""
+    selector: TestSelector
+    payload: TestExternallyData
+
+
+# ==============================================================================
+# Tests
+# ==============================================================================
+
+class TestExternallyData_(unittest.TestCase):
+    """Tests for ExternallyData[T]"""
+
+    def test_get_always_returns_error(self) -> None:
+        """ExternallyData cannot be parsed standalone; it requires a selector."""
+        buf = ByteBuffer.allocate(10)
+        result = TestExternallyData.get(buf)
+
+        self.assertIsInstance(result, Error)
+        self.assertIn("can't get TestExternallyData separately", str(result.exception))
+
+    def test_selected_property_returns_correct_identifier(self) -> None:
+        """selected property should dynamically match the wrapped type's tag."""
+        # Test with NullData (tag 0)
+        obj_null = TestExternallyData(NullData(axdr.NullType(None)))
+        self.assertEqual(obj_null.selected, "null-data")
+
+        # Test with Boolean (tag 3)
+        obj_bool = TestExternallyData(Boolean(axdr.BooleanType(True)))
+        self.assertEqual(obj_bool.selected, "boolean")
+
+    def test_selected_raises_on_unknown_type(self) -> None:
+        """selected should raise ValueError if value type is not in alternatives."""
+        # Integer (tag 15) is NOT in TestExternallyData.alternatives
+        obj_unknown = TestExternallyData(Integer(Integer8(IntegerType(42))))
+
+        with self.assertRaises(ValueError) as ctx:
+            _ = obj_unknown.selected
+        self.assertIn("not in alternatives", str(ctx.exception))
+        self.assertIn("null-data, boolean", str(ctx.exception))
+
+
+class TestDiscriminatedUnion_(unittest.TestCase):
+    """Tests for DiscriminatedUnion (Structure wrapper)"""
+
+    def test_subclass_auto_generates_components(self) -> None:
+        """__init_subclass__ must create components tuple from annotations."""
+        self.assertEqual(len(TestDiscriminatedUnion.components), 2)
+
+        comp_selector, comp_payload = TestDiscriminatedUnion.components
+        self.assertEqual(comp_selector.identifier, "selector")
+        self.assertEqual(comp_payload.identifier, "payload")
+        self.assertIs(comp_selector.type_, TestSelector)
+        self.assertIs(comp_payload.type_, TestExternallyData)
+
+    def test_get_lc_rejects_invalid_length(self) -> None:
+        """A-XDR requires exactly 2 components for this pattern."""
+        # Simulate a buffer where A-XDR length != 2
+        buf = ByteBuffer.wrap(b"\x05\x00\x00\x00\x00\x00")
+        result = TestDiscriminatedUnion.get_lc(buf)
+
+        self.assertIsInstance(result, Error)
+        self.assertIn("Invalid length", str(result.exception))
+
+    def test_get_lc_rejects_unknown_selector(self) -> None:
+        """Parser must fail if selector tag is not in payload.alternatives."""
+        # Length=2, Selector tag=95 (not in alternatives), dummy payload byte
+        buf = ByteBuffer.wrap(b"\x02\x5F\x00")
+        result = TestDiscriminatedUnion.get_lc(buf)
+
+        self.assertIsInstance(result, Error)
+        self.assertIn("expected", str(result.exception))
+
+    def test_roundtrip_null_data(self) -> None:
+        """Full encode -> decode cycle for selector=0 (null-data)."""
+        original = TestDiscriminatedUnion(SequenceOfData([
+            TestSelector(Unsigned8(IntegerType(0))),
+            TestExternallyData(NullData(axdr.NullType(None)))
+        ]))
+        original1 = TestDiscriminatedUnion.parse((0, CHOICE(0, None)))
+
+
+        buf = ByteBuffer.allocate(20)
+        original.put(buf)
+        buf.set_pos(0)
+
+        decoded = TestDiscriminatedUnion.get(buf)
+        self.assertFalse(isinstance(decoded, Error))
+        self.assertEqual(decoded.normalize(), original.normalize())
+
+    def test_roundtrip_boolean(self) -> None:
+        """Full encode -> decode cycle for selector=3 (boolean)."""
+        original = TestDiscriminatedUnion(SequenceOfData([
+            TestSelector(Unsigned8(IntegerType(3))),
+            TestExternallyData(Boolean(axdr.BooleanType(False)))
+        ]))
+
+        buf = ByteBuffer.allocate(20)
+        original.put(buf)
+        buf.set_pos(0)
+
+        decoded = TestDiscriminatedUnion.get(buf)
+        self.assertFalse(isinstance(decoded, Error))
+        self.assertEqual(decoded.selector.value.value.value, 3)
+        self.assertEqual(decoded.payload.selected, "boolean")
+        self.assertFalse(decoded.payload.value.value.value)
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":

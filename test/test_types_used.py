@@ -2,6 +2,7 @@
 Unit tests for types_used.py - DLMS/COSEM xDLMS Data Transfer Services Types
 """
 import unittest
+from COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.types_used import (
     # ENUMERATED Types
     DataAccessResult, DataAccessResult1, DataAccessResultList,
@@ -27,11 +28,11 @@ from src.COSEMpdu.types_used import (
     # Access Response Types
     AccessResponseGet, AccessResponseBody,
 )
-from src.COSEMpdu.data import Data
+from src.COSEMpdu.data import Data, Integer, Unsigned
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
 from COSEMpdu.useful_types import (
-    Integer8, Unsigned16, Unsigned32
+    Integer8, Unsigned16, Unsigned32, Unsigned8
 )
 
 
@@ -123,11 +124,11 @@ class TestCosemBasicTypes(unittest.TestCase):
         """Test CosemClassId (Unsigned16)"""
         class_id = CosemClassId(1)  # Data type
         buf = ByteBuffer.allocate(10)
-        buf.put_uint8((class_id >> 8) & 0xFF)
-        buf.put_uint8(class_id & 0xFF)
+        buf.put_u8((class_id >> 8) & 0xFF)
+        buf.put_u8(class_id & 0xFF)
 
         buf.set_pos(0)
-        decoded = (buf.get_uint8() << 8) | buf.get_uint8()
+        decoded = (buf.get_u8() << 8) | buf.get_u8()
         self.assertEqual(decoded, 1)
 
     def test_cosem_object_instance_id(self) -> None:
@@ -144,20 +145,20 @@ class TestCosemBasicTypes(unittest.TestCase):
         """Test CosemObjectAttributeId (Integer8)"""
         attr_id = CosemObjectAttributeId(2)
         buf = ByteBuffer.allocate(10)
-        buf.put_uint8(attr_id.value & 0xFF)
+        buf.put_u8(attr_id.value & 0xFF)
 
         buf.set_pos(0)
-        decoded = Integer8(buf.get_uint8())
+        decoded = Integer8(buf.get_u8())
         self.assertEqual(decoded.value, 2)
 
     def test_cosem_object_method_id(self) -> None:
         """Test CosemObjectMethodId (Integer8)"""
         method_id = CosemObjectMethodId(1)
         buf = ByteBuffer.allocate(10)
-        buf.put_uint8(method_id.value & 0xFF)
+        buf.put_u8(method_id.value & 0xFF)
 
         buf.set_pos(0)
-        decoded = Integer8(buf.get_uint8())
+        decoded = Integer8(buf.get_u8())
         self.assertEqual(decoded.value, 1)
 
 
@@ -216,14 +217,21 @@ class TestSelectiveAccessDescriptor(unittest.TestCase):
 
     def test_from_components(self) -> None:
         """Test from_components constructor"""
-        data = Data.integer(100)
-        descriptor = SelectiveAccessDescriptor.from_components(
-            access_selector=1,
-            access_parameters=data
-        )
+        class MySelective(SelectiveAccessDescriptor):
+            selector_parameters = {1: Integer, 2: Unsigned, 3: Integer}
 
-        self.assertEqual(descriptor.value[0].value, 1)
-        self.assertEqual(descriptor.value[1].value.value.value, 100)
+
+        z = MySelective.parse((3, 100))  # Valid selector and parameter
+
+
+        descriptor = MySelective.from_components(
+            access_selector=2,
+            access_parameters=Integer.parse(100)
+        )
+        buf = ByteBuffer.allocate(50)
+        descriptor.put(buf)
+        self.assertEqual(descriptor.value[0].normalize(), 1)
+        self.assertEqual(descriptor.value[1].normalize(), CHOICE(15, 100))
 
 
 class TestInvokeIdAndPriority(unittest.TestCase):
@@ -788,10 +796,10 @@ class TestRoundTrip(unittest.TestCase):
         )
 
         buf = ByteBuffer.allocate(10)
-        buf.put_uint8(original.value)
+        buf.put_u8(original.value)
 
         buf.set_pos(0)
-        decoded_value = buf.get_uint8()
+        decoded_value = buf.get_u8()
         decoded = InvokeIdAndPriority(decoded_value)
 
         self.assertEqual(original.value, decoded.value)

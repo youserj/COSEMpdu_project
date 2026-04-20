@@ -1,7 +1,6 @@
 # src/COSEMpdu/x680/integer_type.py
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Optional, Self, Any, Protocol
-from StructResult.result import Error, ValueOrError
+from typing import ClassVar, Iterator, Optional, Self, Any, Protocol, runtime_checkable
 from .type import BuiltinType, INTEGER, Simple
 
 
@@ -67,6 +66,7 @@ class NamedNumberList:
         return "{" + ", ".join(str(nn) for nn in self.members) + "}"
 
 
+@runtime_checkable
 class IntegerType(Simple[INTEGER], BuiltinType, Protocol):
     """
     INTEGER type (X.680 §18)

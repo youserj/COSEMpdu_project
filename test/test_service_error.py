@@ -312,7 +312,7 @@ class TestInitiateError(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         # Read tag
-        tag = buf.get_uint8()
+        tag = buf.get_u8()
         self.assertEqual(tag, 1)
         # Decode ServiceError
         decoded_service_error = ServiceError.get(buf)
@@ -349,17 +349,17 @@ class TestConfirmedServiceErrorIntegration(unittest.TestCase):
         error_code = 2
         
         buf = ByteBuffer.allocate(10)
-        buf.put_uint8(confirmed_error_tag)  # ConfirmedServiceError tag
-        buf.put_uint8(initiate_error_tag)   # initiateError tag
-        buf.put_uint8(initiate_tag)         # initiate tag
-        buf.put_uint8(error_code)           # error code
+        buf.put_u8(confirmed_error_tag)  # ConfirmedServiceError tag
+        buf.put_u8(initiate_error_tag)   # initiateError tag
+        buf.put_u8(initiate_tag)         # initiate tag
+        buf.put_u8(error_code)           # error code
         
         # Verify encoding
         buf.set_pos(0)
-        self.assertEqual(buf.get_uint8(), confirmed_error_tag)
-        self.assertEqual(buf.get_uint8(), initiate_error_tag)
-        self.assertEqual(buf.get_uint8(), initiate_tag)
-        self.assertEqual(buf.get_uint8(), error_code)
+        self.assertEqual(buf.get_u8(), confirmed_error_tag)
+        self.assertEqual(buf.get_u8(), initiate_error_tag)
+        self.assertEqual(buf.get_u8(), initiate_tag)
+        self.assertEqual(buf.get_u8(), error_code)
     
     def test_common_error_scenarios(self):
         """Test common error scenarios from DLMS/COSEM"""

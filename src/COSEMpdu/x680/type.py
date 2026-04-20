@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Self, TypeAlias, Protocol, Optional, Any, runtime_checkable
+from typing import Self, Protocol, Optional, Any, runtime_checkable
 from StructResult.result import ValueOrError
 from ..byte_buffer import ByteBuffer
 
@@ -40,6 +40,14 @@ class CHOICE:
 
     def __repr__(self) -> str:
         return f"[{self.select}] {self.value!r}"
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, CHOICE):
+            return (
+                self.select == value.select
+                and self.value == value.value
+            )
+        raise NotImplementedError
 
 
 type TYPE_VALUE = SIMPLE | COMPLEX | CHOICE

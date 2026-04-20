@@ -10,13 +10,13 @@ Standards:
 Note:
     - SEQUENCE OF is a BUILTIN type per X.680 §16.2
 """
-from typing import ClassVar, Iterator, Self
+from typing import Iterator, Self
 from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE
 
 
 class SequenceOfType[T: Type](BuiltinType):
     """ASN.1 SEQUENCE OF type."""
-    component_type: ClassVar[type[Type]]
+    component_type: type[T]
     value: SEQUENCE_OF[T]
 
     def __init__(self, value: SEQUENCE_OF[T]) -> None:

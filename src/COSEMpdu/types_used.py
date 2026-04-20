@@ -1,17 +1,24 @@
-from typing import Self, Literal, ClassVar
+from typing import Optional, Self, Literal, ClassVar, Any
+from StructResult.result import ValueOrError, Error
 from .x680.type import (
-    NamedType, INTEGER, OCTET_STRING, OptionalNamedType, BOOLEAN
+    TYPE_VALUE, NamedType, INTEGER, OCTET_STRING, OptionalNamedType, BOOLEAN
 )
+from .byte_buffer import ByteBuffer
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.constrained_type import SizeConstraint
 from .x680.tagged_type import TaggingMode
-from . import axdr
 from .data import Data
 from .useful_types import (
     Integer8, Unsigned8, Unsigned16, Unsigned32, ObjectName
 )
-from .axdr import ConstrainedOctetStringType, TaggedType, IntegerType, OctetStringType, SequenceOfType
+from .axdr import (
+    ConstrainedOctetStringType, TaggedType, IntegerType, OctetStringType, SequenceOfType, ImplicitTaggedType, EnumeratedType, SequenceType,
+    BooleanType, ChoiceType, create_alternatives
+)
 
+
+class InitError(Exception):
+    """marked Type init error"""
 
 # =============================================================================
 # ENUMERATED Types (A-XDR: encoded as fixed-length unsigned integer in 1 byte)
@@ -41,7 +48,7 @@ class DataAccessResultList(EnumerationList):
     )
 
 
-class DataAccessResult(axdr.EnumeratedType):
+class DataAccessResult(EnumeratedType):
     """Data-Access-Result"""
     named_members = DataAccessResultList()
     SUCCESS: ClassVar[Self]
@@ -76,7 +83,7 @@ class ActionResultList(EnumerationList):
     )
 
 
-class ActionResult(axdr.EnumeratedType):
+class ActionResult(EnumeratedType):
     """Action-Result"""
     named_members = ActionResultList()
 
@@ -108,7 +115,7 @@ class CosemObjectMethodId(Integer8):
 # =============================================================================
 
 
-class CosemAttributeDescriptor(axdr.SequenceType):
+class CosemAttributeDescriptor(SequenceType):
     """Cosem-Attribute-Descriptor"""
     components = (
         NamedType("class-id", CosemClassId),
@@ -130,7 +137,7 @@ class CosemAttributeDescriptor(axdr.SequenceType):
         ))
 
 
-class CosemMethodDescriptor(axdr.SequenceType):
+class CosemMethodDescriptor(SequenceType):
     """Cosem-Method-Descriptor"""
     components = (
         NamedType("class-id", CosemClassId),
@@ -152,18 +159,44 @@ class CosemMethodDescriptor(axdr.SequenceType):
         ))
 
 
-class SelectiveAccessDescriptor(axdr.SequenceType):
+class SelectiveAccessDescriptor(SequenceType):
     """Selective-Access-Descriptor"""
     components = (
-        NamedType("access-selector", Unsigned8),
-        NamedType("access-parameters", Data),
-    )
+            NamedType("access-selector", Unsigned8),
+            NamedType("access-parameters", Data),
+        )
+    selector_parameters: ClassVar[Optional[dict[int, type[ImplicitTaggedType[Any]]]]] = None
+
+    def __init__(self, value: tuple[Unsigned8, ImplicitTaggedType[Any]]) -> None:
+        selector, parameter = value
+        if self.selector_parameters is not None:
+            if (expected_type := self.selector_parameters.get(selector.normalize())) is None:
+                raise InitError(f"Unknown access-selector value: {selector.value}")
+            if not isinstance(parameter, expected_type):
+                raise InitError(f"Expected access-parameters type {expected_type.__name__} for selector {selector.value}, got {type(parameter).__name__}")
+        self.value = value
+
+    @classmethod
+    def parse(cls, value: tuple[INTEGER, TYPE_VALUE]) -> Self:
+        if cls.selector_parameters is None:
+            return super().parse(value)
+        selector, parameter = value
+        if (expected_type := cls.selector_parameters.get(selector)) is None:
+            raise InitError(f"Unknown access-selector value: {selector}")
+        return cls((Unsigned8.parse(selector), expected_type.parse(parameter)))
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        try:
+            return super().get_lc(buf)
+        except InitError as e:
+            return Error.from_e(e)
 
     @classmethod
     def from_components(
         cls,
         access_selector: INTEGER,
-        access_parameters: Data
+        access_parameters: ImplicitTaggedType[Any]
     ) -> Self:
         return cls((
             Unsigned8(IntegerType(access_selector)),
@@ -171,7 +204,7 @@ class SelectiveAccessDescriptor(axdr.SequenceType):
         ))
 
 
-class CosemAttributeDescriptorWithSelection(axdr.SequenceType):
+class CosemAttributeDescriptorWithSelection(SequenceType):
     """Cosem-Attribute-Descriptor-With-Selection"""
     components = (
         NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
@@ -191,7 +224,7 @@ class VariableName2(TaggedType[ObjectName]):
     value: ObjectName
 
 
-class ParameterizedAccess(axdr.SequenceType):
+class ParameterizedAccess(SequenceType):
     """Parameterized-Access"""
     components = (
         NamedType("variable-name", ObjectName),
@@ -207,7 +240,7 @@ class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
     value: ParameterizedAccess
 
 
-class BlockNumberAccess(axdr.SequenceType):
+class BlockNumberAccess(SequenceType):
     """Block-Number-Access"""
     components = (
         NamedType("block-number", Unsigned16),
@@ -221,12 +254,12 @@ class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
     value: BlockNumberAccess
 
 
-class ReadDataBlockAccess(axdr.SequenceType):
+class ReadDataBlockAccess(SequenceType):
     """Read-Data-Block-Access"""
     components = (
-        NamedType("last-block", axdr.BooleanType),
+        NamedType("last-block", BooleanType),
         NamedType("block-number", Unsigned16),
-        NamedType("raw-data", axdr.OctetStringType),
+        NamedType("raw-data", OctetStringType),
     )
 
 
@@ -237,10 +270,10 @@ class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
     value: ReadDataBlockAccess
 
 
-class WriteDataBlockAccess(axdr.SequenceType):
+class WriteDataBlockAccess(SequenceType):
     """Write-Data-Block-Access"""
     components = (
-        NamedType("last-block", axdr.BooleanType),
+        NamedType("last-block", BooleanType),
         NamedType("block-number", Unsigned16),
     )
 
@@ -252,7 +285,7 @@ class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
     value: WriteDataBlockAccess
 
 
-class VariableAccessSpecification(axdr.ChoiceType):
+class VariableAccessSpecification(ChoiceType):
     """Variable-Access-Specification"""
     alternatives = {
         2: NamedType("variable-name", VariableName2),
@@ -290,9 +323,9 @@ class VariableAccessSpecification(axdr.ChoiceType):
         raw_data: OCTET_STRING
     ) -> Self:
         return cls(ReadDataBlockAccess6(ReadDataBlockAccess((
-            axdr.BooleanType(last_block),
+            BooleanType(last_block),
             Unsigned16(IntegerType(block_number)),
-            axdr.OctetStringType(raw_data)
+            OctetStringType(raw_data)
         ))))
 
     @classmethod
@@ -302,7 +335,7 @@ class VariableAccessSpecification(axdr.ChoiceType):
         block_number: INTEGER
     ) -> Self:
         return cls(WriteDataBlockAccess7(WriteDataBlockAccess((
-            axdr.BooleanType(last_block),
+            BooleanType(last_block),
             Unsigned16(IntegerType(block_number))
         ))))
 
@@ -407,7 +440,7 @@ class DataAccesResult1(TaggedType[DataAccessResult1]):
     value: DataAccessResult1
 
 
-class GetDataResult(axdr.ChoiceType):
+class GetDataResult(ChoiceType):
     """Get-Data-Result"""
     alternatives = {
         0: NamedType("data", Data0),
@@ -428,23 +461,23 @@ class GetDataResult(axdr.ChoiceType):
 # =============================================================================
 
 
-class DataBlockResult(axdr.SequenceType):
+class DataBlockResult(SequenceType):
     """Data-Block-Result"""
     components = (
-        NamedType("last-block", axdr.BooleanType),
+        NamedType("last-block", BooleanType),
         NamedType("block-number", Unsigned16),
-        NamedType("raw-data", axdr.OctetStringType),
+        NamedType("raw-data", OctetStringType),
     )
 
 
-class RawData(TaggedType[axdr.OctetStringType]):
+class RawData(TaggedType[OctetStringType]):
     """[0] IMPLICIT OCTET STRING"""
     tag = 0
     mode = TaggingMode.IMPLICIT
-    value: axdr.OctetStringType
+    value: OctetStringType
 
 
-class DataBlockGResult(axdr.ChoiceType):
+class DataBlockGResult(ChoiceType):
     """
     DataBlock-G result CHOICE:
     {
@@ -452,27 +485,27 @@ class DataBlockGResult(axdr.ChoiceType):
         data-access-result             [1] IMPLICIT Data-Access-Result
     }
     """
-    alternatives = axdr.create_alternatives(
+    alternatives = create_alternatives(
         NamedType("raw-data", RawData),
         NamedType("data-access-result", DataAccessResult1),
     )
 
 
-class DataBlockG(axdr.SequenceType):
+class DataBlockG(SequenceType):
     """DataBlock-G"""
     components = (
-        NamedType("last-block", axdr.BooleanType),
+        NamedType("last-block", BooleanType),
         NamedType("block-number", Unsigned32),
         NamedType("result", DataBlockGResult),
     )
 
 
-class DataBlockSA(axdr.SequenceType):
+class DataBlockSA(SequenceType):
     """DataBlock-SA"""
     components = (
-        NamedType("last-block", axdr.BooleanType),
+        NamedType("last-block", BooleanType),
         NamedType("block-number", Unsigned32),
-        NamedType("raw-data", axdr.OctetStringType),
+        NamedType("raw-data", OctetStringType),
     )
 
 
@@ -481,7 +514,7 @@ class DataBlockSA(axdr.SequenceType):
 # =============================================================================
 
 
-class ActionResponseWithOptionalData(axdr.SequenceType):
+class ActionResponseWithOptionalData(SequenceType):
     """Action-Response-With-Optional-Data"""
     components = (
         NamedType("result", ActionResult),
@@ -494,7 +527,7 @@ class ActionResponseWithOptionalData(axdr.SequenceType):
 # =============================================================================
 
 
-class NotificationBody(axdr.SequenceType):
+class NotificationBody(SequenceType):
     """Notification-Body"""
     components = (
         NamedType("data-value", Data),
@@ -516,7 +549,7 @@ class ListOfData(SequenceOfType[Data]):
 # =============================================================================
 
 
-class AccessRequestGet(axdr.SequenceType):
+class AccessRequestGet(SequenceType):
     """Access-Request-Get"""
     components = (
         NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
@@ -530,7 +563,7 @@ class AccessRequestGet1(TaggedType[AccessRequestGet]):
     value: AccessRequestGet
 
 
-class AccessRequestGetWithSelection(axdr.SequenceType):
+class AccessRequestGetWithSelection(SequenceType):
     """Access-Request-Get-With-Selection"""
     components = (
         NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
@@ -545,7 +578,7 @@ class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
     value: AccessRequestGetWithSelection
 
 
-class AccessRequestSet(axdr.SequenceType):
+class AccessRequestSet(SequenceType):
     """Access-Request-Set"""
     components = (
         NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
@@ -559,7 +592,7 @@ class AccessRequestSet2(TaggedType[AccessRequestSet]):
     value: AccessRequestSet
 
 
-class AccessRequestSetWithSelection(axdr.SequenceType):
+class AccessRequestSetWithSelection(SequenceType):
     """Access-Request-Set-With-Selection"""
     components = (
         NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
@@ -574,7 +607,7 @@ class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
     value: AccessRequestSetWithSelection
 
 
-class AccessRequestAction(axdr.SequenceType):
+class AccessRequestAction(SequenceType):
     """Access-Request-Action"""
     components = (
         NamedType("cosem-method-descriptor", CosemMethodDescriptor),
@@ -588,7 +621,7 @@ class AccessRequestAction3(TaggedType[AccessRequestAction]):
     value: AccessRequestAction
 
 
-class AccessRequestSpecification(axdr.ChoiceType):
+class AccessRequestSpecification(ChoiceType):
     """Access-Request-Specification"""
     alternatives = {
         1: NamedType("access-request-get", AccessRequestGet1),
@@ -610,7 +643,7 @@ class ListOfAccessRequestSpecification0(TaggedType[ListOfAccessRequestSpecificat
     value: ListOfAccessRequestSpecification
 
 
-class AccessRequestBody(axdr.SequenceType):
+class AccessRequestBody(SequenceType):
     """Access-Request-Body"""
     components = (
         NamedType("access-request-specification", ListOfAccessRequestSpecification),
@@ -623,7 +656,7 @@ class AccessRequestBody(axdr.SequenceType):
 # =============================================================================
 
 
-class AccessResponseGet(axdr.SequenceType):
+class AccessResponseGet(SequenceType):
     """Access-Response-Get"""
     components = (
         NamedType("result", DataAccessResult1),
@@ -637,21 +670,21 @@ class AccessResponseGet1(TaggedType[AccessResponseGet]):
     value: AccessResponseGet
 
 
-class AccessResponseSet(axdr.SequenceType):
+class AccessResponseSet(SequenceType):
     """Access-Response-Set"""
     components = (
         NamedType("result", DataAccessResult1),
     )
 
 
-class AccessResponseSet2(axdr.TaggedType[AccessResponseSet]):
+class AccessResponseSet2(TaggedType[AccessResponseSet]):
     """[2] Access-Response-Set"""
     tag = 2
     mode = TaggingMode.IMPLICIT
     value: AccessResponseSet
 
 
-class AccessResponseAction(axdr.SequenceType):
+class AccessResponseAction(SequenceType):
     """Access-Response-Action"""
     components = (
         NamedType("result", ActionResult),
@@ -665,7 +698,7 @@ class AccessResponseAction3(TaggedType[AccessResponseAction]):
     value: AccessResponseAction
 
 
-class AccessResponseSpecification(axdr.ChoiceType):
+class AccessResponseSpecification(ChoiceType):
     """Access-Response-Specification"""
     alternatives = {
         1: NamedType("access-response-get", AccessResponseGet1),
@@ -679,7 +712,7 @@ class ListOfAccessResponseSpecification(SequenceOfType[AccessResponseSpecificati
     component_type = AccessResponseSpecification
 
 
-class AccessResponseBody(axdr.SequenceType):
+class AccessResponseBody(SequenceType):
     """Access-Response-Body"""
     components = (
         OptionalNamedType("access-request-specification", ListOfAccessRequestSpecification0),

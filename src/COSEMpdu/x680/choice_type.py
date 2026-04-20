@@ -10,11 +10,11 @@ Standards:
     - X.690 §8.13: CHOICE encoding rules (handled in x690)
     - IEC 61334-6 §6.6: DLMS/COSEM CHOICE usage
 """
-from typing import ClassVar, Self
+from typing import ClassVar, Protocol, Self
 from .type import Type, NamedType, BuiltinType, CHOICE
 
 
-class ChoiceType[T: Type](BuiltinType):
+class ChoiceType[T: Type](BuiltinType, Protocol):
     """
     ASN.1 CHOICE type metadata (X.680 §28).
 

@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 from enum import IntEnum, auto
-from typing import ClassVar, Self, get_type_hints
-from .type import Type, BuiltinType, TYPE_VALUE
+from typing import ClassVar, Self, overload
+from .type import Simple, Type, BuiltinType, TYPE_VALUE, OCTET_STRING
+from .octet_string_type import OctetStringType
 
 
 class TaggingMode(IntEnum):

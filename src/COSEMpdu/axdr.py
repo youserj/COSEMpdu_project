@@ -18,15 +18,14 @@ Standards:
 - X.690: BER encoding (reference for comparison)
 """
 
-from dataclasses import dataclass
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override
 from StructResult.result import ValueOrError, Error
 from COSEMpdu import x690
 from .x680.tagged_type import TaggingMode
 from .x680.constrained_type import ValueRange, SizeConstraint
-from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
+from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE, OCTET_STRING
 from . import x680
-from .byte_buffer import ByteBuffer
+from .byte_buffer import ByteBuffer, put_chain
 
 
 # =============================================================================
@@ -53,6 +52,16 @@ def _encode_variable_length_integer(value: int) -> bytes:
     return bytes([length_octet]) + value_bytes
 
 
+def put_length(buf: ByteBuffer, length: int) -> ValueOrError[int]:
+    if length < 0x80:  # Short definite form
+        return buf.put_u8(length)
+    num_bytes = (length.bit_length() + 7) // 8      # Long definite form: minimal octets for value
+    return put_chain(
+        buf.put_u8(0x80 | num_bytes),
+        buf.write(length.to_bytes(num_bytes, byteorder="big"))
+    )
+
+
 def get_length(buf: ByteBuffer) -> ValueOrError[int]:
     """
     Decode variable-length integer per IEC 61334-6 §6.1.2.
@@ -60,7 +69,7 @@ def get_length(buf: ByteBuffer) -> ValueOrError[int]:
     Returns:
         Decoded integer value
     """
-    if isinstance(first := buf.get_uint8(), Error):
+    if isinstance(first := buf.get_u8(), Error):
         return first
     if not (first & 0x80):
         # Short form: bits 7-1 = value (0-127)
@@ -116,7 +125,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             [Tag(1)] [Contents with inner tag if CHOICE]
         """
         # Read tag number (1 byte for A-XDR)
-        if isinstance(tag_number := buf.get_uint8(), Error):
+        if isinstance(tag_number := buf.get_u8(), Error):
             return tag_number
         if tag_number != cls.tag:
             return Error.from_e(ValueError(f"Expected tag {cls.tag}, got {tag_number}"))
@@ -144,11 +153,10 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode with Length + Contents"""
-        if isinstance(t := buf.put_uint8(self.tag), Error):
-            return t
-        if isinstance(lc := self.put_lc(buf), Error):
-            return lc
-        return t + lc
+        return put_chain(
+            buf.put_u8(self.tag),
+            self.put_lc(buf)
+        )
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -168,6 +176,21 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             return self.value.put_lc(buf)
         # EXPLICIT: contents may have inner tag (e.g., nested CHOICE)
         return self.value.put(buf)  # put() includes tag/length if applicable
+
+
+class ImplicitTaggedType[T: Type](TaggedType[T]):
+    mode = TaggingMode.IMPLICIT
+
+    @override
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        if isinstance(value := cls._T.get_lc(buf), Error):
+            return value
+        return cls(value)
+
+    @override
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        return self.value.put_lc(buf)
 
 # =============================================================================
 # BOOLEAN Type (IEC 61334-6 §6.2)
@@ -203,7 +226,7 @@ class BooleanType(Type, x680.BooleanType):
         Returns instance and advances buffer position.
         """
         # Single octet, no tag/length
-        if isinstance(content := buf.get_uint8(), Error):
+        if isinstance(content := buf.get_u8(), Error):
             return content
         return cls(content != 0)
 
@@ -217,7 +240,7 @@ class BooleanType(Type, x680.BooleanType):
             FALSE → 0x00
             TRUE  → 0xFF
         """
-        return buf.put_uint8(0xFF if self.value else 0x00)
+        return buf.put_u8(0xFF if self.value else 0x00)
 
 
 # =============================================================================
@@ -254,7 +277,7 @@ class IntegerType(Type, x680.IntegerType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """Variable-length encoding (§6.1.2)"""
-        if isinstance(first := buf.get_uint8(), Error):
+        if isinstance(first := buf.get_u8(), Error):
             return first
         if not (first & 0x80):
             # Short form: 0-127
@@ -274,7 +297,7 @@ class IntegerType(Type, x680.IntegerType):
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Variable-length encoding"""
         if 0 <= self.value <= 127:
-            return buf.put_uint8(self.value)
+            return buf.put_u8(self.value)
         encoded = _encode_variable_length_integer(self.value)
         return buf.write(encoded)
 
@@ -333,14 +356,13 @@ class BitStringType(Type, x680.BitStringType):
         n = len(self.value)
         if n == 0:
             # Length = 0 bits
-            return buf.put_uint8(0)
+            return buf.put_u8(0)
         # Encode length (number of BITS)
         length_bytes = _encode_variable_length_integer(len(self.value))
-        if isinstance(l := buf.write(length_bytes), Error):
-            return l
-        if isinstance(c := self.put_c(buf), Error):
-            return c
-        return l + c
+        return put_chain(
+            buf.write(length_bytes),
+            self.put_c(buf)
+        )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         n = len(self.value)
@@ -395,12 +417,10 @@ class OctetStringType(Type, x680.OctetStringType):
         return cls(bytes(data))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        length_bytes = _encode_variable_length_integer(len(self.value))
-        if isinstance(l := buf.write(length_bytes), Error):
-            return l
-        if isinstance(c := self.put_c(buf), Error):
-            return c
-        return l + c
+        return put_chain(
+            put_length(buf, len(self.value)),
+            self.put_c(buf)
+        )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         return buf.write(self.value)
@@ -420,12 +440,10 @@ class VisibleString(Type, x680.VisibleString):
         return cls(data.decode(encoding="ascii"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        length_bytes = _encode_variable_length_integer(len(self.value))
-        if isinstance(l := buf.write(length_bytes), Error):
-            return l
-        if isinstance(c := buf.write(self.value.encode("ascii")), Error):
-            return c
-        return l + c
+        return put_chain(
+            put_length(buf, len(self.value)),
+            buf.write(self.value.encode("ascii"))
+        )
 
     def __str__(self) -> str:
         return repr(self.value)
@@ -447,12 +465,10 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
         return cls(data.decode(encoding="utf-8"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        length_bytes = _encode_variable_length_integer(len(self.value))
-        if isinstance(l := buf.write(length_bytes), Error):
-            return l
-        if isinstance(c := buf.write(self.value.encode("utf-8")), Error):
-            return c
-        return l + c
+        return put_chain(
+            put_length(buf, len(encode := self.value.encode("utf-8"))),
+            buf.write(encode)
+        )
 
     def __str__(self) -> str:
         return repr(self.value)
@@ -465,7 +481,7 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
 
-class ChoiceType(Type, x680.ChoiceType[Type]):
+class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
     """
     CHOICE with A-XDR encoding/decoding (IEC 61334-6 §6.6)
 
@@ -505,10 +521,10 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
 
         Returns instance with chosen alternative and advances buffer position.
         """
-        if isinstance(tag := buf.get_uint8(), Error):
+        if isinstance(tag := buf.get_u8(), Error):
             return tag
         if (n_t := cls.alternatives.get(tag)) is None:
-            raise ValueError(f"{tag} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
+            return Error.from_e(ValueError(f"{tag} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}"))
         if isinstance(value := n_t.type_.get_lc(buf), Error):
             return value
         return cls(value)
@@ -555,7 +571,7 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         - Component order fixed by ASN.1 definition
         - DLMS uses extensively for APDUs
     """
-    components: ClassVar[tuple[NamedType[Type], ...]]
+    components: ClassVar[tuple[NamedType[Type] | OptionalNamedType, ...]]
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -568,7 +584,7 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         for n_t in cls.components:
             # Check for OPTIONAL/DEFAULT presence flag
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
-                if isinstance(presence_flag := buf.get_uint8(), Error):
+                if isinstance(presence_flag := buf.get_u8(), Error):
                     return presence_flag
                 if presence_flag == 0:
                     # Component absent
@@ -597,11 +613,11 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
                     isinstance(n_t, DefaultNamedType)
                     and value == n_t.default
                 ):
-                    if isinstance(tmp := buf.put_uint8(0), Error):  # Component absent
+                    if isinstance(tmp := buf.put_u8(0), Error):  # Component absent
                         return tmp
                     written += tmp
                     continue
-                if isinstance(tmp := buf.put_uint8(1), Error):  # Component present
+                if isinstance(tmp := buf.put_u8(1), Error):  # Component present
                     return tmp
                 written += tmp
             if value is None:
@@ -643,7 +659,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
         Returns instance and advances buffer position.
         """
         # Single octet, no tag/length
-        if isinstance(index := buf.get_uint8(), Error):
+        if isinstance(index := buf.get_u8(), Error):
             return index
         return cls(index)
 
@@ -653,7 +669,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
 
         Returns number of bytes written (always 1).
         """
-        return buf.put_uint8(self.value)
+        return buf.put_u8(self.value)
 
 
 class NullType(Type, x680.NullType):
@@ -700,10 +716,9 @@ class NullType(Type, x680.NullType):
         return isinstance(other, NullType)
 
 
-class NullType0(TaggedType[NullType]):
+class NullType0(ImplicitTaggedType[NullType]):
     """[0] IMPLICIT NULL"""
     tag = 0
-    mode = TaggingMode.IMPLICIT
     value: NullType
 
 
@@ -752,7 +767,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         components: list[T] = []
         for _ in range(length):
-            if isinstance(component := cast("T", cls.component_type.get_lc(buf)), Error):
+            if isinstance(component := cast("T", cls.component_type.get(buf)), Error):
                 return component
             components.append(component)
         return cls(components)
@@ -764,21 +779,13 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         Returns number of bytes written.
         """
         # Variable-length encoding (§6.10.2)
-        count_bytes = _encode_variable_length_integer(len(self.value))
-        if isinstance(written := buf.write(count_bytes), Error):
-            return written
-        if isinstance(written2 := self.put_c(buf), Error):
-            return written2
-        return written + written2
+        return put_chain(
+            put_length(buf, len(self.value)),
+            self.put_c(buf)
+        )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
-        written: int = 0
-        for component in self.value:
-            if isinstance(tmp := component.put_lc(buf), Error):
-                return tmp
-            written += tmp
-        return written
-
+        return put_chain(*(comp.put(buf) for comp in self.value))
 
     @property
     def is_empty(self) -> bool:
@@ -787,6 +794,90 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}[{len(self.value)}].{self.component_type.__name__}"
+
+
+class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
+    """
+    OBJECT IDENTIFIER with A-XDR encoding/decoding (IEC 61334-6)
+
+    A-XDR encoding structure:
+        [Length(1+)] [Content(N)]  # NO tag, NO length in content
+
+    Content:
+        - BER base-128 variable-length subidentifiers (X.690 §8.19)
+
+    Standards:
+        - IEC 61334-6 §6.5 (applied as variable-length byte string)
+        - X.690 §8.19 (BER OID content encoding)
+        - X.680 §31 (OBJECT IDENTIFIER type definition)
+
+    Note:
+        - DLMS uses for Application-context-name, Mechanism-name, etc.
+        - A-XDR omits BER tag (0x06), keeping only A-XDR var-length + BER content.
+    """
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        # 1. Decode A-XDR variable-length integer for content length
+        if isinstance(num_octets := get_length(buf), Error):
+            return num_octets
+        if num_octets == 0:
+            return cls(())
+        # 2. Read raw OID content octets
+        if isinstance(data := buf.read(num_octets), Error):
+            return data
+        content = bytes(data)
+        arcs: list[int] = []
+        # 3. Decode first octet per X.690 §8.19.4
+        # arc0 is strictly restricted to {0, 1, 2}. arc1 can be any >=0 integer.
+        first = content[0]
+        if first < 40:
+            arcs.extend([0, first])
+        elif first < 80:
+            arcs.extend([1, first - 40])
+        else:
+            arcs.extend([2, first - 80])
+        # 4. Decode remaining subidentifiers (base-128)
+        pos = 1
+        while pos < len(content):
+            arc_value = 0
+            while True:
+                if pos >= len(content):
+                    return Error.from_e(ValueError("Truncated OBJECT IDENTIFIER encoding"))
+                octet = content[pos]
+                pos += 1
+                arc_value = (arc_value << 7) | (octet & 0x7F)
+                if not (octet & 0x80):
+                    break
+            arcs.append(arc_value)
+        return cls(tuple(arcs))
+
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        content = bytearray()
+        # Encode first two arcs into single octet
+        content.append(self.value[0] * 40 + self.value[1])
+        # Encode remaining arcs using base-128 variable-length
+        for arc in self.value[2:]:
+            if arc == 0:
+                content.append(0x00)
+            else:
+                arc_bits = arc.bit_length()
+                num_octets = (arc_bits + 6) // 7
+                chunks: list[int] = []
+                val = arc
+                for _ in range(num_octets):
+                    chunks.append(val & 0x7F)
+                    val >>= 7
+                chunks.reverse()
+                # Set continuation bit (0x80) on all but last octet
+                for i in range(len(chunks) - 1):
+                    chunks[i] |= 0x80
+                content.extend(chunks)
+        # Write A-XDR variable-length header + BER OID content
+        return put_chain(
+            put_length(buf, len(content)),
+            buf.write(bytes(content))
+        )
 
 
 class GeneralizedTime(Type, x680.GeneralizedTime):
@@ -801,11 +892,10 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         data = self.value.encode("ascii")
-        if isinstance(l := x690.put_length(buf, len(data)), Error):
-            return l
-        if isinstance(c := buf.write(data), Error):
-            return c
-        return l + c
+        return put_chain(
+            x690.put_length(buf, len(data)),
+            buf.write(data)
+        )
 
 
 class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
@@ -864,10 +954,18 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
             return buf.write(content_bytes)
         return self.value.put_lc(buf)
 
+    @override
+    def normalize(self) -> INTEGER:
+        return self.value.normalize()
 
-class ConstrainedOctetStringType(Type, x680.ConstrainedType[OctetStringType]):
+
+class ConstrainedOctetStringType(x680.ConstrainedType[OctetStringType], Type):
     fixed_length: ClassVar[Optional[int]] = None
     value: OctetStringType
+
+    @override
+    def normalize(self) -> OCTET_STRING:
+        return self.value.normalize()
 
     @classmethod
     def __init_subclass__(cls) -> None:

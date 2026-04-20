@@ -37,10 +37,10 @@ class OctetStringType(Simple[OCTET_STRING], BuiltinType):
 
     def __str__(self) -> str:
         """ASN.1 value notation: 'A5'H (X.680 §22.3)"""
-        return f"'{self.hex()}'H"
+        return self.value.hex(" ")
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(b'{self.value.hex()}')"
+        return f"{self.__class__.__name__}({self.value!r})"
 
     @classmethod
     def empty(cls) -> Self:

@@ -60,7 +60,7 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
             return r_value
         return int.from_bytes(r_value, "big")
 
-    def get_uint8(self) -> ValueOrError[int]:
+    def get_u8(self) -> ValueOrError[int]:
         """get integer8, increase position"""
         if isinstance(value := self.read(1), Error):
             return value
@@ -91,21 +91,17 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
     def get_pos(self) -> int:
         return self._pos
 
-    def set_pos(self, index: int) -> Fallible:
-        """set new position, with check"""
-        if (len_ := len(self)) == 0:
-            """skip NullTypes"""
-        elif 0 <= index < len_:
+    def set_pos(self, index: int) -> ValueOrError[int]:
+        """set new position, with check, return delta"""
+        if 0 <= index < len(self):
+            ret = index - self._pos
             self._pos = index
-        else:
-            return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
-        return OK
+            return ret
+        return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
 
     def shift_pos(self, value: int) -> ValueOrError[int]:
         """shift and return old position"""
-        if isinstance(err := self.set_pos((ret := self._pos) + value), Error):
-            return err
-        return ret
+        return self.set_pos(self._pos + value)
 
     def peek(self, length: int = 1) -> ValueOrError[T]:
         return self.read_pos(self._pos, length)
@@ -165,7 +161,7 @@ class ByteBuffer(_ByteBuffer[bytearray]):
         self.buf[pos: pos + length] = value
         return length
 
-    def put_uint8(self, value: int) -> ValueOrError[int]:
+    def put_u8(self, value: int) -> ValueOrError[int]:
         """put builtin int, increase position"""
         if isinstance(err := self._check_space(1), Error):
             return err
@@ -210,3 +206,12 @@ class ByteBuffer(_ByteBuffer[bytearray]):
             self.buf[pos + step + i] = self.buf[pos + i]
         # Return next position after shifted data
         return pos + length + step
+
+
+def put_chain(*res: ValueOrError[int]) -> ValueOrError[int]:
+    count: int = 0
+    for r in res:
+        if isinstance(r, Error):
+            return r
+        count += r
+    return count

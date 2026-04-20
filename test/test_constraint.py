@@ -3,7 +3,6 @@ Unit tests for ConstrainedType with BER encoding/decoding (X.680 §45, X.690)
 Tests cover ValueRange constraints and validation during encode/decode
 """
 import unittest
-from dataclasses import dataclass
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.ber import IntegerType, EnumeratedType, ConstrainedType
 from src.COSEMpdu.x680.constrained_type import ValueRange
@@ -45,19 +44,20 @@ class TestValueRange(unittest.TestCase):
         self.assertEqual(str(range_constraint), "(0..255)")
 
 
-@dataclass
 class Unsigned8(ConstrainedType[IntegerType]):
     constraint_spec = ValueRange(0, 255)
     value: IntegerType
 
 # PortNumber ::= INTEGER (1..65535)
-@dataclass
+
+
 class PortNumber(ConstrainedType[IntegerType]):
     constraint_spec = ValueRange(1, 65535)
     value: IntegerType
 
 # Temperature ::= INTEGER (-40..85)
-@dataclass
+
+
 class Temperature(ConstrainedType[IntegerType]):
     constraint_spec = ValueRange(-40, 85)
     value: IntegerType
@@ -181,11 +181,10 @@ class TestConstrainedEnumeratedType(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test ConstrainedType for Enumerated"""
         # ServiceError ::= ENUMERATED (0..4)
-        @dataclass
+
         class ServiceError(ConstrainedType[EnumeratedType]):
             constraint_spec = ValueRange(0, 4)
             value: EnumeratedType
-
 
         self.ServiceError = ServiceError
 
@@ -245,7 +244,7 @@ class TestConstraintValidation(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test constrained types"""
-        @dataclass
+
         class ConstrainedInt(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(10, 20)
             value: IntegerType
@@ -277,12 +276,11 @@ class TestConstraintInheritance(unittest.TestCase):
 
     def test_subclass_inherits_constraint(self) -> None:
         """Test that subclasses inherit parent constraint"""
-        @dataclass
+
         class BaseConstrained(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(0, 100)
             value: IntegerType
 
-        @dataclass
         class DerivedConstrained(BaseConstrained):
             value: IntegerType
 
@@ -300,7 +298,6 @@ class TestConstraintInheritance(unittest.TestCase):
             DerivedConstrained(IntegerType(101))
 
 
-@dataclass
 class LargeInt(ConstrainedType[IntegerType]):
     constraint_spec = ValueRange(0, 2**32 - 1)
     value: IntegerType
@@ -340,7 +337,7 @@ class TestConstraintEdgeCases(unittest.TestCase):
 
     def test_zero_range(self) -> None:
         """Test constraint with zero range (single value)"""
-        @dataclass
+
         class FixedValue(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(42, 42)
             value: IntegerType
@@ -363,7 +360,7 @@ class TestConstraintEdgeCases(unittest.TestCase):
 
     def test_full_integer_range(self) -> None:
         """Test constraint with full integer range"""
-        @dataclass
+
         class UnboundedInt(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(-2**63, 2**63 - 1)
             value: IntegerType
@@ -383,7 +380,7 @@ class TestConstraintRoundTrip(unittest.TestCase):
 
     def test_round_trip_valid_values(self) -> None:
         """Test round-trip for valid values"""
-        @dataclass
+
         class TestConstrained(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(-100, 100)
             value: IntegerType
@@ -403,7 +400,7 @@ class TestConstraintRoundTrip(unittest.TestCase):
 
     def test_round_trip_preserves_constraint(self) -> None:
         """Test that constraint is preserved after round-trip"""
-        @dataclass
+
         class TestConstrained(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(0, 255)
             value: IntegerType
@@ -432,13 +429,10 @@ class TestConstraintWithSequence(unittest.TestCase):
         from src.COSEMpdu.x680 import NamedType
         from src.COSEMpdu.ber import BooleanType
 
-        @dataclass
         class ConstrainedInt(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(0, 255)
             value: IntegerType
 
-
-        @dataclass
         class TestSequence(SequenceType):
             components = (
                 NamedType("id", ConstrainedInt),
@@ -466,13 +460,10 @@ class TestConstraintWithSequence(unittest.TestCase):
         from src.COSEMpdu.x680 import NamedType
         from src.COSEMpdu.ber import BooleanType
 
-        @dataclass
         class ConstrainedInt(ConstrainedType[IntegerType]):
             constraint_spec = ValueRange(0, 255)
             value: IntegerType
 
-
-        @dataclass
         class TestSequence(SequenceType):
             components = (
                 NamedType("id", ConstrainedInt),

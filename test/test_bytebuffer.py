@@ -76,11 +76,11 @@ class TestType(unittest.TestCase):
 
     def test_put_get_uint8_and_get(self) -> None:
         buf = ByteBuffer.allocate(2)
-        buf.put_uint8(0x41)  # 'A'
+        buf.put_u8(0x41)  # 'A'
         self.assertEqual(buf.get_pos(), 1)
 
         buf.set_pos(0)
-        self.assertEqual(buf.get_uint8(), 0x41)
+        self.assertEqual(buf.get_u8(), 0x41)
 
         buf.set_pos(0)
         self.assertEqual(buf.get(), b"A")

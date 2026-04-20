@@ -4,17 +4,16 @@ from StructResult.result import ValueOrError, Error
 from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
 from . import x680
 from .x680 import TaggingMode, UniversalClassTagAssignments
-from .byte_buffer import ByteBuffer
+from .byte_buffer import ByteBuffer, put_chain
 from .x690 import Tag, Length, TagError
 
 
 def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
     """common put length and contents to buffer"""
-    if isinstance(l := Length(length).put(buf), Error):
-        return l
-    if isinstance(v := buf.write(data), Error):
-        return v
-    return l + v
+    return put_chain(
+        Length(length).put(buf),
+        buf.write(data)
+    )
 
 
 class Type(x680.Type, Protocol):
@@ -30,11 +29,10 @@ class Type(x680.Type, Protocol):
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode with Tag + Length + Contents"""
-        if isinstance(ret := self.tag.put(buf), Error):
-            return ret
-        if isinstance(ret2 := self.put_lc(buf), Error):
-            return ret2
-        return ret + ret2
+        return put_chain(
+            self.tag.put(buf),
+            self.put_lc(buf)
+        )
 
 
 type NamedType = x680.NamedType[Type]
@@ -101,11 +99,10 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         else:
             # IMPLICIT: preserve base type's constructed flag
             tag_to_encode = self.tag
-        if isinstance(ret := tag_to_encode.put(buf), Error):
-            return ret
-        if isinstance(ret2 := self.put_lc(buf), Error):
-            return ret2
-        return ret + ret2
+        return put_chain(
+            tag_to_encode.put(buf),
+            self.put_lc(buf)
+        )
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if self.is_explicit():
@@ -164,7 +161,7 @@ class BitStringType(Type, x680.BitStringType):
         if length.value == 0:
             return cls(())
         # First octet: unused bits count (0-7)
-        if isinstance(unused_bits := buf.get_uint8(), Error):
+        if isinstance(unused_bits := buf.get_u8(), Error):
             return unused_bits
         if not (0 <= unused_bits <= 7):
             return Error.from_e(ValueError(f"Invalid unused bits count: {unused_bits}"))
@@ -191,10 +188,8 @@ class BitStringType(Type, x680.BitStringType):
         Returns number of bytes written.
         """
         n = len(self.value)
-        unused_bits = (8 - (n % 8)) % 8
-        # Pad bits to octet boundary
-        padded = list(self.value) + [0] * unused_bits
-        # Convert to bytes (MSB-first per octet)
+        unused_bits = (8 - (n % 8)) % 8                 # Pad bits to octet boundary
+        padded = list(self.value) + [0] * unused_bits   # Convert to bytes (MSB-first per octet)
         data_bytes = bytearray()
         for i in range(0, len(padded), 8):
             byte = 0
@@ -202,13 +197,11 @@ class BitStringType(Type, x680.BitStringType):
                 if padded[i + j]:
                     byte |= (1 << (7 - j))
             data_bytes.append(byte)
-        if isinstance(length := Length(1 + len(data_bytes)).put(buf), Error):
-            return length
-        if isinstance(u := buf.put_uint8(unused_bits), Error):
-            return u
-        if isinstance(v := buf.write(bytes(data_bytes)), Error):
-            return v
-        return length + u + v
+        return put_chain(
+            Length(1 + len(data_bytes)).put(buf),
+            buf.put_u8(unused_bits),
+            buf.write(bytes(data_bytes))
+        )
 
 
 class BooleanType(Type, x680.BooleanType):
@@ -245,7 +238,7 @@ class BooleanType(Type, x680.BooleanType):
             return length
         if length.value != 1:
             raise ValueError(f"BOOLEAN length must be 1, got {length.value}")
-        if isinstance(content := buf.get_uint8(), Error):
+        if isinstance(content := buf.get_u8(), Error):
             return content
         return cls(content != 0)
 
@@ -258,11 +251,10 @@ class BooleanType(Type, x680.BooleanType):
             FALSE → 0x00
             TRUE  → 0xFF (all bits one, DER/CER compliant)
         """
-        if isinstance(length := Length(1).put(buf), Error):
-            return length
-        if isinstance(value := buf.put_uint8(0xFF if self.value else 0x00), Error):
-            return value
-        return length + value
+        return put_chain(
+            Length(1).put(buf),
+            buf.put_u8(0xFF if self.value else 0x00)
+        )
 
 
 class GraphicString(Type, x680.GraphicString):

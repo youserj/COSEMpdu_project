@@ -157,8 +157,8 @@ class ConstrainedType[T: Type](Type, Protocol):
     def parse(cls, value: Any) -> Self:
         return cls(cls.get_type().parse(value))
 
-    def normalize(self) -> TYPE_VALUE:
-        return self.value.normalize()
+    # def normalize(self) -> TYPE_VALUE:
+    #     return self.value.normalize()
 
     @classmethod
     def default(cls) -> Self:

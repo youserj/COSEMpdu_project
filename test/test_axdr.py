@@ -8,8 +8,8 @@ from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
     create_alternatives,
     ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
-    BooleanType, IntegerType, BitStringType, OctetStringType, TaggedType,
-    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
+    BooleanType, IntegerType, BitStringType, OctetStringType, TaggedType, ObjectIdentifierType,
+    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType, ImplicitTaggedType,
     _encode_variable_length_integer, get_length
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
@@ -33,6 +33,21 @@ class TestChoice(ChoiceType):
         NamedType("first", Integer0),
         NamedType("second", OctetString1)
     )
+
+
+class OctetStringObjectIdentifierType(ImplicitTaggedType[ObjectIdentifierType]):
+    tag = 9
+
+
+class My(ImplicitTaggedType[IntegerType]):
+    tag = 5
+
+
+# m = My.parse(5)
+# buf = ByteBuffer.allocate(20)
+# m.put(buf)
+# buf.set_pos(0)
+# m1 = My.get(buf)
 
 
 class TestVariableLengthInteger(unittest.TestCase):
@@ -407,8 +422,7 @@ class TestChoiceType(unittest.TestCase):
     def test_decode_invalid_tag(self) -> None:
         """Invalid tag raises ValueError"""
         buf = ByteBuffer.wrap(b"\x05\x00")
-        with self.assertRaises(ValueError):
-            TestChoice.get(buf)
+        self.assertTrue(TestChoice.get(buf).has(exception_type=ValueError))
 
     def test_init_invalid_tag(self) -> None:
         """Initialize with invalid tag raises ValueError"""
@@ -545,7 +559,7 @@ class TestSequenceOfType(unittest.TestCase):
     def test_encode_variable_length(self) -> None:
         """Variable-length SEQUENCE OF encodes count + components (§6.10.2)"""
 
-        class TestSeqOf(SequenceOfType):
+        class TestSeqOf(SequenceOfType[IntegerType]):
             component_type = IntegerType
 
         val = TestSeqOf(
@@ -717,6 +731,92 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(decoded["data"].value, b"TEST")
         self.assertEqual(decoded["choice"].selected, "first")
         self.assertEqual(decoded["choice"].value.value.value, 456)
+
+
+class TestObjectIdentifierType(unittest.TestCase):
+    """Test OBJECT IDENTIFIER encoding per IEC 61334-6 §6.9 / X.690 §8.19"""
+
+    def test_encode_short_oid(self) -> None:
+        """Encode OID {1 0 1} (iso standard asn1)"""
+        val = ObjectIdentifierType((1, 0, 1))
+        buf = ByteBuffer.allocate(3)
+        written = val.put(buf)
+        # Length: 2 (0x02)
+        # Content: 0x28 (1*40+0), 0x01
+        self.assertEqual(written, 3)
+        self.assertEqual(bytes(buf), b"\x02\x28\x01")
+
+    def test_encode_oid_with_large_arc(self) -> None:
+        """Encode OID {2 100 3}"""
+        val = ObjectIdentifierType((2, 100, 3))
+        buf = ByteBuffer.allocate(3)
+        written = val.put(buf)
+        # Length: 2 (0x02)
+        # Content: 0xB4 (2*40+100), 0x03
+        self.assertEqual(written, 3)
+        self.assertEqual(bytes(buf), b"\x02\xB4\x03")
+
+    def test_encode_oid_with_base128_arc(self) -> None:
+        """Encode OID with arc requiring base-128 multi-byte encoding {1 2 3 840}"""
+        val = ObjectIdentifierType((1, 2, 3, 840))
+        buf = ByteBuffer.allocate(10)
+        written = val.put(buf)
+        # Content: 0x2A, 0x03, 0x86 0x48 (840 = 0x348 -> 0x86 0x48)
+        # Length: 4
+        self.assertEqual(written, 5)
+        self.assertEqual(bytes(buf.extract()), b"\x04\x2A\x03\x86\x48")
+
+    def test_decode_short_oid(self) -> None:
+        """Decode OID {1 0 1}"""
+        buf = ByteBuffer.wrap(b"\x02\x28\x01")
+        val = ObjectIdentifierType.get(buf)
+        self.assertEqual(val.value, (1, 0, 1))
+        self.assertEqual(buf.get_pos(), 3)
+
+    def test_decode_oid_with_base128_arc(self) -> None:
+        """Decode OID with base-128 encoded arc"""
+        buf = ByteBuffer.wrap(b"\x04\x2A\x03\x86\x48")
+        val = ObjectIdentifierType.get(buf)
+        self.assertEqual(val.value, (1, 2, 3, 840))
+        self.assertEqual(buf.get_pos(), 5)
+
+    def test_roundtrip_oid(self) -> None:
+        """Roundtrip encode/decode for various OIDs"""
+        test_cases = [
+            (1, 0, 1),
+            (2, 100, 3),
+            (1, 3, 6, 1, 4, 1),
+            (1, 2, 840, 113549),  # Common OID prefix (iso member-body us org dod internet)
+            (2, 16, 0x2f4, 5, 8, 1, 1)
+        ]
+        for arcs in test_cases:
+            original = ObjectIdentifierType(arcs)
+            buf = ByteBuffer.allocate(32)
+            original.put(buf)
+            buf.set_pos(0)
+            decoded = ObjectIdentifierType.get(buf)
+            self.assertEqual(decoded.value, arcs, f"Roundtrip failed for {arcs}")
+
+    def test_encode_invalid_less_than_two_arcs(self) -> None:
+        """OID must have at least two arcs per X.680 §31.10"""
+        with self.assertRaises(ValueError):
+            ObjectIdentifierType((1,))
+
+    def test_decode_truncated_oid(self) -> None:
+        """Truncated OID content should return Error"""
+        # Claims length 5, but only 2 bytes provided
+        buf = ByteBuffer.wrap(b"\x05\x2A\x03")
+        result = ObjectIdentifierType.get(buf)
+        self.assertTrue(result.has(exception_type=(ValueError, BufferError)))
+
+    def test_octet(self) -> None:
+        class OctetStringObjectIdentifierType(ImplicitTaggedType[ObjectIdentifierType]):
+            tag = 9
+
+        original = OctetStringObjectIdentifierType(ObjectIdentifierType((2, 16, 0x2f4, 5, 8, 1, 1)))
+        buf = ByteBuffer.allocate(20)
+        original.put(buf)
+        print(buf)
 
 
 if __name__ == "__main__":
