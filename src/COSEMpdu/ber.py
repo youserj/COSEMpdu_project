@@ -63,7 +63,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
             if isinstance(length := Length.get(buf), Error):  # EXPLICIT: decode length, then complete base encoding (TLV)
                 return length
             if length.value == -1:
-                raise ValueError("Indefinite length not supported for tagged types")
+                return Error.from_e(ValueError("Indefinite length not supported for tagged types"))
             # Decode inner value (with its own tag)
             if isinstance(value := cls._T.get(buf), Error):
                 return value
@@ -237,7 +237,7 @@ class BooleanType(Type, x680.BooleanType):
         if isinstance(length := Length.get(buf), Error):
             return length
         if length.value != 1:
-            raise ValueError(f"BOOLEAN length must be 1, got {length.value}")
+            return Error.from_e(ValueError(f"BOOLEAN length must be 1, got {length.value}"))
         if isinstance(content := buf.get_u8(), Error):
             return content
         return cls(content != 0)
@@ -280,9 +280,7 @@ class GraphicString(Type, x680.GraphicString):
         if isinstance(length := Length.get(buf), Error):
             return length
         if length.value < 0:
-            raise ValueError(
-                "Indefinite length form not supported for GRAPHIC STRING primitive"
-            )
+            return Error.from_e(ValueError("Indefinite length form not supported for GRAPHIC STRING primitive"))
         if length.value == 0:
             return cls("")
         if isinstance(value := buf.read(length.value), Error):
@@ -363,7 +361,7 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
         if isinstance(tag := Tag.get(buf), Error):
             return tag
         if (n_t := cls.alternatives.get(hash(tag))) is None:
-            raise ValueError(f"{tag=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}")
+            return Error.from_e(ValueError(f"{tag=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}"))
         # tag_byte = buf.get_uint8()
         # tag_number = tag_byte & 0x1F
         # for n_t in cls.alternatives:
@@ -509,9 +507,9 @@ class IntegerType(Type, x680.IntegerType):
         if isinstance(length := Length.get(buf), Error):
             return length
         if length.value < 0:
-            raise ValueError("Indefinite length form not supported for INTEGER")
+            return Error.from_e(ValueError("Indefinite length form not supported for INTEGER"))
         if length.value == 0:
-            raise ValueError("INTEGER length must be >= 1")
+            return Error.from_e(ValueError("INTEGER length must be >= 1"))
 
         # Read content octets as big-endian two's complement
         if isinstance(content := buf.read(length.value), Error):
@@ -741,7 +739,7 @@ class OctetStringType(Type, x680.OctetStringType):
         if isinstance(length := Length.get(buf), Error):
             return length
         if length.value < 0:
-            raise ValueError("Indefinite length form not supported for OCTET STRING primitive")
+            return Error.from_e(ValueError("Indefinite length form not supported for OCTET STRING primitive"))
         # Read octets directly (no unused_bits like BIT STRING)
         if length.value == 0:
             return cls(b"")
@@ -844,7 +842,7 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
             if value is None:
                 if isinstance(n_t, x680.OptionalNamedType):
                     continue
-                raise ValueError(f"Required component <{n_t.identifier}> not set")
+                return Error.from_e(ValueError(f"Required component <{n_t.identifier}> not set"))
             if isinstance(tmp := value.put(buf), Error):
                 return tmp
             counter += tmp
