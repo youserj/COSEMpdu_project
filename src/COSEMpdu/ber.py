@@ -832,8 +832,9 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         """
         # Encode all present components
         counter: int = 0
-        if isinstance(l_pos := buf.shift_pos(1), Error):
-            return l_pos
+        length_pos: int = buf.get_pos()
+        if isinstance(err := buf.shift_pos(1), Error):
+            return err
         for value, n_t in zip(self.value, self.components):
             if (
                 isinstance(n_t, x680.DefaultNamedType)
@@ -849,11 +850,11 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
             counter += tmp
         length = Length(counter)
         if (step := len(length) - 1) > 0:
-            if isinstance(end := buf.shift_right(l_pos + 1, counter, step), Error):
+            if isinstance(end := buf.shift_right(length_pos + 1, counter, step), Error):
                 return end
         else:
             end = buf.get_pos()
-        if isinstance(err := buf.set_pos(l_pos), Error):
+        if isinstance(err := buf.set_pos(length_pos), Error):
             return err
         length.put(buf)
         if isinstance(err := buf.set_pos(end), Error):
@@ -987,3 +988,8 @@ class ConstrainedType[T: Type](Type, x680.ConstrainedType[T]):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         return self.value.put_lc(buf)
+
+
+class ConstrainedOctetStringType(x680.ConstrainedOctetStringType[OctetStringType], ConstrainedType[OctetStringType], Type):
+    fixed_length: ClassVar[Optional[int]] = None
+    value: OctetStringType

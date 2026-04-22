@@ -332,6 +332,15 @@ class TestOctetStringType(unittest.TestCase):
         written = val.put(buf)
         self.assertEqual(written, 0)
 
+    def test_default(self) -> None:
+        """Empty fixed-length OCTET STRING encodes nothing"""
+
+        class Octet(ConstrainedOctetStringType):
+            constraint_spec = SizeConstraint(4)
+
+        val = Octet.default()
+        self.assertEqual(val.normalize(), b"\x00\x00\x00\x00")
+
 
 class TestEnumeratedType(unittest.TestCase):
     """Test ENUMERATED encoding per IEC 61334-6 §6.3"""

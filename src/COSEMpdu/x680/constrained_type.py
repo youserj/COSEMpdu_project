@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import ClassVar, Optional, Protocol, Any, Self, get_type_hints
+from typing import ClassVar, Optional, Protocol, Any, Self, get_type_hints, override
 from StructResult.result import ValueOrError
-from .type import Type, TYPE_VALUE
+from .type import Type, TYPE_VALUE, OCTET_STRING
 from .integer_type import IntegerType
 from .bit_string import BitStringType
 from .octet_string_type import OctetStringType
@@ -172,3 +172,27 @@ class ConstrainedType[T: Type](Type, Protocol):
         if not isinstance(other, self.__class__):
             return False
         return self.value == other.value
+
+
+class ConstrainedOctetStringType[T: OctetStringType](ConstrainedType[T], Type):
+    fixed_length: ClassVar[Optional[int]] = None
+    value: T
+
+    @override
+    def normalize(self) -> OCTET_STRING:
+        return self.value.normalize()
+
+    @classmethod
+    def default(cls) -> Self:
+        if cls.fixed_length is not None:
+            return cls.parse(b"\x00" * cls.fixed_length)
+        return super().default()
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        if hasattr(cls, "constraint_spec"):
+            if (  # Fixed-length encoding (§6.5.1)
+                isinstance(cls.constraint_spec, SizeConstraint)
+                and cls.constraint_spec.min_size is None
+            ):
+                cls.fixed_length = cls.constraint_spec.max_size

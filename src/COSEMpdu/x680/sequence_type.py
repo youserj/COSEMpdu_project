@@ -1,6 +1,6 @@
 # src/COSEMpdu/x680/sequence_type.py
 from typing import ClassVar, Optional, Self
-from .type import BuiltinType, NamedType, Type, SEQUENCE, DefaultNamedType, OptionalNamedType, TYPE_VALUE
+from .type import BuiltinType, NamedType, Type, SEQUENCE, TYPE_VALUE
 
 
 class SequenceType[T: SEQUENCE](BuiltinType):

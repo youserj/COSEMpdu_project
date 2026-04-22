@@ -959,21 +959,9 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         return self.value.normalize()
 
 
-class ConstrainedOctetStringType(x680.ConstrainedType[OctetStringType], Type):
+class ConstrainedOctetStringType(x680.ConstrainedOctetStringType[OctetStringType], Type):
     fixed_length: ClassVar[Optional[int]] = None
     value: OctetStringType
-
-    @override
-    def normalize(self) -> OCTET_STRING:
-        return self.value.normalize()
-
-    @classmethod
-    def __init_subclass__(cls) -> None:
-        if (  # Fixed-length encoding (§6.5.1)
-            isinstance(cls.constraint_spec, SizeConstraint)
-            and cls.constraint_spec.min_size is None
-        ):
-            cls.fixed_length = cls.constraint_spec.max_size
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
