@@ -83,6 +83,11 @@ class EnumeratedType(Simple[INTEGER], BuiltinType):
     named_members: ClassVar[Optional[EnumerationList]] = None
     value: INTEGER
 
+    def __init_subclass__(cls) -> None:
+        if cls.named_members:
+            for member in cls.named_members:
+                setattr(cls, member.identifier, member.value)
+
     @classmethod
     def default(cls) -> Self:
         """Default value: first member in the list."""
