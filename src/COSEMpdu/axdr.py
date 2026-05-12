@@ -17,13 +17,12 @@ Standards:
 - X.680: ASN.1 notation
 - X.690: BER encoding (reference for comparison)
 """
-
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override, runtime_checkable
 from StructResult.result import ValueOrError, Error
 from COSEMpdu import x690
 from .x680.tagged_type import TaggingMode
 from .x680.constrained_type import ValueRange, SizeConstraint
-from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE, OCTET_STRING
+from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
 from . import x680
 from .byte_buffer import ByteBuffer, put_chain
 
@@ -480,7 +479,7 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # =============================================================================
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
-
+@runtime_checkable
 class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
     """
     CHOICE with A-XDR encoding/decoding (IEC 61334-6 §6.6)

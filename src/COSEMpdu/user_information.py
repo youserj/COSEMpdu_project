@@ -1,9 +1,10 @@
-from typing import Optional, Self, ClassVar
+from typing import Optional, Self, ClassVar, Literal
 from .x680 import tag, TaggingMode
 from .x680.type import (
     OptionalNamedType,
     DefaultNamedType,
-    NamedType
+    NamedType,
+    INTEGER
 )
 from .x680.bit_string import NamedBitList, NamedBit
 from .x680.constrained_type import SizeConstraint
@@ -13,8 +14,7 @@ from . import axdr
 from .useful_types import Integer8, Unsigned16, Unsigned8, ObjectName
 
 
-class Conformance_(ber.ConstrainedType[ber.BitStringType]):
-    """Conformance"""
+class BitStringConformance(ber.BitStringType):
     named_bits: ClassVar[Optional[NamedBitList]] = NamedBitList((
         NamedBit("reserved-zero", 0),
         NamedBit("general-protection", 1),
@@ -41,8 +41,40 @@ class Conformance_(ber.ConstrainedType[ber.BitStringType]):
         NamedBit("event-notification", 22),
         NamedBit("action", 23),
     ))
+
+
+class Conformance_(ber.ConstrainedType[BitStringConformance]):
+    """Conformance"""
     constraint_spec = SizeConstraint(24)
-    value: ber.BitStringType
+    value: BitStringConformance
+
+
+NamedBitLiteral = Literal[
+    "reserved-zero",
+    "general-protection",
+    "general-block-transfer",
+    "read",
+    "write",
+    "unconfirmed-write",
+    "delta-value-encoding",
+    "reserved-seven",
+    "attribute0-supported-with-set",
+    "priority-mgmt-supported",
+    "attribute0-supported-with-get",
+    "block-transfer-with-get-or-read",
+    "block-transfer-with-set-or-write",
+    "block-transfer-with-action",
+    "multiple-references",
+    "information-report",
+    "data-notification",
+    "access",
+    "parameterized-access",
+    "get",
+    "set",
+    "selective-access",
+    "event-notification",
+    "action"
+]
 
 
 class Conformance(ber.TaggedType[Conformance_]):
@@ -52,6 +84,9 @@ class Conformance(ber.TaggedType[Conformance_]):
     )
     mode = TaggingMode.IMPLICIT
     value: Conformance_
+
+    def __getitem__(self, key: NamedBitLiteral) -> INTEGER:
+        return self.value.value[key]
 
 
 LN_REFERENCE = ObjectName(axdr.IntegerType(0x0007))

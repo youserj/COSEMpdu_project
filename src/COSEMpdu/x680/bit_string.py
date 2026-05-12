@@ -77,6 +77,8 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     @classmethod
     def default(cls) -> Self:
         """Default value: all bits 0"""
+        if cls.named_bits:
+            return cls((0,) * len(cls.named_bits.bits))
         return cls(())
 
     @classmethod

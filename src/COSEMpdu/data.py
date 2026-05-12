@@ -262,6 +262,10 @@ class Structure(ImplicitTaggedType[SequenceOfData[ImplicitTaggedType[Any]]]):
     tag = 2
     components: ClassVar[Optional[tuple[NamedType[Type], ...]]] = None  # 4.1.5 Common data types Table 2
 
+    @classmethod
+    def default(cls) -> Self:
+        return cls(SequenceOfData([component.type_.default() for component in cls.components]))
+
     @property
     def get_el0(self):
         return self.value[0]
@@ -354,6 +358,9 @@ class DigitalMixin[T: Unsigned8 | Unsigned16 | Unsigned32 | Unsigned64 | Integer
     def __int__(self) -> int:
         return self.value.value.value
 
+    def normalize(self) -> INTEGER:
+        return self.value.normalize()
+
 
 class Boolean(ImplicitTaggedType[BooleanType]):
     """[3] IMPLICIT BOOLEAN"""
@@ -378,6 +385,9 @@ class DoubleLongUnsigned(DigitalMixin[Unsigned32], ImplicitTaggedType[Unsigned32
 class OctetString(ImplicitTaggedType[OctetStringType]):
     """[9] IMPLICIT OCTET STRING"""
     tag = 9
+
+    def normalize(self) -> OCTET_STRING:
+        return super().normalize()
 
 
 class VisibleString(ImplicitTaggedType[axdr.VisibleString]):
@@ -494,10 +504,26 @@ class EnumMixin:
 
     def __str__(self) -> str:
         value = self.normalize()
-        add: str = ""
-        if value in self.enumeration_item:
-            add = f"{self.enumeration_item[value]}"
-        return f"({value}){add}"
+        return f"({value}){self.enumeration_item.get(value, "")}"
+
+
+class BitMixin:
+    enumeration_item: ClassVar[dict[int, str]]
+    value: Unsigned8
+
+    def normalize(self) -> INTEGER:
+        return self.value.normalize()
+
+    def __str__(self) -> str:
+        value = self.normalize()
+        values: list[str] = []
+        for (k, v) in self.enumeration_item.items():
+            if k & value:
+                values.append(v)
+        return f"({value}){" | ".join(values)}"
+
+    def __contains__(self, item: INTEGER) -> bool:
+        return bool(item & self.normalize())
 
 
 class Enum(EnumMixin, ImplicitTaggedType[Unsigned8]):

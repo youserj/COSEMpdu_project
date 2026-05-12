@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Protocol, Any, Self, get_type_hints, override
-from StructResult.result import ValueOrError
 from .type import Type, TYPE_VALUE, OCTET_STRING
 from .integer_type import IntegerType
 from .bit_string import BitStringType
@@ -157,8 +156,8 @@ class ConstrainedType[T: Type](Type, Protocol):
     def parse(cls, value: Any) -> Self:
         return cls(cls.get_type().parse(value))
 
-    # def normalize(self) -> TYPE_VALUE:
-    #     return self.value.normalize()
+    def normalize(self) -> TYPE_VALUE:
+        return self.value.normalize()
 
     @classmethod
     def default(cls) -> Self:
