@@ -167,7 +167,7 @@ class TestCosemAttributeDescriptor(unittest.TestCase):
 
     def test_from_components(self) -> None:
         """Test from_components constructor"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
@@ -179,7 +179,7 @@ class TestCosemAttributeDescriptor(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test encoding and decoding"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
@@ -201,7 +201,7 @@ class TestCosemMethodDescriptor(unittest.TestCase):
 
     def test_from_components(self) -> None:
         """Test from_components constructor"""
-        descriptor = CosemMethodDescriptor.from_components(
+        descriptor = CosemMethodDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             method_id=1
@@ -224,7 +224,7 @@ class TestSelectiveAccessDescriptor(unittest.TestCase):
         z = MySelective.parse((3, 100))  # Valid selector and parameter
 
 
-        descriptor = MySelective.from_components(
+        descriptor = MySelective(
             access_selector=2,
             access_parameters=Integer.parse(100)
         )
@@ -517,7 +517,7 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_get(self) -> None:
         """Test Access-Request-Get"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
@@ -533,12 +533,12 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_get_with_selection(self) -> None:
         """Test Access-Request-Get-With-Selection"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
         )
-        selection = SelectiveAccessDescriptor.from_components(
+        selection = SelectiveAccessDescriptor(
             access_selector=1,
             access_parameters=Data.integer(100)
         )
@@ -553,7 +553,7 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_specification_choice(self) -> None:
         """Test Access-Request-Specification CHOICE"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
@@ -607,7 +607,7 @@ class TestAccessRequestBody(unittest.TestCase):
 
     def test_access_request_body(self) -> None:
         """Test Access-Request-Body with all components"""
-        descriptor = CosemAttributeDescriptor.from_components(
+        descriptor = CosemAttributeDescriptor(
             class_id=1,
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
@@ -744,7 +744,7 @@ class TestRoundTrip(unittest.TestCase):
 
     def test_cosem_attribute_descriptor_roundtrip(self) -> None:
         """Test full round-trip for CosemAttributeDescriptor"""
-        original = CosemAttributeDescriptor.from_components(
+        original = CosemAttributeDescriptor(
             class_id=7,  # Clock
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2

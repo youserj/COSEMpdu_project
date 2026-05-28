@@ -1,4 +1,5 @@
 from typing import Self
+from dataclasses import dataclass
 from .x680.type import NamedType, OCTET_STRING
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.tagged_type import TaggingMode
@@ -41,16 +42,14 @@ class KekId(EnumeratedType):
 # SEQUENCE Types (A-XDR: components encoded in order, no identifier)
 # =============================================================================
 
-
+@dataclass
 class IdentifiedKey(SequenceType):
     """Identified-Key"""
-    components = (
-        NamedType("key-id", KeyId),
-    )
+    key_id: KeyId
 
 
-class IdentifiedKey0(TaggedType[IdentifiedKey]):
-    """[0] Identified-Key"""
+class identifiedKey(TaggedType[IdentifiedKey]):
+    """identified-key"""
     tag = 0
     mode = TaggingMode.IMPLICIT
     value: IdentifiedKey
@@ -58,10 +57,7 @@ class IdentifiedKey0(TaggedType[IdentifiedKey]):
 
 class WrappedKey(SequenceType):
     """Wrapped-Key"""
-    components = (
-        NamedType("kek-id", KekId),
-        NamedType("key-ciphered-data", axdr.OctetStringType),
-    )
+    kek_id: KekId
 
 
 class WrappedKey1(TaggedType[WrappedKey]):
@@ -73,10 +69,8 @@ class WrappedKey1(TaggedType[WrappedKey]):
 
 class AgreedKey(SequenceType):
     """Agreed-Key"""
-    components = (
-        NamedType("key-parameters", OctetStringType),
-        NamedType("key-ciphered-data", OctetStringType),
-    )
+    key_parameters: OctetStringType
+    key_ciphered_data: OctetStringType
 
 
 class AgreedKey2(TaggedType[AgreedKey]):
@@ -94,7 +88,7 @@ class AgreedKey2(TaggedType[AgreedKey]):
 class KeyInfo(axdr.ChoiceType):
     """Key-Info"""
     alternatives = {
-        0: NamedType("identified-key", IdentifiedKey0),
+        0: NamedType("identified-key", identifiedKey),
         1: NamedType("wrapped-key", WrappedKey1),
         2: NamedType("agreed-key", AgreedKey2)
     }
@@ -103,7 +97,7 @@ class KeyInfo(axdr.ChoiceType):
     @classmethod
     def identified_key(cls, key_id: KeyId) -> Self:
         """Create KeyInfo from Identified-Key alternative"""
-        return cls(IdentifiedKey0(IdentifiedKey((key_id,))))
+        return cls(identifiedKey(IdentifiedKey((key_id,))))
 
     @classmethod
     def wrapped_key(cls, kek_id: KekId, key_ciphered_data: OCTET_STRING) -> Self:

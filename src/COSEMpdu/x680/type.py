@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Self, Protocol, Optional, Any, runtime_checkable
-from StructResult.result import ValueOrError
+from StructResult.result import ValueOrError, Error
 from ..byte_buffer import ByteBuffer
 
 
@@ -83,7 +83,6 @@ class Type(Protocol):
        - Contains pure data values (str/list[str]), NO structural metadata
        - Field names and type context are handled by container types (SEQUENCE, etc.)
     """
-    value: Any
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:

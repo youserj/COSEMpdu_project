@@ -3,15 +3,16 @@ COSEM PDU Types Implementation
 Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6
 """
-from typing import ClassVar
-from .data import Data
+from typing import ClassVar, Optional, TypeAlias
+from dataclasses import dataclass
+from .data import Data, SequenceOfData
 from .x680.tagged_type import TaggingMode
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .axdr import (
     EnumeratedType, OctetStringType, SequenceType, SequenceOfType, create_alternatives,
     ChoiceType, TaggedType, NullType, GeneralizedTime, NullType0
 )
-from .x680.type import NamedType, OptionalNamedType
+from .x680.type import NamedType
 from .useful_types import Unsigned16, Unsigned8, Unsigned32
 from .types_used import (
     CosemAttributeDescriptor,
@@ -21,7 +22,7 @@ from .types_used import (
     SelectiveAccessDescriptor,
     VariableAccessSpecification,
     Data0,
-    DataAccesResult1,
+    DataAccessResult1,
     DataBlockResult,
     LongInvokeIdAndPriority,
     GetDataResult,
@@ -37,14 +38,14 @@ from .user_information import InitiateRequest, InitiateResponse
 from .key_info import KeyInfo
 
 
-class InitialRequest1(TaggedType[InitiateRequest]):
+class initialRequest(TaggedType[InitiateRequest]):
     """initialRequest"""
     tag = 1
     mode = TaggingMode.IMPLICIT
     value: InitiateRequest
 
 
-class InitialResponse8(TaggedType[InitiateResponse]):
+class initialResponse(TaggedType[InitiateResponse]):
     """initialResponse"""
     tag = 8
     mode = TaggingMode.IMPLICIT
@@ -56,19 +57,18 @@ class InitialResponse8(TaggedType[InitiateResponse]):
 # ============================================================================
 
 
-class ReadRequest(SequenceOfType[VariableAccessSpecification]):
-    """ReadRequest"""
-    component_type = VariableAccessSpecification
+ReadRequest: TypeAlias = SequenceOfType[VariableAccessSpecification]
+"""ReadRequest"""
 
 
-class ReadRequest5(TaggedType[ReadRequest]):
+class readRequest(TaggedType[ReadRequest]):
     """readRequest"""
     tag = 5
     mode = TaggingMode.IMPLICIT
     value: ReadRequest
 
 
-class DataBlockResult2(TaggedType[DataBlockResult]):
+class dataBlockResult(TaggedType[DataBlockResult]):
     """[2] IMPLICIT Data-Block-Result"""
     tag = 2
     mode = TaggingMode.IMPLICIT
@@ -92,34 +92,35 @@ class ReadResponseChoice(ChoiceType):
     """
     alternatives = create_alternatives(
         NamedType("data", Data0),
-        NamedType("data-access-error", DataAccesResult1),
-        NamedType("data-block-result", DataBlockResult2),
+        NamedType("data-access-error", DataAccessResult1),
+        NamedType("data-block-result", dataBlockResult),
         NamedType("block-number", BlockNumber3),
     )
-    value: DataBlockResult2 | DataAccesResult1 | DataBlockResult2 | BlockNumber3
+    value: dataBlockResult | DataAccessResult1 | dataBlockResult | BlockNumber3
 
 
-class ReadResponse(SequenceOfType[ReadResponseChoice]):
-    """ReadResponse"""
-    component_type = ReadResponseChoice
+ReadResponse: TypeAlias = SequenceOfType[ReadResponseChoice]
+"""ReadResponse"""
 
 
-class ReadResponse12(TaggedType[ReadResponse]):
-    """[12] IMPLICIT ReadResponse"""
+class readResponse(TaggedType[ReadResponse]):
+    """readResponse"""
     tag = 12
     mode = TaggingMode.IMPLICIT
     value: ReadResponse
 
 
+SequenceOfVariableAccessSpecification: TypeAlias = SequenceOfType[VariableAccessSpecification]
+"""SEQUENCE OF VariableAccessSpecification"""
+
+@dataclass
 class WriteRequest(SequenceType):
     """WriteRequest"""
-    components = (
-        NamedType("variable-access-specification", SequenceOfType[VariableAccessSpecification]),
-        NamedType("list-of-data", SequenceOfType[Data]),
-    )
+    variable_access_specification: SequenceOfVariableAccessSpecification
+    list_of_data: SequenceOfData
 
 
-class WriteRequest6(TaggedType[WriteRequest]):
+class writeRequest(TaggedType[WriteRequest]):
     """writeRequest"""
     tag = 6
     mode = TaggingMode.IMPLICIT
@@ -142,19 +143,18 @@ class WriteResponseChoice(ChoiceType):
     """
     alternatives = {
         0: NamedType("success", NullType0),
-        1: NamedType("data-access-error", DataAccesResult1),
+        1: NamedType("data-access-error", DataAccessResult1),
         2: NamedType("block-number", BlockNumber2),
     }
-    value: NullType0 | DataAccesResult1 | BlockNumber2
+    value: NullType0 | DataAccessResult1 | BlockNumber2
     SUCCESS: ClassVar["WriteResponseChoice"]
 
 
 WriteResponseChoice.SUCCESS = WriteResponseChoice(NullType0(NullType(None)))
 
 
-class WriteResponse(SequenceOfType[WriteResponseChoice]):
-    """WriteResponse"""
-    component_type = WriteResponseChoice
+WriteResponse: TypeAlias = SequenceOfType[WriteResponseChoice]
+"""WriteResponse"""
 
 
 class writeResponse(TaggedType[WriteResponse]):
@@ -171,53 +171,49 @@ class confirmedServiceError(TaggedType[ConfirmedServiceError]):
     value: ConfirmedServiceError
 
 
+@dataclass
 class NotificationBody(SequenceType):
     """NotificationBody"""
-    components = (
-        NamedType("data-value", Data),
-    )
+    data_value: Data
 
 
+@dataclass
 class DataNotification(SequenceType):
     """DataNotification"""
-    components = (
-        NamedType("long-invoke-id-and-priority", LongInvokeIdAndPriority),
-        NamedType("date-time", OctetStringType),
-        NamedType("notification-body", NotificationBody),
-    )
+    long_invoke_id_and_priority: LongInvokeIdAndPriority
+    date_time: OctetStringType
+    notification_body: NotificationBody
 
 
-class DataNotification15(TaggedType[DataNotification]):
+class dataNotification(TaggedType[DataNotification]):
     """data-notification"""
     tag = 15
     mode = TaggingMode.IMPLICIT
     value: DataNotification
 
 
+@dataclass
 class DataNotificationConfirm(SequenceType):
     """DataNotificationConfirm"""
-    components = (
-        NamedType("long-invoke-id-and-priority", LongInvokeIdAndPriority),
-        NamedType("date-time", OctetStringType),
-    )
+    long_invoke_id_and_priority: LongInvokeIdAndPriority
+    date_time: OctetStringType
 
 
-class DataNotificationConfirm16(TaggedType[DataNotificationConfirm]):
+class dataNotificationConfirm(TaggedType[DataNotificationConfirm]):
     """data-notification-confirm"""
     tag = 16
     mode = TaggingMode.IMPLICIT
     value: DataNotificationConfirm
 
 
+@dataclass
 class UnconfirmedWriteRequest(SequenceType):
     """UnconfirmedWriteRequest"""
-    components = (
-        NamedType("variable-access-specification", SequenceOfType[VariableAccessSpecification]),
-        NamedType("list-of-data", SequenceOfType[Data]),
-    )
+    variable_access_specification: SequenceOfVariableAccessSpecification
+    list_of_data: SequenceOfData
 
 
-class UnconfirmedWriteRequest22(TaggedType[UnconfirmedWriteRequest]):
+class unconfirmedWriteRequest(TaggedType[UnconfirmedWriteRequest]):
     """unconfirmedWriteRequest"""
     tag = 22
     mode = TaggingMode.IMPLICIT
@@ -226,14 +222,19 @@ class UnconfirmedWriteRequest22(TaggedType[UnconfirmedWriteRequest]):
 
 class InformationReportRequest(SequenceType):
     """InformationReportRequest"""
-    components = (
-        OptionalNamedType("current-time", GeneralizedTime),
-        NamedType("variable-access-specification", SequenceOfType[VariableAccessSpecification]),
-        NamedType("list-of-data", SequenceOfType[Data]),
-    )
+    current_time: Optional[GeneralizedTime] = None  # OPTIONAL — before mandatory
+    variable_access_specification: SequenceOfVariableAccessSpecification
+    list_of_data: SequenceOfData
+
+    def __init__(self, variable_access_specification: SequenceOfVariableAccessSpecification,
+                 list_of_data: SequenceOfData,
+                 current_time: Optional[GeneralizedTime] = None) -> None:
+        self.variable_access_specification = variable_access_specification
+        self.list_of_data = list_of_data
+        self.current_time = current_time
 
 
-class InformationReportRequest24(TaggedType[InformationReportRequest]):
+class informationReportRequest(TaggedType[InformationReportRequest]):
     """informationReportRequest"""
     tag = 24
     mode = TaggingMode.IMPLICIT
@@ -366,13 +367,12 @@ class DedInformationReportRequest(TaggedType[OctetStringType]):
     value: OctetStringType
 
 
+@dataclass
 class GetRequestNormal(SequenceType):
     """Get-Request-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        OptionalNamedType("access-selection", SelectiveAccessDescriptor),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None
 
 
 class GetRequestNormal1(TaggedType[GetRequestNormal]):
@@ -382,12 +382,11 @@ class GetRequestNormal1(TaggedType[GetRequestNormal]):
     value: GetRequestNormal
 
 
+@dataclass
 class GetRequestNext(SequenceType):
     """Get-Request-Next"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("block-number", Unsigned32),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    block_number: Unsigned32
 
 
 class GetRequestNext2(TaggedType[GetRequestNext]):
@@ -397,12 +396,15 @@ class GetRequestNext2(TaggedType[GetRequestNext]):
     value: GetRequestNext
 
 
+SequenceOfCosemAttributeDescriptorWithSelection: TypeAlias = SequenceOfType[CosemAttributeDescriptorWithSelection]
+"""SEQUENCE OF CosemAttributeDescriptorWithSelection"""
+
+
+@dataclass
 class GetRequestWithList(SequenceType):
     """Get-Request-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("attribute-descriptor-list", SequenceOfType[CosemAttributeDescriptorWithSelection]),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    attribute_descriptor_list: SequenceOfCosemAttributeDescriptorWithSelection
 
 
 class GetRequestWithList3(TaggedType[GetRequestWithList]):
@@ -428,12 +430,11 @@ class getRequest(TaggedType[GetRequest]):
     value: GetRequest
 
 
+@dataclass
 class GetResponseNormal(SequenceType):
     """Get-Response-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", GetDataResult),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: GetDataResult
 
 
 class GetResponseNormal1(TaggedType[GetResponseNormal]):
@@ -443,12 +444,11 @@ class GetResponseNormal1(TaggedType[GetResponseNormal]):
     value: GetResponseNormal
 
 
+@dataclass
 class GetResponseWithDatablock(SequenceType):
     """Get-Response-With-Datablock ::= SEQUENCE {invoke-id-and-priority, result}"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", DataBlockG),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: DataBlockG
 
 
 class GetResponseWithDatablock2(TaggedType[GetResponseWithDatablock]):
@@ -458,12 +458,15 @@ class GetResponseWithDatablock2(TaggedType[GetResponseWithDatablock]):
     value: GetResponseWithDatablock
 
 
+SequenceOfGetDataResult: TypeAlias = SequenceOfType[GetDataResult]
+"""SEQUENCE OF GetDataResult"""
+
+
+@dataclass
 class GetResponseWithList(SequenceType):
     """Get-Response-With-List ::= SEQUENCE {invoke-id-and-priority, result}"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", SequenceOfType[GetDataResult]),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: SequenceOfGetDataResult
 
 
 class GetResponseWithList3(TaggedType[GetResponseWithList]):
@@ -491,12 +494,19 @@ class getResponse(TaggedType[GetResponse]):
 
 class SetRequestNormal(SequenceType):
     """Set-Request-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        OptionalNamedType("access-selection", SelectiveAccessDescriptor),
-        NamedType("value", Data),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None  # OPTIONAL — между mandatory
+    value: Data
+
+    def __init__(self, invoke_id_and_priority: InvokeIdAndPriority,
+                 cosem_attribute_descriptor: CosemAttributeDescriptor,
+                 value: Data,
+                 access_selection: Optional[SelectiveAccessDescriptor] = None) -> None:
+        self.invoke_id_and_priority = invoke_id_and_priority
+        self.cosem_attribute_descriptor = cosem_attribute_descriptor
+        self.value = value
+        self.access_selection = access_selection
 
 
 class SetRequestNormal1(TaggedType[SetRequestNormal]):
@@ -508,12 +518,19 @@ class SetRequestNormal1(TaggedType[SetRequestNormal]):
 
 class SetRequestWithFirstDatablock(SequenceType):
     """Set-Request-With-First-Datablock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        OptionalNamedType("access-selection", SelectiveAccessDescriptor),
-        NamedType("datablock", DataBlockSA),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None  # OPTIONAL — между mandatory
+    datablock: DataBlockSA
+
+    def __init__(self, invoke_id_and_priority: InvokeIdAndPriority,
+                 cosem_attribute_descriptor: CosemAttributeDescriptor,
+                 datablock: DataBlockSA,
+                 access_selection: Optional[SelectiveAccessDescriptor] = None):
+        self.invoke_id_and_priority = invoke_id_and_priority
+        self.cosem_attribute_descriptor = cosem_attribute_descriptor
+        self.datablock = datablock
+        self.access_selection = access_selection
 
 
 class SetRequestWithFirstDatablock2(TaggedType[SetRequestWithFirstDatablock]):
@@ -525,12 +542,19 @@ class SetRequestWithFirstDatablock2(TaggedType[SetRequestWithFirstDatablock]):
 
 class SetRequestWithDatablock(SequenceType):
     """Set-Request-With-Datablock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        OptionalNamedType("access-selection", SelectiveAccessDescriptor),
-        NamedType("datablock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None  # OPTIONAL — между mandatory
+    datablock: DataBlockSA
+
+    def __init__(self, invoke_id_and_priority: InvokeIdAndPriority,
+                 cosem_attribute_descriptor: CosemAttributeDescriptor,
+                 datablock: DataBlockSA,
+                 access_selection: Optional[SelectiveAccessDescriptor] = None) -> None:
+        self.invoke_id_and_priority = invoke_id_and_priority
+        self.cosem_attribute_descriptor = cosem_attribute_descriptor
+        self.datablock = datablock
+        self.access_selection = access_selection
 
 
 class SetRequestWithDatablock3(TaggedType[SetRequestWithDatablock]):
@@ -540,13 +564,16 @@ class SetRequestWithDatablock3(TaggedType[SetRequestWithDatablock]):
     value: SetRequestWithDatablock
 
 
+SequenceOfCosemAttributeDescriptorWithSelection: TypeAlias = SequenceOfType[CosemAttributeDescriptorWithSelection]
+"""SEQUENCE OF CosemAttributeDescriptorWithSelection"""
+
+
+@dataclass
 class SetRequestWithList(SequenceType):
     """Set-Request-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("attribute-descriptor-list", SequenceOfType[CosemAttributeDescriptorWithSelection]),
-        NamedType("value-list", SequenceOfType[Data])
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    attribute_descriptor_list: SequenceOfCosemAttributeDescriptorWithSelection
+    value_list: SequenceOfData
 
 
 class SetRequestWithList4(TaggedType[SetRequestWithList]):
@@ -556,13 +583,12 @@ class SetRequestWithList4(TaggedType[SetRequestWithList]):
     value: SetRequestWithList
 
 
+@dataclass
 class SetRequestWithListAndFirstDatablock(SequenceType):
     """Set-Request-With-List-And-First-Datablock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("attribute-descriptor-list", SequenceOfType[CosemAttributeDescriptorWithSelection]),
-        NamedType("datablock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    attribute_descriptor_list: SequenceOfCosemAttributeDescriptorWithSelection
+    datablock: DataBlockSA
 
 
 class SetRequestWithListAndFirstDatablock5(TaggedType[SetRequestWithListAndFirstDatablock]):
@@ -590,12 +616,11 @@ class setRequest(TaggedType[SetRequest]):
     value: SetRequest
 
 
+@dataclass
 class SetResponseNormal(SequenceType):
     """Set-Response-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", GetDataResult),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: GetDataResult
 
 
 class SetResponseNormal1(TaggedType[SetResponseNormal]):
@@ -605,12 +630,11 @@ class SetResponseNormal1(TaggedType[SetResponseNormal]):
     value: SetResponseNormal
 
 
+@dataclass
 class SetResponseDatablock(SequenceType):
     """Set-Response-Datablock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("block-number", Unsigned32)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    block_number: Unsigned32
 
 
 class SetResponseDatablock2(TaggedType[SetResponseDatablock]):
@@ -620,13 +644,12 @@ class SetResponseDatablock2(TaggedType[SetResponseDatablock]):
     value: SetResponseDatablock
 
 
+@dataclass
 class SetResponseLastDatablock(SequenceType):
     """Set-Response-Last-Datablock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", DataAccessResult),
-        NamedType("block-number", Unsigned32)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: DataAccessResult
+    block_number: Unsigned32
 
 
 class SetResponseLastDatablock3(TaggedType[SetResponseLastDatablock]):
@@ -636,13 +659,16 @@ class SetResponseLastDatablock3(TaggedType[SetResponseLastDatablock]):
     value: SetResponseLastDatablock
 
 
+SequenceOfDataAccessResult: TypeAlias = SequenceOfType[DataAccessResult]
+"""SEQUENCE OF DataAccessResult"""
+
+
+@dataclass
 class SetResponseLastDatablockWithList(SequenceType):
     """Set-Response-Last-Datablock-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", SequenceOfType[DataAccessResult]),
-        NamedType("block-number", Unsigned32)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: SequenceOfDataAccessResult
+    block_number: Unsigned32
 
 
 class SetResponseLastDatablockWithList4(TaggedType[SetResponseLastDatablockWithList]):
@@ -652,12 +678,11 @@ class SetResponseLastDatablockWithList4(TaggedType[SetResponseLastDatablockWithL
     value: SetResponseLastDatablockWithList
 
 
+@dataclass
 class SetResponseWithList(SequenceType):
     """Set-Response-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("result", SequenceOfType[DataAccessResult]),
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    result: SequenceOfDataAccessResult
 
 
 class SetResponseWithList5(TaggedType[SetResponseWithList]):
@@ -685,94 +710,92 @@ class setResponse(TaggedType[SetResponse]):
     value: SetResponse
 
 
+@dataclass
 class ActionRequestNormal(SequenceType):
     """Action-Request-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-method-descriptor", CosemMethodDescriptor),
-        OptionalNamedType("method-invocation-parameters", Data)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_method_descriptor: CosemMethodDescriptor
+    method_invocation_parameters: Optional[Data] = None
 
 
-class ActionRequestNormal1(TaggedType[ActionRequestNormal]):
+class actionRequestNormal(TaggedType[ActionRequestNormal]):
     """[1] IMPLICIT Action-Request-Normal"""
     tag = 1
     mode = TaggingMode.IMPLICIT
     value: ActionRequestNormal
 
 
+@dataclass
 class ActionRequestNextPblock(SequenceType):
     """Action-Request-Next-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("block-number", Unsigned32)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    block_number: Unsigned32
 
 
-class ActionRequestNextPblock2(TaggedType[ActionRequestNextPblock]):
+class actionRequestNextPblock(TaggedType[ActionRequestNextPblock]):
     """[2] IMPLICIT Action-Request-Next-Pblock"""
     tag = 2
     mode = TaggingMode.IMPLICIT
     value: ActionRequestNextPblock
 
 
+SequenceOfCosemMethodDescriptor: TypeAlias = SequenceOfType[CosemMethodDescriptor]
+"""SEQUENCE OF CosemMethodDescriptor"""
+
+
+@dataclass
 class ActionRequestWithList(SequenceType):
     """Action-Request-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-method-descriptor-list", SequenceOfType[CosemMethodDescriptor]),
-        NamedType("method-invocation-parameters", SequenceOfType[Data])
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_method_descriptor_list: SequenceOfCosemMethodDescriptor
+    method_invocation_parameters: SequenceOfData
 
 
-class ActionRequestWithList3(TaggedType[ActionRequestWithList]):
+class actionRequestWithList(TaggedType[ActionRequestWithList]):
     """[3] IMPLICIT Action-Request-With-List"""
     tag = 3
     mode = TaggingMode.IMPLICIT
     value: ActionRequestWithList
 
 
+@dataclass
 class ActionRequestWithFirstPblock(SequenceType):
     """Action-Request-With-First-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-method-descriptor", CosemMethodDescriptor),
-        NamedType("pblock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_method_descriptor: CosemMethodDescriptor
+    pblock: DataBlockSA
 
 
-class ActionRequestWithFirstPblock4(TaggedType[ActionRequestWithFirstPblock]):
+class actionRequestWithFirstPblock(TaggedType[ActionRequestWithFirstPblock]):
     """[4] IMPLICIT Action-Request-With-First-Pblock"""
     tag = 4
     mode = TaggingMode.IMPLICIT
     value: ActionRequestWithFirstPblock
 
 
+@dataclass
 class ActionRequestWithListAndFirstPblock(SequenceType):
     """Action-Request-With-List-And-First-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("cosem-method-descriptor-list", SequenceOfType[CosemMethodDescriptor]),
-        NamedType("pblock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    cosem_method_descriptor_list: SequenceOfCosemMethodDescriptor
+    pblock: DataBlockSA
 
 
-class ActionRequestWithListAndFirstPblock5(TaggedType[ActionRequestWithListAndFirstPblock]):
+class actionRequestWithListAndFirstPblock(TaggedType[ActionRequestWithListAndFirstPblock]):
     """[5] IMPLICIT Action-Request-With-List-And-First-Pblock"""
     tag = 5
     mode = TaggingMode.IMPLICIT
     value: ActionRequestWithListAndFirstPblock
 
 
+@dataclass
 class ActionRequestWithPblock(SequenceType):
     """Action-Request-With-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("pblock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    pblock: DataBlockSA
 
 
-class ActionRequestWithPblock6(TaggedType[ActionRequestWithPblock]):
+class actionRequestWithPblock(TaggedType[ActionRequestWithPblock]):
     """[6] IMPLICIT Action-Request-With-Pblock"""
     tag = 6
     mode = TaggingMode.IMPLICIT
@@ -782,12 +805,12 @@ class ActionRequestWithPblock6(TaggedType[ActionRequestWithPblock]):
 class ActionRequest(ChoiceType):
     """Action-Request"""
     alternatives = {
-        1: NamedType("action-request-normal", ActionRequestNormal1),
-        2: NamedType("action-request-next-pblock", ActionRequestNextPblock2),
-        3: NamedType("action-request-with-list", ActionRequestWithList3),
-        4: NamedType("action-request-with-first-pblock", ActionRequestWithFirstPblock4),
-        5: NamedType("action-request-with-list-and-first-pblock", ActionRequestWithListAndFirstPblock5),
-        6: NamedType("action-request-with-pblock", ActionRequestWithPblock6)
+        1: NamedType("action-request-normal", actionRequestNormal),
+        2: NamedType("action-request-next-pblock", actionRequestNextPblock),
+        3: NamedType("action-request-with-list", actionRequestWithList),
+        4: NamedType("action-request-with-first-pblock", actionRequestWithFirstPblock),
+        5: NamedType("action-request-with-list-and-first-pblock", actionRequestWithListAndFirstPblock),
+        6: NamedType("action-request-with-pblock", actionRequestWithPblock)
     }
 
 
@@ -798,61 +821,61 @@ class actionRequest(TaggedType[ActionRequest]):
     value: ActionRequest
 
 
+@dataclass
 class ActionResponseNormal(SequenceType):
     """Action-Response-Normal"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("single-response", ActionResponseWithOptionalData)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    single_response: ActionResponseWithOptionalData
 
 
-class ActionResponseNormal1(TaggedType[ActionResponseNormal]):
-    """[1] IMPLICIT Action-Response-Normal"""
+class actionResponseNormal(TaggedType[ActionResponseNormal]):
+    """action-response-normal"""
     tag = 1
     mode = TaggingMode.IMPLICIT
     value: ActionResponseNormal
 
 
+@dataclass
 class ActionResponseWithPblock(SequenceType):
     """Action-Response-With-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("pblock", DataBlockSA)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    pblock: DataBlockSA
 
 
-class ActionResponseWithPblock2(TaggedType[ActionResponseWithPblock]):
-    """[2] IMPLICIT Action-Response-With-Pblock"""
+class actionResponseWithPblock(TaggedType[ActionResponseWithPblock]):
+    """action-response-with-pblock"""
     tag = 2
     mode = TaggingMode.IMPLICIT
     value: ActionResponseWithPblock
 
 
+SequenceOfActionResponseWithOptionalData: TypeAlias = SequenceOfType[ActionResponseWithOptionalData]
+"""SEQUENCE OF ActionResponseWithOptionalData"""
+
+
+@dataclass
 class ActionResponseWithList(SequenceType):
     """Action-Response-With-List"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("list-of-responses", SequenceOfType[ActionResponseWithOptionalData])
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    list_of_responses: SequenceOfActionResponseWithOptionalData
 
 
-class ActionResponseWithList3(TaggedType[ActionResponseWithList]):
-    """[3] IMPLICIT Action-Response-With-List"""
+class actionResponseWithList(TaggedType[ActionResponseWithList]):
+    """action-response-with-list"""
     tag = 3
     mode = TaggingMode.IMPLICIT
     value: ActionResponseWithList
 
 
+@dataclass
 class ActionResponseNextPblock(SequenceType):
     """Action-Response-Next-Pblock"""
-    components = (
-        NamedType("invoke-id-and-priority", InvokeIdAndPriority),
-        NamedType("block-number", Unsigned32)
-    )
+    invoke_id_and_priority: InvokeIdAndPriority
+    block_number: Unsigned32
 
 
-class ActionResponseNextPblock4(TaggedType[ActionResponseNextPblock]):
-    """[4] IMPLICIT Action-Response-Next-Pblock"""
+class actionResponseNextPblock(TaggedType[ActionResponseNextPblock]):
+    """action-response-next-pblock"""
     tag = 4
     mode = TaggingMode.IMPLICIT
     value: ActionResponseNextPblock
@@ -861,10 +884,10 @@ class ActionResponseNextPblock4(TaggedType[ActionResponseNextPblock]):
 class ActionResponse(ChoiceType):
     """Action-Response"""
     alternatives = {
-        1: NamedType("action-response-normal", ActionResponseNormal1),
-        2: NamedType("action-response-with-pblock", ActionResponseWithPblock2),
-        3: NamedType("action-response-with-list", ActionResponseWithList3),
-        4: NamedType("action-response-next-pblock", ActionResponseNextPblock4)
+        1: NamedType("action-response-normal", actionResponseNormal),
+        2: NamedType("action-response-with-pblock", actionResponseWithPblock),
+        3: NamedType("action-response-with-list", actionResponseWithList),
+        4: NamedType("action-response-next-pblock", actionResponseNextPblock)
     }
 
 
@@ -877,11 +900,16 @@ class actionResponse(TaggedType[ActionResponse]):
 
 class EventNotificationRequest(SequenceType):
     """EventNotificationRequest"""
-    components = (
-        OptionalNamedType("time", OctetStringType),
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        NamedType("attribute-value", Data)
-    )
+    time: Optional[OctetStringType] = None  # OPTIONAL — before mandatory
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    attribute_value: Data
+
+    def __init__(self, cosem_attribute_descriptor: CosemAttributeDescriptor,
+                 attribute_value: Data,
+                 time: Optional[OctetStringType] = None) -> None:
+        self.cosem_attribute_descriptor = cosem_attribute_descriptor
+        self.attribute_value = attribute_value
+        self.time = time
 
 
 class eventNotificationRequest(TaggedType[EventNotificationRequest]):
@@ -1056,7 +1084,15 @@ class InvocationCounterError(TaggedType[Unsigned32]):
 
 
 class ServiceErrorChoice(ChoiceType):
-    """service-error"""
+    """ CHOICE
+    {
+    operation-not-possible [1] IMPLICIT NULL,
+    service-not-supported [2] IMPLICIT NULL,
+    other-reason [3] IMPLICIT NULL,
+    pdu-too-long [4] IMPLICIT NULL,
+    deciphering-error [5] IMPLICIT NULL,
+    invocation-counter-error [6] IMPLICIT Unsigned32
+    }"""
     alternatives = {
         1: NamedType("operation-not-possible", OperationNotPossible),
         2: NamedType("service-not-supported", ServiceNotSupported),
@@ -1067,31 +1103,30 @@ class ServiceErrorChoice(ChoiceType):
     }
 
 
-class ServiceError(TaggedType[ServiceErrorChoice]):
-    """[1] IMPLICIT service-error"""
+class serviceError(TaggedType[ServiceErrorChoice]):
+    """service-error"""
     tag = 1
     mode = TaggingMode.DEFAULT
     value: ServiceErrorChoice
-    OPERATION_NOT_POSSIBLE: ClassVar["ServiceError"]
-    SERVICE_NOT_SUPPORTED: ClassVar["ServiceError"]
-    OTHER_REASON: ClassVar["ServiceError"]
-    PDU_TOO_LONG: ClassVar["ServiceError"]
-    DECIPHERING_ERROR: ClassVar["ServiceError"]
+    OPERATION_NOT_POSSIBLE: ClassVar["serviceError"]
+    SERVICE_NOT_SUPPORTED: ClassVar["serviceError"]
+    OTHER_REASON: ClassVar["serviceError"]
+    PDU_TOO_LONG: ClassVar["serviceError"]
+    DECIPHERING_ERROR: ClassVar["serviceError"]
 
 
-ServiceError.OPERATION_NOT_POSSIBLE = ServiceError(ServiceErrorChoice(OperationNotPossible(NullType(None))))
-ServiceError.SERVICE_NOT_SUPPORTED = ServiceError(ServiceErrorChoice(ServiceNotSupported(NullType(None))))
-ServiceError.OTHER_REASON = ServiceError(ServiceErrorChoice(OtherReason(NullType(None))))
-ServiceError.PDU_TOO_LONG = ServiceError(ServiceErrorChoice(PduTooLong(NullType(None))))
-ServiceError.DECIPHERING_ERROR = ServiceError(ServiceErrorChoice(DecipheringError(NullType(None))))
+serviceError.OPERATION_NOT_POSSIBLE = serviceError(ServiceErrorChoice(OperationNotPossible(NullType(None))))
+serviceError.SERVICE_NOT_SUPPORTED = serviceError(ServiceErrorChoice(ServiceNotSupported(NullType(None))))
+serviceError.OTHER_REASON = serviceError(ServiceErrorChoice(OtherReason(NullType(None))))
+serviceError.PDU_TOO_LONG = serviceError(ServiceErrorChoice(PduTooLong(NullType(None))))
+serviceError.DECIPHERING_ERROR = serviceError(ServiceErrorChoice(DecipheringError(NullType(None))))
 
 
+@dataclass
 class ExceptionResponse(SequenceType):
     """ExceptionResponse"""
-    components = (
-        NamedType("state-error", StateError),
-        NamedType("service-error", ServiceError)
-    )
+    state_error: StateError
+    service_error: serviceError
 
 
 class exceptionResponse(TaggedType[ExceptionResponse]):
@@ -1101,13 +1136,12 @@ class exceptionResponse(TaggedType[ExceptionResponse]):
     value: ExceptionResponse
 
 
+@dataclass
 class AccessRequest(SequenceType):
     """Access-Request"""
-    components = (
-        NamedType("long-invoke-id-and-priority", LongInvokeIdAndPriority),
-        NamedType("date-time", OctetStringType),
-        NamedType("access-request-body", AccessRequestBody)
-    )
+    long_invoke_id_and_priority: LongInvokeIdAndPriority
+    date_time: OctetStringType
+    access_request_body: AccessRequestBody
 
 
 class accessRequest(TaggedType[AccessRequest]):
@@ -1117,13 +1151,12 @@ class accessRequest(TaggedType[AccessRequest]):
     value: AccessRequest
 
 
+@dataclass
 class AccessResponse(SequenceType):
     """Access-Response"""
-    components = (
-        NamedType("long-invoke-id-and-priority", LongInvokeIdAndPriority),
-        NamedType("date-time", OctetStringType),
-        NamedType("access-response-body", AccessResponseBody)
-    )
+    long_invoke_id_and_priority: LongInvokeIdAndPriority
+    date_time: OctetStringType
+    access_response_body: AccessResponseBody
 
 
 class accessResponse(TaggedType[AccessResponse]):
@@ -1149,12 +1182,11 @@ class BlockControl(Unsigned8):
         return bool(self.value.value & 0x80)
 
 
+@dataclass
 class GeneralDedCiphering(SequenceType):
     """General-Ded-Ciphering"""
-    components = (
-        NamedType("system-title", OctetStringType),
-        NamedType("ciphered-content", OctetStringType)
-    )
+    system_title: OctetStringType
+    ciphered_content: OctetStringType
 
 
 class generalDedCiphering(TaggedType[GeneralDedCiphering]):
@@ -1164,12 +1196,11 @@ class generalDedCiphering(TaggedType[GeneralDedCiphering]):
     value: GeneralDedCiphering
 
 
+@dataclass
 class GeneralGloCiphering(SequenceType):
     """General-Glo-Ciphering"""
-    components = (
-        NamedType("system-title", OctetStringType),
-        NamedType("ciphered-content", OctetStringType)
-    )
+    system_title: OctetStringType
+    ciphered_content: OctetStringType
 
 
 class generalGloCiphering(TaggedType[GeneralGloCiphering]):
@@ -1179,17 +1210,16 @@ class generalGloCiphering(TaggedType[GeneralGloCiphering]):
     value: GeneralGloCiphering
 
 
+@dataclass
 class GeneralCiphering(SequenceType):
     """General-Ciphering"""
-    components = (
-        NamedType("transaction-id", OctetStringType),
-        NamedType("originator-system-title", OctetStringType),
-        NamedType("recipient-system-title", OctetStringType),
-        NamedType("date-time", OctetStringType),
-        NamedType("other-information", OctetStringType),
-        NamedType("key-info", KeyInfo),
-        NamedType("ciphered-content", OctetStringType)
-    )
+    transaction_id: OctetStringType
+    originator_system_title: OctetStringType
+    recipient_system_title: OctetStringType
+    date_time: OctetStringType
+    other_information: OctetStringType
+    key_info: KeyInfo
+    ciphered_content: OctetStringType
 
 
 class generalCiphering(TaggedType[GeneralCiphering]):
@@ -1199,17 +1229,16 @@ class generalCiphering(TaggedType[GeneralCiphering]):
     value: GeneralCiphering
 
 
+@dataclass
 class GeneralSigning(SequenceType):
     """General-Signing"""
-    components = (
-        NamedType("transaction-id", OctetStringType),
-        NamedType("originator-system-title", OctetStringType),
-        NamedType("recipient-system-title", OctetStringType),
-        NamedType("date-time", OctetStringType),
-        NamedType("other-information", OctetStringType),
-        NamedType("content", OctetStringType),
-        NamedType("signature", OctetStringType)
-    )
+    transaction_id: OctetStringType
+    originator_system_title: OctetStringType
+    recipient_system_title: OctetStringType
+    date_time: OctetStringType
+    other_information: OctetStringType
+    content: OctetStringType
+    signature: OctetStringType
 
 
 class generalSigning(TaggedType[GeneralSigning]):
@@ -1219,14 +1248,13 @@ class generalSigning(TaggedType[GeneralSigning]):
     value: GeneralSigning
 
 
+@dataclass
 class GeneralBlockTransfer(SequenceType):
     """General-Block-Transfer"""
-    components = (
-        NamedType("block-control", BlockControl),
-        NamedType("block-number", Unsigned16),
-        NamedType("block-number-ack", Unsigned16),
-        NamedType("block-data", OctetStringType)
-    )
+    block_control: BlockControl
+    block_number: Unsigned16
+    block_number_ack: Unsigned16
+    block_data: OctetStringType
 
 
 class generalBlockTransfer(TaggedType[GeneralBlockTransfer]):
@@ -1244,17 +1272,17 @@ class generalBlockTransfer(TaggedType[GeneralBlockTransfer]):
 class XDLMS_APDU(ChoiceType):
     """XDLMS-APDU"""
     alternatives = {
-        1: NamedType("initiateRequest", InitialRequest1),
-        5: NamedType("readRequest", ReadRequest5),
-        6: NamedType("writeRequest", WriteRequest6),
-        8: NamedType("initiateResponse", InitialResponse8),
-        12: NamedType("readResponse", ReadResponse12),
+        1: NamedType("initiateRequest", initialRequest),
+        5: NamedType("readRequest", readRequest),
+        6: NamedType("writeRequest", writeRequest),
+        8: NamedType("initiateResponse", initialResponse),
+        12: NamedType("readResponse", readResponse),
         13: NamedType("writeResponse", writeResponse),
         14: NamedType("confirmedServiceError", confirmedServiceError),
-        15: NamedType("data-notification", DataNotification15),
-        16: NamedType("data-notification-confirm", DataNotificationConfirm16),
-        22: NamedType("unconfirmedWriteRequest", UnconfirmedWriteRequest22),
-        24: NamedType("informationReportRequest", InformationReportRequest24),
+        15: NamedType("data-notification", dataNotification),
+        16: NamedType("data-notification-confirm", dataNotificationConfirm),
+        22: NamedType("unconfirmedWriteRequest", unconfirmedWriteRequest),
+        24: NamedType("informationReportRequest", informationReportRequest),
         # -- with global ciphering (OCTET STRING)
         33: NamedType("glo-initiateRequest", GloInitiateRequest),
         37: NamedType("glo-readRequest", GloReadRequest),

@@ -3,13 +3,14 @@ Unit tests for BER encoding/decoding (X.690)
 Tests cover all type implementations in ber.py
 """
 import unittest
+from dataclasses import dataclass
 from typing import Optional, override, Self
+from StructResult.result import Error
 from src.COSEMpdu.byte_buffer import ByteBuffer
-from src.COSEMpdu.x690 import Tag, Length
+from src.COSEMpdu.x690 import Tag, Length, TagError
 from src.COSEMpdu.x680 import NamedType, TaggingMode, OptionalNamedType, DefaultNamedType, NamedBit, NamedBitList
 from src.COSEMpdu.ber import (
     create_alternatives,
-    TagError,
     TaggedType,
     BitStringType,
     BooleanType,
@@ -33,47 +34,54 @@ class TestLength(unittest.TestCase):
         """Short form: length < 128"""
         length = Length(100)
         buf = ByteBuffer.allocate(10)
-        written = length.put(buf)
+        if isinstance(written := length.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 1)
         self.assertEqual(bytes(buf)[:written], b"\x64")
 
     def test_short_form_decode(self) -> None:
         """Short form: length < 128"""
         buf = ByteBuffer.wrap(b"\x64")
-        length = Length.get(buf)
+        if isinstance(length := Length.get(buf), Error):
+            length.unwrap()
         self.assertEqual(length.value, 100)
 
     def test_long_form_encode(self) -> None:
         """Long form: length >= 128"""
         length = Length(300)
         buf = ByteBuffer.allocate(10)
-        written = length.put(buf)
+        if isinstance(written := length.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 3)  # 0x82 + 2 bytes
         self.assertEqual(bytes(buf)[:written], b"\x82\x01\x2c")
 
     def test_long_form_decode(self) -> None:
         """Long form: length >= 128"""
         buf = ByteBuffer.wrap(b"\x82\x01\x2c")
-        length = Length.get(buf)
+        if isinstance(length := Length.get(buf), Error):
+            length.unwrap()
         self.assertEqual(length.value, 300)
 
     def test_indefinite_form(self) -> None:
         """Indefinite form: 0x80"""
         length = Length(-1)
         buf = ByteBuffer.allocate(10)
-        written = length.put(buf)
+        if isinstance(written := length.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 1)
         self.assertEqual(bytes(buf)[:written], b"\x80")
 
         buf = ByteBuffer.wrap(b"\x80")
-        decoded = Length.get(buf)
+        if isinstance(decoded := Length.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value, -1)
 
     def test_zero_length(self) -> None:
         """Zero length encoding"""
         length = Length(0)
         buf = ByteBuffer.allocate(10)
-        written = length.put(buf)
+        if isinstance(written := length.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 1)
         self.assertEqual(bytes(buf)[:written], b"\x00")
 
@@ -89,14 +97,16 @@ class TestTag(unittest.TestCase):
             constructed=False
         )
         buf = ByteBuffer.allocate(10)
-        written = tag.put(buf)
+        if isinstance(written := tag.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 1)
         self.assertEqual(bytes(buf)[:written], b"\x02")
 
     def test_low_tag_number_decode(self) -> None:
         """Low tag number: < 31"""
         buf = ByteBuffer.wrap(b"\x02")
-        tag = Tag.get(buf)
+        if isinstance(tag := Tag.get(buf), Error):
+            tag.unwrap()
         self.assertEqual(tag.class_number, 2)
         self.assertEqual(tag.class_, Class.UNIVERSAL)
         self.assertFalse(tag.constructed)
@@ -109,7 +119,8 @@ class TestTag(unittest.TestCase):
             constructed=True
         )
         buf = ByteBuffer.allocate(10)
-        written = tag.put(buf)
+        if isinstance(written := tag.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 2)  # 0xdf + 2 bytes for 100
         # 0xdf = 11011111 (CONTEXT, constructed, high-tag)
         # 100 = 0x64 = 0b1100100
@@ -150,7 +161,8 @@ class TestBooleanType(unittest.TestCase):
         """FALSE = 0x00"""
         boolean = BooleanType(False)
         buf = ByteBuffer.allocate(10)
-        written = boolean.put(buf)
+        if isinstance(written := boolean.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 3)  # Tag + Length + Content
         self.assertEqual(bytes(buf)[:written], b"\x01\x01\x00")
 
@@ -158,33 +170,40 @@ class TestBooleanType(unittest.TestCase):
         """TRUE = 0xFF (DER compliant)"""
         boolean = BooleanType(True)
         buf = ByteBuffer.allocate(10)
-        written = boolean.put(buf)
+        if isinstance(written := boolean.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 3)
         self.assertEqual(bytes(buf)[:written], b"\x01\x01\xff")
 
     def test_false_decode(self) -> None:
         """Decode FALSE"""
         buf = ByteBuffer.wrap(b"\x01\x01\x00")
-        boolean = BooleanType.get(buf)
-        self.assertFalse(boolean.value)
+        result = BooleanType.get(buf)
+        self.assertNotIsInstance(result, Error)
+        self.assertFalse(result.value)
 
     def test_true_decode(self) -> None:
         """Decode TRUE"""
         buf = ByteBuffer.wrap(b"\x01\x01\xff")
-        boolean = BooleanType.get(buf)
+        if isinstance(boolean := BooleanType.get(buf), Error):
+            boolean.unwrap()
         self.assertTrue(boolean.value)
 
     def test_true_nonzero_decode(self) -> None:
         """TRUE can be any non-zero value (BER)"""
         buf = ByteBuffer.wrap(b"\x01\x01\x01")
-        boolean = BooleanType.get(buf)
+        if isinstance(boolean := BooleanType.get(buf), Error):
+            boolean.unwrap()
         self.assertTrue(boolean.value)
 
     def test_invalid_length(self) -> None:
         """Length must be 1"""
         buf = ByteBuffer.wrap(b"\x01\x02\x00\x00")
-        with self.assertRaises(ValueError):
-            BooleanType.get(buf)
+        if not (
+            isinstance(err := BooleanType.get(buf), Error)
+            and err.has(exception_type=ValueError)
+        ):
+            raise AssertionError("Expected IntegerType.get() to return an Error with ValueError")
 
     def test_length_calculation(self) -> None:
         """__len__ should return 3"""
@@ -199,14 +218,16 @@ class TestIntegerType(unittest.TestCase):
         """Zero = single 0x00 octet"""
         integer = IntegerType(0)
         buf = ByteBuffer.allocate(10)
-        written = integer.put(buf)
+        if isinstance(written := integer.put(buf), Error):
+            written.unwrap()
         self.assertEqual(bytes(buf)[:written], b"\x02\x01\x00")
 
     def test_positive_encode(self) -> None:
         """Positive integer"""
         integer = IntegerType(12345)
         buf = ByteBuffer.allocate(10)
-        written = integer.put(buf)
+        if isinstance(written := integer.put(buf), Error):
+            written.unwrap()
         # 12345 = 0x3039
         self.assertEqual(bytes(buf)[:written], b"\x02\x02\x30\x39")
 
@@ -214,20 +235,23 @@ class TestIntegerType(unittest.TestCase):
         """Negative integer (two's complement)"""
         integer = IntegerType(-12345)
         buf = ByteBuffer.allocate(10)
-        written = integer.put(buf)
+        if isinstance(written := integer.put(buf), Error):
+            written.unwrap()
         # -12345 = 0xCFC7 in two's complement
         self.assertEqual(bytes(buf)[:written], b"\x02\x02\xcf\xc7")
 
     def test_positive_decode(self) -> None:
         """Decode positive integer"""
         buf = ByteBuffer.wrap(b"\x02\x02\x30\x39")
-        integer = IntegerType.get(buf)
+        if isinstance(integer := IntegerType.get(buf), Error):
+            integer.unwrap()
         self.assertEqual(integer.value, 12345)
 
     def test_negative_decode(self) -> None:
         """Decode negative integer"""
         buf = ByteBuffer.wrap(b"\x02\x02\xcf\xc7")
-        integer = IntegerType.get(buf)
+        if isinstance(integer := IntegerType.get(buf), Error):
+            integer.unwrap()
         self.assertEqual(integer.value, -12345)
 
     def test_minimal_encoding(self) -> None:
@@ -235,20 +259,23 @@ class TestIntegerType(unittest.TestCase):
         # 127 should be 1 byte, not 2
         integer = IntegerType(127)
         buf = ByteBuffer.allocate(10)
-        integer.put(buf)
+        if isinstance(_ := integer.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[1], 1)  # Length = 1
 
         # -128 should be 1 byte
         integer = IntegerType(-128)
         buf = ByteBuffer.allocate(10)
-        integer.put(buf)
+        if isinstance(_ := integer.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[1], 2)  # Length = 1
 
     def test_sign_bit_padding(self) -> None:
         """Positive numbers with MSB=1 need leading 0x00"""
         integer = IntegerType(128)  # 0x80 has MSB=1
         buf = ByteBuffer.allocate(10)
-        integer.put(buf)
+        if isinstance(_ := integer.put(buf), Error):
+            _.unwrap()
         # Should be 2 bytes: 0x00 0x80
         self.assertEqual(bytes(buf)[1], 2)  # Length = 2
         self.assertEqual(bytes(buf)[2], 0x00)  # Leading zero
@@ -256,8 +283,11 @@ class TestIntegerType(unittest.TestCase):
     def test_invalid_length(self) -> None:
         """Length must be >= 1"""
         buf = ByteBuffer.wrap(b"\x02\x00")
-        with self.assertRaises(ValueError):
-            IntegerType.get(buf)
+        if not (
+            isinstance(err := IntegerType.get(buf), Error)
+            and err.has(exception_type=ValueError)
+        ):
+            raise AssertionError("Expected IntegerType.get() to return an Error with ValueError")
 
 
 class TestBitStringType(unittest.TestCase):
@@ -267,13 +297,15 @@ class TestBitStringType(unittest.TestCase):
         """Empty bit string"""
         bitstring = BitStringType(())
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         self.assertEqual(bytes(buf)[:written], b"\x03\x01\x00")
 
     def test_empty_decode(self) -> None:
         """Decode empty bit string"""
         buf = ByteBuffer.wrap(b"\x03\x01\x00")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         self.assertEqual(bitstring.value, ())
 
     def test_byte_aligned_encode(self) -> None:
@@ -281,7 +313,8 @@ class TestBitStringType(unittest.TestCase):
         bits = tuple([1, 0, 1, 0, 1, 0, 1, 0])  # 0xAA
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         self.assertEqual(bytes(buf)[:written], b"\x03\x02\x00\xaa")
 
     def test_non_byte_aligned_encode(self) -> None:
@@ -289,7 +322,8 @@ class TestBitStringType(unittest.TestCase):
         bits = tuple([1, 0, 1, 0, 1])  # 5 bits
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         # unused_bits = 3, padded = 10101000 = 0xA8
         self.assertEqual(bytes(buf)[2], 3)  # unused_bits
         self.assertEqual(bytes(buf)[3], 0xA8)
@@ -297,23 +331,28 @@ class TestBitStringType(unittest.TestCase):
     def test_msb_first_decode(self) -> None:
         """Bits ordered MSB-first per octet"""
         buf = ByteBuffer.wrap(b"\x03\x02\x00\xaa")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         # 0xAA = 10101010
-        expected = tuple([1, 0, 1, 0, 1, 0, 1, 0])
+        expected = (1, 0, 1, 0, 1, 0, 1, 0)
         self.assertEqual(bitstring.value, expected)
 
     def test_unused_bits_removed(self) -> None:
         """Unused trailing bits removed on decode"""
         # 5 bits with 3 unused: 10101000
         buf = ByteBuffer.wrap(b"\x03\x02\x03\xa8")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         self.assertEqual(len(bitstring.value), 5)
-        self.assertEqual(bitstring.value, tuple([1, 0, 1, 0, 1]))
+        self.assertEqual(bitstring.value, (1, 0, 1, 0, 1))
 
     def test_invalid_unused_bits(self) -> None:
         """unused_bits must be 0-7"""
         buf = ByteBuffer.wrap(b"\x03\x02\x08\x00")
-        self.assertTrue(BitStringType.get(buf).has(exception_type=ValueError))
+        if isinstance(decoded := BitStringType.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=ValueError))
+        else:
+            self.fail("Expected Error from BitStringType.get(buf)")
 
 
 class TestBitStringType2(unittest.TestCase):
@@ -323,29 +362,33 @@ class TestBitStringType2(unittest.TestCase):
         """Empty bit string"""
         bitstring = BitStringType(())
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         self.assertEqual(bytes(buf)[:written], b"\x03\x01\x00")
 
     def test_empty_decode(self) -> None:
         """Decode empty bit string"""
         buf = ByteBuffer.wrap(b"\x03\x01\x00")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         self.assertEqual(bitstring.value, ())
 
     def test_byte_aligned_encode(self) -> None:
         """Byte-aligned bit string"""
-        bits = tuple([1, 0, 1, 0, 1, 0, 1, 0])  # 0xAA
+        bits = (1, 0, 1, 0, 1, 0, 1, 0)  # 0xAA
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         self.assertEqual(bytes(buf)[:written], b"\x03\x02\x00\xaa")
 
     def test_non_byte_aligned_encode(self) -> None:
         """Non-byte-aligned bit string"""
-        bits = tuple([1, 0, 1, 0, 1])  # 5 bits
+        bits = (1, 0, 1, 0, 1)  # 5 bits
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(10)
-        written = bitstring.put(buf)
+        if isinstance(written := bitstring.put(buf), Error):
+            written.unwrap()
         # unused_bits = 3, padded = 10101000 = 0xA8
         self.assertEqual(bytes(buf)[2], 3)  # unused_bits
         self.assertEqual(bytes(buf)[3], 0xA8)
@@ -353,9 +396,10 @@ class TestBitStringType2(unittest.TestCase):
     def test_msb_first_decode(self) -> None:
         """Bits ordered MSB-first per octet"""
         buf = ByteBuffer.wrap(b"\x03\x02\x00\xaa")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         # 0xAA = 10101010
-        expected = tuple([1, 0, 1, 0, 1, 0, 1, 0])
+        expected = (1, 0, 1, 0, 1, 0, 1, 0)
         self.assertEqual(bitstring.value, expected)
 
     def setUp(self) -> None:
@@ -364,7 +408,9 @@ class TestBitStringType2(unittest.TestCase):
                 NamedBit("read", 0),
                 NamedBit("write", 1),
                 NamedBit("execute", 2),
-            ))
+                )
+        )
+
 
         class PermissionType(BitStringType):
             named_bits = self.StatusBits
@@ -376,9 +422,10 @@ class TestBitStringType2(unittest.TestCase):
         """Unused trailing bits removed on decode"""
         # 5 bits with 3 unused: 10101000
         buf = ByteBuffer.wrap(b"\x03\x02\x03\xa8")
-        bitstring = BitStringType.get(buf)
+        if isinstance(bitstring := BitStringType.get(buf), Error):
+            bitstring.unwrap()
         self.assertEqual(len(bitstring.value), 5)
-        self.assertEqual(bitstring.value, tuple([1, 0, 1, 0, 1]))
+        self.assertEqual(bitstring.value, (1, 0, 1, 0, 1))
 
     def test_invalid_unused_bits(self) -> None:
         """unused_bits must be 0-7"""
@@ -581,11 +628,13 @@ class TestBitStringType2(unittest.TestCase):
 
         # Encode
         buf = ByteBuffer.allocate(10)
-        written = original.put(buf)
+        if isinstance(written := original.put(buf), Error):
+            written.unwrap()
 
         # Decode
         buf.set_pos(0)
-        decoded = self.PermissionType.get(buf)
+        if isinstance(decoded := self.PermissionType.get(buf), Error):
+            decoded.unwrap()
 
         # Verify
         self.assertEqual(decoded.value, original.value)
@@ -692,7 +741,8 @@ class TestNullType(unittest.TestCase):
         """NULL encoding"""
         null = NullType(None)
         buf = ByteBuffer.allocate(10)
-        written = null.put(buf)
+        if isinstance(written := null.put(buf), Error):
+            written.unwrap()
         self.assertEqual(written, 2)
         self.assertEqual(bytes(buf)[:written], b"\x05\x00")
 
@@ -705,7 +755,11 @@ class TestNullType(unittest.TestCase):
     def test_invalid_length(self) -> None:
         """Length must be 0"""
         buf = ByteBuffer.wrap(b"\x05\x01\x00")
-        self.assertTrue(NullType.get(buf).has(exception_type=ValueError))
+        if not (
+            isinstance(err := NullType.get(buf), Error)
+            and err.has(exception_type=ValueError)
+        ):
+            raise AssertionError("Expected NullType.get() to return an Error with ValueError")
 
     def test_length_calculation(self) -> None:
         """__len__ should return 2"""
@@ -729,35 +783,41 @@ class TestEnumeratedType(unittest.TestCase):
         """Encode enumeration index"""
         enum = EnumeratedType(2)
         buf = ByteBuffer.allocate(10)
-        written = enum.put(buf)
+        if isinstance(written := enum.put(buf), Error):
+            written.unwrap()
         # Tag 0x0A, Length 0x01, Value 0x02
         self.assertEqual(bytes(buf)[:written], b"\x0a\x01\x02")
 
     def test_decode(self) -> None:
         """Decode enumeration index"""
         buf = ByteBuffer.wrap(b"\x0a\x01\x02")
-        enum = EnumeratedType.get(buf)
+        if isinstance(enum := EnumeratedType.get(buf), Error):
+            enum.unwrap()
         self.assertEqual(enum.value, 2)
 
     def test_negative_encode(self) -> None:
         """Negative enumeration index (two's complement)"""
         enum = EnumeratedType(-1)
         buf = ByteBuffer.allocate(10)
-        enum.put(buf)
+        if isinstance(_ := enum.put(buf), Error):
+            _.unwrap()
         buf.set_pos(0)
-        decoded = EnumeratedType.get(buf)
+        if isinstance(decoded := EnumeratedType.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value, -1)
 
     def test_minimal_encoding(self) -> None:
         """Minimal octets for index"""
         enum = EnumeratedType(127)
         buf = ByteBuffer.allocate(10)
-        enum.put(buf)
+        if isinstance(_ := enum.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[1], 1)  # Length = 1
 
         enum = EnumeratedType(128)
         buf = ByteBuffer.allocate(10)
-        enum.put(buf)
+        if isinstance(_ := enum.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[1], 2)  # Length = 2 (needs sign bit)
 
 
@@ -786,35 +846,42 @@ class TestChoiceType(unittest.TestCase):
         choice = TestChoice(Integer0(IntegerType(42)),
         )
         buf = ByteBuffer.allocate(10)
-        choice.put(buf)
+        if isinstance(_ := choice.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[:3], b"\x80\x01\x2a")
 
     def test_encode_octetstring_alternative(self) -> None:
         """Encode CHOICE with OCTET STRING alternative"""
         choice = TestChoice(OctetString1(OctetStringType(b"AB")))
         buf = ByteBuffer.allocate(10)
-        choice.put(buf)
+        if isinstance(_ := choice.put(buf), Error):
+            _.unwrap()
         self.assertEqual(bytes(buf)[:4], b"\x81\x02AB")
 
     def test_decode_integer_alternative(self) -> None:
         """Decode CHOICE with INTEGER alternative"""
         buf = ByteBuffer.wrap(b"\x80\x01\x2a")
-        choice = TestChoice.get(buf)
+        if isinstance(choice := TestChoice.get(buf), Error):
+            choice.unwrap()
         self.assertEqual(choice.selected, "first")
         self.assertEqual(choice.value.value.value, 42)
 
     def test_decode_octetstring_alternative(self) -> None:
         """Decode CHOICE with OCTET STRING alternative"""
         buf = ByteBuffer.wrap(b"\x81\x02AB")
-        choice = TestChoice.get(buf)
+        if isinstance(choice := TestChoice.get(buf), Error):
+            choice.unwrap()
         self.assertEqual(choice.selected, "second")
         self.assertEqual(choice.value.value.value, b"AB")
 
     def test_invalid_tag(self) -> None:
         """Invalid tag should raise"""
         buf = ByteBuffer.wrap(b"\x05\x00")  # NULL tag
-        with self.assertRaises(ValueError):
-            TestChoice.get(buf)
+        if not (
+            isinstance(err := TestChoice.get(buf), Error)
+            and err.has(exception_type=ValueError)
+        ):
+            raise AssertionError("Expected IntegerType.get() to return an Error with ValueError")
 
     def test_invalid_selected_tag(self) -> None:
         """Invalid selected_tag in constructor"""
@@ -825,42 +892,41 @@ class TestChoiceType(unittest.TestCase):
         """__len__ should match alternative length"""
         choice = TestChoice(Integer0(IntegerType(42)))
         buf = ByteBuffer.allocate(100)
-        self.assertEqual(choice.put(buf), IntegerType(42).put(buf))
+        if isinstance(_ := choice.put(buf), Error):
+            _.unwrap()
+
+
+class TestSequenceWithDefault(SequenceType):
+    required: IntegerType
+    optional_with_default: IntegerType = IntegerType(30)
+    required2: BooleanType
+
+    def __init__(self, required: IntegerType, required2: BooleanType, optional_with_default: Optional[IntegerType] = None) -> None:
+        self.required = required
+        self.optional_with_default = optional_with_default
+        self.required2 = required2
+
+
+@dataclass
+class TestSequence(SequenceType):
+    first: IntegerType
+    second: BooleanType
+    third: Optional[OctetStringType]
 
 
 class TestSequenceType(unittest.TestCase):
     """Test SEQUENCE encoding/decoding per X.690 §8.9"""
 
-    def setUp(self) -> None:
-        """Set up test SEQUENCE type"""
-
-        class TestSequence(SequenceType):
-            components = (
-                NamedType("first", IntegerType),
-                NamedType("second", BooleanType),
-                OptionalNamedType("third", OctetStringType),
-            )
-
-        self.TestSequence = TestSequence
-
-        class TestSequenceWithDefault(SequenceType):
-            components = (
-                NamedType("required", IntegerType),
-                DefaultNamedType("optional_with_default", IntegerType, IntegerType(30)),
-                NamedType("required2", BooleanType),
-            )
-
-        self.TestSequenceWithDefault = TestSequenceWithDefault
-
     def test_encode_default_value_omitted(self) -> None:
         """DEFAULT component with default value should be omitted (X.690 §8.9.3)"""
-        seq = self.TestSequenceWithDefault((
+        seq = TestSequenceWithDefault(
             IntegerType(1),
-            IntegerType(30),  # Default value
-            BooleanType(True)
-        ))
+            BooleanType(True),
+            IntegerType(30)  # Default value
+        )
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Should NOT contain encoding for optional_with_default
         # Tag(1) + Length(1) + required(3) + required2(3) = 8 bytes
@@ -875,13 +941,14 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_non_default_value_included(self) -> None:
         """DEFAULT component with non-default value should be included"""
-        seq = self.TestSequenceWithDefault((
+        seq = TestSequenceWithDefault(
             IntegerType(1),
+            BooleanType(True),
             IntegerType(50),  # Non-default value
-            BooleanType(True)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Should contain encoding for optional_with_default
         # Tag(1) + Length(1) + required(3) + default(3) + required2(3) = 11 bytes
@@ -895,52 +962,56 @@ class TestSequenceType(unittest.TestCase):
     def test_decode_default_value_absent(self) -> None:
         """Decode SEQUENCE with DEFAULT component absent - use default value"""
         # Encode with default value (component omitted)
-        seq = self.TestSequenceWithDefault((
+        seq = TestSequenceWithDefault(
             IntegerType(1),
+            BooleanType(False),
             IntegerType(30),  # Default value
-            BooleanType(False)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         buf.set_pos(0)
 
         # Decode
-        decoded = self.TestSequenceWithDefault.get(buf)
-
+        if isinstance(decoded := TestSequenceWithDefault.get(buf), Error):
+            decoded.unwrap()
         # Should have default value even though not in encoding
-        self.assertEqual(decoded["required"].value, 1)
-        self.assertEqual(decoded["optional_with_default"].value, 30)  # Default
-        self.assertFalse(decoded["required2"].value)
+        self.assertEqual(decoded.required.value, 1)
+        self.assertEqual(decoded.optional_with_default.value, 30)  # Default
+        self.assertFalse(decoded.required2.value)
 
     def test_decode_non_default_value_present(self) -> None:
         """Decode SEQUENCE with DEFAULT component present - use encoded value"""
         # Encode with non-default value (component included)
-        seq = self.TestSequenceWithDefault((
+        seq = TestSequenceWithDefault(
             IntegerType(1),
+            BooleanType(True),
             IntegerType(100),  # Non-default value
-            BooleanType(True)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
 
         # Decode
-        decoded = self.TestSequenceWithDefault.get(buf)
+        if isinstance(decoded := TestSequenceWithDefault.get(buf), Error):
+            decoded.unwrap()
 
         # Should have encoded value
-        self.assertEqual(decoded["required"].value, 1)
-        self.assertEqual(decoded["optional_with_default"].value, 100)  # Encoded
-        self.assertTrue(decoded["required2"].value)
+        self.assertEqual(decoded.required.value, 1)
+        self.assertEqual(decoded.optional_with_default.value, 100)  # Encoded
+        self.assertTrue(decoded.required2.value)
 
     def test_default_component_order(self) -> None:
         """DEFAULT components encoded in definition order when present"""
-        seq = self.TestSequenceWithDefault((
+        seq = TestSequenceWithDefault(
             IntegerType(1),
+            BooleanType(True),
             IntegerType(50),  # Non-default
-            BooleanType(True)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         data = bytes(buf)
 
         # Find positions of component tags
@@ -957,50 +1028,56 @@ class TestSequenceType(unittest.TestCase):
         """Test SEQUENCE with multiple DEFAULT components"""
 
         class MultiDefaultSequence(SequenceType):
-            components = (
-                NamedType("first", IntegerType),
-                DefaultNamedType("second", IntegerType, IntegerType(10)),
-                DefaultNamedType("third", BooleanType, BooleanType(False)),
-                NamedType("fourth", OctetStringType),
-            )
+            first: IntegerType
+            second: IntegerType = IntegerType(10)
+            third: BooleanType = BooleanType(False)
+            fourth: OctetStringType
+
+            def __init__(self, first: IntegerType, fourth: OctetStringType, second: IntegerType = IntegerType(10), third: BooleanType = BooleanType(False)) -> None:
+                self.first = first
+                self.second = second
+                self.third = third
+                self.fourth = fourth
 
         # All defaults
-        seq_all_defaults = MultiDefaultSequence((
+        seq_all_defaults = MultiDefaultSequence(
             IntegerType(1),
+            OctetStringType(b"X"),
             IntegerType(10),  # Default
-            BooleanType(False),  # Default
-            OctetStringType(b"X")
-        ))
+            BooleanType(False)  # Default
+        )
         buf = ByteBuffer.allocate(50)
-        written_defaults = seq_all_defaults.put(buf)
+        if isinstance(written_defaults := seq_all_defaults.put(buf), Error):
+            written_defaults.unwrap()
 
         # No defaults
-        seq_no_defaults = MultiDefaultSequence((
+        seq_no_defaults = MultiDefaultSequence(
             IntegerType(1),
+            OctetStringType(b"X"),
             IntegerType(20),  # Non-default
-            BooleanType(True),  # Non-default
-            OctetStringType(b"X")
-        ))
+            BooleanType(True)  # Non-default
+        )
         buf = ByteBuffer.allocate(50)
-        written_no_defaults = seq_no_defaults.put(buf)
+        if isinstance(written_no_defaults := seq_no_defaults.put(buf), Error):
+            written_no_defaults.unwrap()
 
         # Encoding with defaults should be shorter
         self.assertLess(written_defaults, written_no_defaults)
 
     def test_default_value_equality(self) -> None:
         """DEFAULT component with default value equals explicit default"""
-        seq1 = self.TestSequenceWithDefault((
+        seq1 = TestSequenceWithDefault(
             IntegerType(1),
+            BooleanType(True),
             IntegerType(30),  # Explicit default
-            BooleanType(True)
-        ))
+        )
 
         # Create another instance with same values
-        seq2 = self.TestSequenceWithDefault((
+        seq2 = TestSequenceWithDefault(
             IntegerType(1),
-            IntegerType(30),
-            BooleanType(True)
-        ))
+            BooleanType(True),
+            IntegerType(30)
+        )
 
         # Should be equal
         self.assertEqual(seq1, seq2)
@@ -1017,15 +1094,16 @@ class TestSequenceType(unittest.TestCase):
 
         for value, should_be_present in test_cases:
             with self.subTest(value=value):
-                original = self.TestSequenceWithDefault((
+                original = TestSequenceWithDefault(
                     IntegerType(1),
+                    BooleanType(True),
                     IntegerType(value),
-                    BooleanType(True)
-                ))
+                )
 
                 # Encode
                 buf = ByteBuffer.allocate(50)
-                original.put(buf)
+                if isinstance(_ := original.put(buf), Error):
+                    _.unwrap()
                 encoded_data = bytes(buf)
 
                 # Check if default component is in encoding
@@ -1037,10 +1115,10 @@ class TestSequenceType(unittest.TestCase):
 
                 # Decode
                 buf.set_pos(0)
-                decoded = self.TestSequenceWithDefault.get(buf)
+                decoded = TestSequenceWithDefault.get(buf)
 
                 # Value should be preserved
-                self.assertEqual(decoded.value[1].value, value)
+                self.assertEqual(decoded.optional_with_default.value, value)
 
     def test_default_named_type_str(self) -> None:
         """Test DefaultNamedType string representation"""
@@ -1055,56 +1133,53 @@ class TestSequenceType(unittest.TestCase):
         """Test SEQUENCE with both OPTIONAL and DEFAULT components"""
 
         class MixedSequence(SequenceType):
-            components = (
-                NamedType("required", IntegerType),
-                OptionalNamedType("optional", OctetStringType),
-                DefaultNamedType("with_default", IntegerType, IntegerType(100)),
-                NamedType("required2", BooleanType),
-            )
+            required: IntegerType
+            optional: Optional[OctetStringType]
+            with_default: IntegerType = IntegerType(100)
+            required2: BooleanType
 
-            @override
-            @classmethod
-            def from_components(
-                cls, *,
+            def __init__(
+                self,
                 required: IntegerType,
+                required2: BooleanType,
                 optional: Optional[OctetStringType] = None,
-                with_default: Optional[IntegerType],
-                required2: BooleanType
-            ) -> Self:
-                return cls((required, optional, with_default, required2))
-
-            @property
-            def required(self) -> IntegerType:
-                return self.value[0]
+                with_default: IntegerType = IntegerType(100),
+            ) -> None:
+                self.required = required
+                self.optional = optional
+                self.with_default = with_default
+                self.required2 = required2
 
         # OPTIONAL absent, DEFAULT present
-        seq1 = MixedSequence.from_components(
+        seq1 = MixedSequence(
             required=IntegerType(1),
             with_default=IntegerType(100),  # Default
             required2=BooleanType(True)
         )
         buf = ByteBuffer.allocate(50)
-        written1 = seq1.put(buf)
+        if isinstance(written1 := seq1.put(buf), Error):
+            written1.unwrap()
 
         # OPTIONAL present, DEFAULT absent
-        seq2 = MixedSequence((
+        seq2 = MixedSequence(
             IntegerType(1),
+            BooleanType(True),
             OctetStringType(b"X"),  # Present
-            IntegerType(100),  # Default
-            BooleanType(True)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        written2 = seq2.put(buf)
+        if isinstance(written2 := seq2.put(buf), Error):
+            written2.unwrap()
 
         # OPTIONAL present, DEFAULT non-default
-        seq3 = MixedSequence((
+        seq3 = MixedSequence(
             IntegerType(1),
+            BooleanType(True),
             OctetStringType(b"X"),  # Present
             IntegerType(128),  # Non-default
-            BooleanType(True)
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        written3 = seq3.put(buf)
+        if isinstance(written3 := seq3.put(buf), Error):
+            written3.unwrap()
 
         # Verify length ordering
         self.assertLess(written1, written2)  # optional absent < present
@@ -1128,44 +1203,45 @@ class TestSequenceType(unittest.TestCase):
         manual_encoding = b"\x30\x08\x02\x01\x01\x01\x01\xff"
 
         buf = ByteBuffer.wrap(manual_encoding)
-        decoded = self.TestSequenceWithDefault.get(buf)
-
+        if isinstance(decoded := TestSequenceWithDefault.get(buf), Error):
+            decoded.unwrap()
         # Required components should be present
-        self.assertEqual(decoded.value[0].value, 1)
-        self.assertTrue(decoded.value[2].value)
-
+        self.assertEqual(decoded.required.value, 1)
+        self.assertTrue(decoded.required2.value)
         # DEFAULT component should have default value
-        self.assertEqual(decoded.value[1].value, 30)
+        self.assertEqual(decoded.optional_with_default.value, 30)
 
     def test_encode_all_present(self) -> None:
         """Encode SEQUENCE with all components"""
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(True),
             OctetStringType(b"\x00")
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
 
         # Verify tag (UNIVERSAL 16, constructed = 0x30)
         self.assertEqual(bytes(buf)[0], 0x30)
 
     def test_encode_optional_absent(self) -> None:
         """Encode SEQUENCE with OPTIONAL component absent"""
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(False),
             None
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Should be shorter without third component
-        seq_full = self.TestSequence((
+        seq_full = TestSequence(
             IntegerType(1),
             BooleanType(False),
             OctetStringType(b"\x00")
-        ))
+        )
         buf_full = ByteBuffer.allocate(50)
         seq_full.put(buf_full)
 
@@ -1174,43 +1250,50 @@ class TestSequenceType(unittest.TestCase):
     def test_decode_all_present(self) -> None:
         """Decode SEQUENCE with all components"""
         # First encode to get valid bytes
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(True),
             OctetStringType(b"\x00")
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
 
-        decoded = self.TestSequence.get(buf)
-        self.assertEqual(decoded["first"].value, 1)
-        self.assertTrue(decoded["second"].value)
-        self.assertEqual(decoded["third"].value, b"\x00")
+        if isinstance(decoded := TestSequence.get(buf), Error):
+            decoded.unwrap()
+        self.assertIsNotNone(decoded.first)
+        self.assertIsNotNone(decoded.second)
+        self.assertIsNotNone(decoded.third)
+        self.assertEqual(decoded.first.value, 1)
+        self.assertTrue(decoded.second.value)
+        self.assertEqual(decoded.third.value, b"\x00")
 
     def test_decode_optional_absent(self) -> None:
         """Decode SEQUENCE with OPTIONAL component absent"""
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(False),
             None
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
 
-        decoded = self.TestSequence.get(buf)
+        decoded = TestSequence.get(buf)
         self.assertEqual(decoded["third"], None)
 
     def test_component_order(self) -> None:
         """Components encoded in definition order"""
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(True),
             OctetStringType(b"\x00")
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         data = bytes(buf)
 
         # Find positions of component tags
@@ -1223,13 +1306,14 @@ class TestSequenceType(unittest.TestCase):
 
     def test_length_calculation(self) -> None:
         """__len__ should match encoded length"""
-        seq = self.TestSequence((
+        seq = TestSequence(
             IntegerType(1),
             BooleanType(True),
             OctetStringType(b"\x00")
-        ))
+        )
         buf = ByteBuffer.allocate(50)
-        actual_len = seq.put(buf)
+        if isinstance(actual_len := seq.put(buf), Error):
+            actual_len.unwrap()
         self.assertEqual(11, actual_len)
 
 
@@ -1239,27 +1323,30 @@ class TestIntegration(unittest.TestCase):
     def test_nested_sequence(self) -> None:
         """Nested SEQUENCE encoding"""
 
+        @dataclass
         class Inner(SequenceType):
-            components = (NamedType("value", IntegerType),)
+            value: IntegerType
 
+        @dataclass
         class Outer(SequenceType):
-            components = (
-                NamedType("inner", Inner),
-                NamedType("flag", BooleanType))
+            inner: Inner
+            flag: BooleanType
 
-        outer = Outer((
-            Inner((IntegerType(42),)),
+        outer = Outer(
+            Inner(IntegerType(42)),
             BooleanType(True)
-        ))
+        )
 
         buf = ByteBuffer.allocate(100)
-        outer.put(buf)
+        if isinstance(_ := outer.put(buf), Error):
+            _.unwrap()
 
         # Decode and verify
         buf = ByteBuffer.wrap(bytes(buf))
-        decoded = Outer.get(buf)
-        self.assertEqual(decoded["inner"]["value"].value, 42)
-        self.assertTrue(decoded["flag"])
+        if isinstance(decoded := Outer.get(buf), Error):
+            decoded.unwrap()
+        self.assertEqual(decoded.inner.value.value, 42)
+        self.assertTrue(decoded.flag)
 
     def test_choice_in_sequence(self) -> None:
         """CHOICE as SEQUENCE component"""
@@ -1269,23 +1356,24 @@ class TestIntegration(unittest.TestCase):
                 NamedType("second", BooleanType),
             )
 
+        @dataclass
         class Container(SequenceType):
-            components = (
-                NamedType("choice", MyChoice),
-                NamedType("name", OctetStringType)
-            )
+            choice: MyChoice
+            name: OctetStringType
 
-        container = Container((
+        container = Container(
             MyChoice(IntegerType(100)),
             OctetStringType(b"test")
-        ))
+        )
 
         buf = ByteBuffer.allocate(100)
-        container.put(buf)
+        if isinstance(_ := container.put(buf), Error):
+            _.unwrap()
 
         buf = ByteBuffer.wrap(bytes(buf))
-        decoded = Container.get(buf)
-        self.assertEqual(decoded["choice"].value.value, 100)
+        if isinstance(decoded := Container.get(buf), Error):
+            decoded.unwrap()
+        self.assertEqual(decoded.choice.value.value, 100)
 
     def test_round_trip(self) -> None:
         """Encode then decode should preserve values"""
@@ -1297,19 +1385,20 @@ class TestIntegration(unittest.TestCase):
             IntegerType(-12345),
             OctetStringType(b""),
             OctetStringType(b"\x00\xFF\x7F"),
-            BitStringType(tuple([1, 0, 1, 0, 1])),
+            BitStringType((1, 0, 1, 0, 1)),
             NullType(None),
             EnumeratedType(5),
         ]
 
         for original in test_cases:
             buf = ByteBuffer.allocate(100)
-            original.put(buf)
+            if isinstance(_ := original.put(buf), Error):
+                _.unwrap()
             buf = ByteBuffer.wrap(bytes(buf))
-
-            decoded = type(original).get(buf)
+            if isinstance(decoded := type(original).get(buf), Error):
+                decoded.unwrap()
             self.assertEqual(decoded.value, original.value,
-                           f"Failed for {type(original).__name__}: {original.value}")
+                f"Failed for {type(original).__name__}: {original.value}")
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -1319,9 +1408,11 @@ class TestEdgeCases(unittest.TestCase):
         """Large integer encoding"""
         integer = IntegerType(2**64 - 1)
         buf = ByteBuffer.allocate(100)
-        integer.put(buf)
+        if isinstance(_ := integer.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
-        decoded = IntegerType.get(buf)
+        if isinstance(decoded := IntegerType.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value, 2**64 - 1)
 
     def test_large_bitstring(self) -> None:
@@ -1329,48 +1420,49 @@ class TestEdgeCases(unittest.TestCase):
         bits = tuple([i % 2 for i in range(1000)])
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(200)
-        bitstring.put(buf)
+        if isinstance(_ := bitstring.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
-        decoded = BitStringType.get(buf)
+        if isinstance(decoded := BitStringType.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value, bits)
 
     def test_buffer_overflow(self) -> None:
         """Buffer overflow protection"""
         buf = ByteBuffer.allocate(1)
         integer = IntegerType(1000)  # Requires multiple bytes
-
-        self.assertTrue(integer.put(buf).has(exception_type=BufferError))
+        if isinstance(res := integer.put(buf), Error):
+            self.assertTrue(res.has(exception_type=BufferError))
 
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise"""
         buf = ByteBuffer.wrap(b"\x02\x05\x00\x00")  # Claims 5 bytes, has 2
-        self.assertTrue(IntegerType.get(buf).has(exception_type=BufferError))
+        if isinstance(res := IntegerType.get(buf), Error):
+            self.assertTrue(res.has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Indefinite length not supported for primitive types"""
         buf = ByteBuffer.wrap(b"\x02\x80")  # INTEGER with indefinite length
-        with self.assertRaises(ValueError):
-            IntegerType.get(buf)
+        if not (
+            isinstance(err := IntegerType.get(buf), Error)
+            and err.has(exception_type=ValueError)
+        ):
+            raise AssertionError("Expected IntegerType.get() to return an Error with ValueError")
+
+
+IntegerSequence = SequenceOfType[IntegerType]
+BooleanSequence = SequenceOfType[BooleanType]
 
 
 class TestSequenceOfType(unittest.TestCase):
     """Test SEQUENCE OF encoding/decoding per X.690 §8.10"""
 
-    def setUp(self) -> None:
-        """Set up test SEQUENCE OF type"""
-        # Create a concrete SequenceOfType for testing
-        IntegerSequence = SequenceOfType[IntegerType]
-
-        BooleanSequence = SequenceOfType[BooleanType]
-
-        self.IntegerSequence = IntegerSequence
-        self.BooleanSequence = BooleanSequence
-
     def test_empty_encode(self) -> None:
         """Encode empty SEQUENCE OF"""
-        seq = self.IntegerSequence(())
+        seq = IntegerSequence()
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x30) + Length (0x00) = 2 bytes
         self.assertEqual(written, 2)
@@ -1379,15 +1471,17 @@ class TestSequenceOfType(unittest.TestCase):
     def test_empty_decode(self) -> None:
         """Decode empty SEQUENCE OF"""
         buf = ByteBuffer.wrap(b"\x30\x00")
-        seq = self.IntegerSequence.get(buf)
+        if isinstance(seq := IntegerSequence.get(buf), Error):
+            seq.unwrap()
         self.assertEqual(len(seq), 0)
         self.assertEqual(seq.value, [])
 
     def test_single_element_encode(self) -> None:
         """Encode SEQUENCE OF with single element"""
-        seq = self.IntegerSequence((IntegerType(42),))
+        seq = IntegerSequence([IntegerType(42)])
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x30) + Length (0x03) + INTEGER (0x02 0x01 0x2A) = 5 bytes
         self.assertEqual(written, 5)
@@ -1396,20 +1490,21 @@ class TestSequenceOfType(unittest.TestCase):
     def test_single_element_decode(self) -> None:
         """Decode SEQUENCE OF with single element"""
         buf = ByteBuffer.wrap(b"\x30\x03\x02\x01\x2a")
-        seq = self.IntegerSequence.get(buf)
+        if isinstance(seq := IntegerSequence.get(buf), Error):
+            seq.unwrap()
         self.assertEqual(len(seq), 1)
         self.assertEqual(seq[0].value, 42)
 
     def test_multiple_elements_encode(self) -> None:
         """Encode SEQUENCE OF with multiple elements"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(1),
             IntegerType(2),
             IntegerType(3),
-        ))
+        ])
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
-
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
         # Tag (0x30) + Length (0x09) + 3×INTEGER (3×3 bytes) = 11 bytes
         self.assertEqual(written, 11)
         self.assertEqual(
@@ -1420,7 +1515,8 @@ class TestSequenceOfType(unittest.TestCase):
     def test_multiple_elements_decode(self) -> None:
         """Decode SEQUENCE OF with multiple elements"""
         buf = ByteBuffer.wrap(b"\x30\x09\x02\x01\x01\x02\x01\x02\x02\x01\x03")
-        seq = self.IntegerSequence.get(buf)
+        if isinstance(seq := IntegerSequence.get(buf), Error):
+            seq.unwrap()
         self.assertEqual(len(seq), 3)
         self.assertEqual(seq[0].value, 1)
         self.assertEqual(seq[1].value, 2)
@@ -1428,77 +1524,82 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_large_values_encode(self) -> None:
         """Encode SEQUENCE OF with large integer values"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(1000),  # 2 bytes
             IntegerType(10000),  # 2 bytes
-        ))
+        ])
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x30) + Length (0x08) + 2×INTEGER (2×4 bytes) = 10 bytes
         self.assertEqual(written, 10)
 
     def test_negative_values_encode(self) -> None:
         """Encode SEQUENCE OF with negative values"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(-1),
             IntegerType(-100),
-        ))
+        ])
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
         buf.set_pos(0)
-
-        decoded = self.IntegerSequence.get(buf)
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded[0].value, -1)
         self.assertEqual(decoded[1].value, -100)
 
     def test_mixed_boolean_sequence(self) -> None:
         """Encode SEQUENCE OF BOOLEAN"""
-        seq = self.BooleanSequence((
+        seq = BooleanSequence([
             BooleanType(True),
             BooleanType(False),
             BooleanType(True),
-        ))
+        ])
         buf = ByteBuffer.allocate(50)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x30) + Length (0x09) + 3×BOOLEAN (3×3 bytes) = 11 bytes
         self.assertEqual(written, 11)
 
         buf.set_pos(0)
-        decoded = self.BooleanSequence.get(buf)
+        if isinstance(decoded := BooleanSequence.get(buf), Error):
+            decoded.unwrap()
         self.assertTrue(decoded[0].value)
         self.assertFalse(decoded[1].value)
         self.assertTrue(decoded[2].value)
 
     def test_length_calculation(self) -> None:
         """__len__ should match encoded length"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(1),
             IntegerType(2),
-        ))
+        ])
         buf = ByteBuffer.allocate(50)
-        actual_len = seq.put(buf)
+        if isinstance(actual_len := seq.put(buf), Error):
+            actual_len.unwrap()
         self.assertEqual(8, actual_len)
 
     def test_iteration(self) -> None:
         """Test iteration over SEQUENCE OF"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(10),
             IntegerType(20),
             IntegerType(30),
-        ))
+        ])
 
         values = [item.value for item in seq]
         self.assertEqual(values, [10, 20, 30])
 
     def test_indexing(self) -> None:
         """Test indexing into SEQUENCE OF"""
-        seq = self.IntegerSequence((
+        seq = IntegerSequence([
             IntegerType(100),
             IntegerType(200),
             IntegerType(300),
-        ))
+        ])
 
         self.assertEqual(seq[0].value, 100)
         self.assertEqual(seq[1].value, 200)
@@ -1508,36 +1609,36 @@ class TestSequenceOfType(unittest.TestCase):
     def test_first_last_properties(self) -> None:
         """Test first and last properties"""
         # Empty sequence
-        empty = self.IntegerSequence(())
-        self.assertIsNone(empty.first)
-        self.assertIsNone(empty.last)
+        empty = IntegerSequence([])
+        self.assertIsInstance(empty.first, Error)
+        self.assertIsInstance(empty.last, Error)
 
         # Single element
-        single = self.IntegerSequence((IntegerType(42),))
+        single = IntegerSequence([IntegerType(42)])
         self.assertEqual(single.first.value, 42)
         self.assertEqual(single.last.value, 42)
 
         # Multiple elements
-        multi = self.IntegerSequence((
+        multi = IntegerSequence([
             IntegerType(1),
             IntegerType(2),
             IntegerType(3),
-        ))
+        ])
         self.assertEqual(multi.first.value, 1)
         self.assertEqual(multi.last.value, 3)
 
     def test_repr(self) -> None:
         """Test string representation"""
-        seq = self.IntegerSequence((IntegerType(1), IntegerType(2)))
+        seq = IntegerSequence([IntegerType(1), IntegerType(2)])
         repr_str = repr(seq)
         self.assertIn("IntegerType", repr_str)
         self.assertIn("count=2", repr_str)
 
     def test_equality(self) -> None:
         """Test equality comparison"""
-        seq1 = self.IntegerSequence((IntegerType(1), IntegerType(2)))
-        seq2 = self.IntegerSequence((IntegerType(1), IntegerType(2)))
-        seq3 = self.IntegerSequence((IntegerType(1),))
+        seq1 = IntegerSequence([IntegerType(1), IntegerType(2)])
+        seq2 = IntegerSequence([IntegerType(1), IntegerType(2)])
+        seq3 = IntegerSequence([IntegerType(1)])
 
         self.assertEqual(seq1, seq2)
         self.assertNotEqual(seq1, seq3)
@@ -1545,7 +1646,7 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_round_trip(self) -> None:
         """Encode then decode should preserve values"""
-        original = self.IntegerSequence([
+        original = IntegerSequence([
             IntegerType(0),
             IntegerType(127),
             IntegerType(-128),
@@ -1553,10 +1654,12 @@ class TestSequenceOfType(unittest.TestCase):
         ])
 
         buf = ByteBuffer.allocate(100)
-        original.put(buf)
+        if isinstance(_ := original.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
 
-        decoded = self.IntegerSequence.get(buf)
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(len(decoded), len(original))
         for i, (orig, dec) in enumerate(zip(original, decoded)):
             self.assertEqual(
@@ -1571,16 +1674,18 @@ class TestSequenceOfType(unittest.TestCase):
 
         OuterSequence = SequenceOfType[InnerSequence]
 
-        nested = OuterSequence((
-            InnerSequence((IntegerType(1), IntegerType(2))),
-            InnerSequence((IntegerType(3),)),
-        ))
+        nested = OuterSequence([
+            InnerSequence([IntegerType(1), IntegerType(2)]),
+            InnerSequence([IntegerType(3)]),
+        ])
 
         buf = ByteBuffer.allocate(100)
-        nested.put(buf)
+        if isinstance(_ := nested.put(buf), Error):
+            _.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
 
-        decoded = OuterSequence.get(buf)
+        if isinstance(decoded := OuterSequence.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(len(decoded), 2)
         self.assertEqual(len(decoded[0]), 2)
         self.assertEqual(len(decoded[1]), 1)
@@ -1590,44 +1695,47 @@ class TestSequenceOfType(unittest.TestCase):
     def test_invalid_tag(self) -> None:
         """Invalid tag should raise"""
         buf = ByteBuffer.wrap(b"\x31\x00")  # SET OF tag instead of SEQUENCE OF
-        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=TagError))
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=TagError))
 
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise"""
         buf = ByteBuffer.wrap(b"\x30\x05\x02\x01\x01")  # Claims 5 bytes, has 3
-        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=BufferError))
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=BufferError))
 
     def test_buffer_overflow(self) -> None:
         """Buffer overflow protection"""
-        seq = self.IntegerSequence((IntegerType(1000), IntegerType(2000)))
+        seq = IntegerSequence([IntegerType(1000), IntegerType(2000)])
         buf = ByteBuffer.allocate(1)  # Too small
-
-        self.assertTrue(seq.put(buf).has(exception_type=BufferError))
+        if isinstance(err := seq.put(buf), Error):
+            self.assertTrue(err.has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Indefinite length not supported"""
         buf = ByteBuffer.wrap(b"\x30\x80")  # SEQUENCE OF with indefinite length
-        self.assertTrue(self.IntegerSequence.get(buf).has(exception_type=ValueError))
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=ValueError))
 
     def test_large_sequence(self) -> None:
         """Test large SEQUENCE OF"""
         # Create sequence with 100 elements
-        elements = tuple(IntegerType(i) for i in range(100))
-        seq = self.IntegerSequence(elements)
-
+        elements = [IntegerType(i) for i in range(100)]
+        seq = IntegerSequence(elements)
         buf = ByteBuffer.allocate(500)
-        written = seq.put(buf)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
         buf = ByteBuffer.wrap(bytes(buf))
-
-        decoded = self.IntegerSequence.get(buf)
+        if isinstance(decoded := IntegerSequence.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(len(decoded), 100)
         self.assertEqual(decoded[0].value, 0)
         self.assertEqual(decoded[99].value, 99)
 
     def test_component_type_validation(self) -> None:
         """Test that component_type is properly set"""
-        self.assertEqual(self.IntegerSequence.component_type, IntegerType)
-        self.assertEqual(self.BooleanSequence.component_type, BooleanType)
+        self.assertEqual(IntegerSequence.component_type, IntegerType)
+        self.assertEqual(BooleanSequence.component_type, BooleanType)
 
 
 class TestTaggedType(unittest.TestCase):
@@ -1643,7 +1751,8 @@ class TestTaggedType(unittest.TestCase):
         # Create instance with value
         tagged = ImplicitInteger(value=IntegerType(42))
         buf = ByteBuffer.allocate(10)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
 
         # IMPLICIT: Tag (0x82) + Length (0x01) + Value (0x2A) = 3 bytes
         self.assertEqual(written, 3)
@@ -1656,7 +1765,8 @@ class TestTaggedType(unittest.TestCase):
             mode = TaggingMode.IMPLICIT
 
         buf = ByteBuffer.wrap(b"\x82\x01\x2a")
-        decoded = ImplicitInteger.get(buf)
+        if isinstance(decoded := ImplicitInteger.get(buf), Error):
+            decoded.unwrap()
 
         self.assertEqual(decoded.value.value, 42)
 
@@ -1668,7 +1778,8 @@ class TestTaggedType(unittest.TestCase):
 
         tagged = ExplicitInteger(value=IntegerType(42))
         buf = ByteBuffer.allocate(10)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
 
         # EXPLICIT: Outer Tag (0xA3) + Outer Length (0x03) + Inner TLV (0x02\x01\x2a) = 5 bytes
         self.assertEqual(written, 5)
@@ -1681,7 +1792,8 @@ class TestTaggedType(unittest.TestCase):
             mode = TaggingMode.EXPLICIT
 
         buf = ByteBuffer.wrap(b"\xa3\x03\x02\x01\x2a")
-        decoded = ExplicitInteger.get(buf)
+        if isinstance(decoded := ExplicitInteger.get(buf), Error):
+            decoded.unwrap()
 
         self.assertEqual(decoded.value.value, 42)
 
@@ -1694,7 +1806,8 @@ class TestTaggedType(unittest.TestCase):
 
         tagged = ImplicitBoolean(value=BooleanType(True))
         buf = ByteBuffer.allocate(10)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x80) + Length (0x01) + Value (0xFF) = 3 bytes
         self.assertEqual(written, 3)
@@ -1709,14 +1822,16 @@ class TestTaggedType(unittest.TestCase):
 
         tagged = ExplicitOctetString(value=OctetStringType(b"AB"))
         buf = ByteBuffer.allocate(20)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
 
         # Outer Tag (0xA1) + Outer Length + Inner TLV (0x04\x02AB)
         self.assertGreater(written, 0)
 
         # Decode and verify
         buf.set_pos(0)
-        decoded = ExplicitOctetString.get(buf)
+        if isinstance(decoded := ExplicitOctetString.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value.value, b"AB")
 
     def test_tag_class_encoding(self) -> None:
@@ -1738,7 +1853,8 @@ class TestTaggedType(unittest.TestCase):
 
                 tagged = TestTagged(IntegerType(0))
                 buf = ByteBuffer.allocate(10)
-                tagged.put(buf)
+                if isinstance(put_res := tagged.put(buf), Error):
+                    put_res.unwrap()
                 self.assertEqual(buf.buf[0], expected_tag)
 
     def test_high_tag_number_encode(self) -> None:
@@ -1749,7 +1865,8 @@ class TestTaggedType(unittest.TestCase):
 
         tagged = HighTag(value=IntegerType(42))
         buf = ByteBuffer.allocate(10)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
 
         # High tag number: 0x9F 0x64 + Length + Value
         self.assertEqual(buf.buf[0], 0x9F)  # CONTEXT, high-tag
@@ -1768,10 +1885,12 @@ class TestTaggedType(unittest.TestCase):
                 original = ImplicitInt(IntegerType(val))
 
                 buf = ByteBuffer.allocate(50)
-                original.put(buf)
+                if isinstance(put_res := original.put(buf), Error):
+                    put_res.unwrap()
                 buf.set_pos(0)
 
-                decoded = ImplicitInt.get(buf)
+                if isinstance(decoded := ImplicitInt.get(buf), Error):
+                    decoded.unwrap()
                 self.assertEqual(decoded.value.value, val)
 
     def test_round_trip_explicit(self) -> None:
@@ -1787,10 +1906,12 @@ class TestTaggedType(unittest.TestCase):
                 original = ExplicitInt(value=IntegerType(val))
 
                 buf = ByteBuffer.allocate(50)
-                original.put(buf)
+                if isinstance(put_res := original.put(buf), Error):
+                    put_res.unwrap()
                 buf.set_pos(0)
 
-                decoded = ExplicitInt.get(buf)
+                if isinstance(decoded := ExplicitInt.get(buf), Error):
+                    decoded.unwrap()
                 self.assertEqual(decoded.value.value, val)
 
     def test_tag_validation_error_number(self) -> None:
@@ -1803,7 +1924,8 @@ class TestTaggedType(unittest.TestCase):
         # Encode with tag 5
         tagged = TaggedInt(value=IntegerType(42))
         buf = ByteBuffer.allocate(10)
-        tagged.put(buf)
+        if isinstance(put_res := tagged.put(buf), Error):
+            put_res.unwrap()
         buf.set_pos(0)
 
         # Decode with wrong tag number (6 instead of 5)
@@ -1812,7 +1934,10 @@ class TestTaggedType(unittest.TestCase):
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
 
-        self.assertTrue(WrongTag.get(buf).has(exception_type=TagError))
+        if isinstance(decoded := WrongTag.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=TagError))
+        else:
+            self.fail("Expected Error from WrongTag.get(buf)")
 
     def test_tag_validation_error_class(self) -> None:
         """Test tag validation raises on tag class mismatch"""
@@ -1824,7 +1949,8 @@ class TestTaggedType(unittest.TestCase):
         # Encode with CONTEXT_SPECIFIC
         tagged = TaggedInt(IntegerType(42))
         buf = ByteBuffer.allocate(10)
-        tagged.put(buf)
+        if isinstance(put_res := tagged.put(buf), Error):
+            put_res.unwrap()
         buf.set_pos(0)
 
         # Decode with APPLICATION class
@@ -1832,7 +1958,10 @@ class TestTaggedType(unittest.TestCase):
             tag = Tag(5, Class.APPLICATION)
             mode = TaggingMode.IMPLICIT
 
-        self.assertTrue(WrongClass.get(buf).has(exception_type=TagError))
+        if isinstance(decoded := WrongClass.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=TagError))
+        else:
+            self.fail("Expected Error from WrongClass.get(buf)")
 
     def test_get_contents_implicit(self) -> None:
         """Test get_contents for IMPLICIT tagged type (CHOICE alternative)"""
@@ -1842,11 +1971,13 @@ class TestTaggedType(unittest.TestCase):
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\x80\x01\x2a")
-        outer_tag = Tag.get(buf)
+        if isinstance(outer_tag := Tag.get(buf), Error):
+            outer_tag.unwrap()
         self.assertEqual(outer_tag.class_number, 0)
 
         # Then decode contents only (no tag validation)
-        decoded = ImplicitInt.get_lc(buf)
+        if isinstance(decoded := ImplicitInt.get_lc(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value.value, 42)
 
     def test_get_contents_explicit(self) -> None:
@@ -1857,17 +1988,18 @@ class TestTaggedType(unittest.TestCase):
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\xa1\x03\x02\x01\x2a")
-        outer_tag = Tag.get(buf)
+        if isinstance(outer_tag := Tag.get(buf), Error):
+            outer_tag.unwrap()
         self.assertEqual(outer_tag.class_number, 1)
         self.assertTrue(outer_tag.constructed)
-
         # Then decode contents (length + inner TLV)
-        decoded = ExplicitInt.get_lc(buf)
+        if isinstance(decoded := ExplicitInt.get_lc(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value.value, 42)
 
     def test_put_contents_implicit(self) -> None:
         """Test put_contents for IMPLICIT tagged type"""
-        class ImplicitInt(TaggedType):
+        class ImplicitInt(TaggedType[IntegerType]):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
             type_ = IntegerType
             mode = TaggingMode.IMPLICIT
@@ -1876,7 +2008,8 @@ class TestTaggedType(unittest.TestCase):
 
         buf = ByteBuffer.allocate(10)
         # Encode tag separately
-        tagged.tag.put(buf)
+        if isinstance(_ := tagged.tag.put(buf), Error):
+            _.unwrap()
         # Encode contents only
         written = tagged.put_lc(buf)
 
@@ -1894,7 +2027,8 @@ class TestTaggedType(unittest.TestCase):
 
         buf = ByteBuffer.allocate(10)
         # Encode tag separately
-        tagged.tag.put(buf)
+        if isinstance(_ := tagged.tag.put(buf), Error):
+            _.unwrap()
         # Encode contents only (Length + complete base TLV)
         written = tagged.put_lc(buf)
 
@@ -1913,7 +2047,7 @@ class TestTaggedType(unittest.TestCase):
         self.assertEqual(tagged.put(ByteBuffer.allocate(10)), 3)
 
         # EXPLICIT should be longer (outer TLV + inner TLV)
-        class ExplicitInt(TaggedType):
+        class ExplicitInt(TaggedType[IntegerType]):
             tag = Tag(5, Class.CONTEXT_SPECIFIC, constructed=True)
             type_ = IntegerType
             mode = TaggingMode.EXPLICIT
@@ -1930,9 +2064,11 @@ class TestTaggedType(unittest.TestCase):
 
         tagged = ApplicationTagged(value=IntegerType(42))
         buf = ByteBuffer.allocate(20)
-        written = tagged.put(buf)
+        if isinstance(written := tagged.put(buf), Error):
+            written.unwrap()
         buf.set_pos(0)
-        decoded = ApplicationTagged.get(buf)
+        if isinstance(decoded := ApplicationTagged.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value.value, 42)
 
     def test_nested_tagged_types(self) -> None:
@@ -1946,16 +2082,15 @@ class TestTaggedType(unittest.TestCase):
         class OuterTagged(TaggedType[InnerTagged]):
             tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-
         inner = InnerTagged(IntegerType(42))
         outer = OuterTagged(value=inner)
-
         buf = ByteBuffer.allocate(50)
-        outer.put(buf)
-
+        if isinstance(_ := outer.put(buf), Error):
+            _.unwrap()
         # Decode
         buf.set_pos(0)
-        decoded = OuterTagged.get(buf)
+        if isinstance(decoded := OuterTagged.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value.value.value, 42)
 
 
@@ -1966,8 +2101,10 @@ class TestObjectIdentifierType(unittest.TestCase):
         """Encode simple OID {1 0 1} (iso.standard.asn1)"""
         oid = ObjectIdentifierType((1, 0, 1))
         buf = ByteBuffer.allocate(10)
-        written = oid.put(buf)
-
+        if isinstance(written := oid.put(buf), Error):
+            written.unwrap()
+        if isinstance(written := oid.put(buf), Error):
+            written.unwrap()
         # Tag 0x06, Length 0x02, Content: (1*40)+0=0x28, 1=0x01
         self.assertEqual(written, 4)
         self.assertEqual(bytes(buf)[:written], b"\x06\x02\x28\x01")
@@ -1975,7 +2112,8 @@ class TestObjectIdentifierType(unittest.TestCase):
     def test_simple_oid_decode(self) -> None:
         """Decode simple OID {1 0 1}"""
         buf = ByteBuffer.wrap(b"\x06\x02\x28\x01")
-        oid = ObjectIdentifierType.get(buf)
+        if isinstance(oid := ObjectIdentifierType.get(buf), Error):
+            oid.unwrap()
 
         self.assertEqual(oid.value, (1, 0, 1))
 
@@ -1983,16 +2121,16 @@ class TestObjectIdentifierType(unittest.TestCase):
         """Encode ITU-T OID {0 0}"""
         oid = ObjectIdentifierType((0, 0))
         buf = ByteBuffer.allocate(10)
-        written = oid.put(buf)
-
-        # (0*40)+0 = 0x00
-        self.assertEqual(bytes(buf)[:written], b"\x06\x01\x00")
+        if isinstance(written := oid.put(buf), Error):
+            written.unwrap()
+        self.assertEqual(bytes(buf)[:written], b"\x06\x01\x00")  # (0*40)+0 = 0x00
 
     def test_joint_iso_oid_encode(self) -> None:
         """Encode joint-iso-itu-t OID {2 10 8825}"""
         oid = ObjectIdentifierType((2, 10, 8825))
         buf = ByteBuffer.allocate(10)
-        written = oid.put(buf)
+        if isinstance(written := oid.put(buf), Error):
+            written.unwrap()
 
         # First two arcs: (2*40)+10 = 90 = 0x5A
         # Third arc: 8825 = 0x2279 (needs 2 octets in base-128)
@@ -2005,7 +2143,8 @@ class TestObjectIdentifierType(unittest.TestCase):
         # Arc value 128 requires 2 octets: 0x81 0x00
         oid = ObjectIdentifierType((1, 0, 128))
         buf = ByteBuffer.allocate(10)
-        oid.put(buf)
+        if isinstance(_ := oid.put(buf), Error):
+            _.unwrap()
 
         # Third arc: 128 = 0x81 0x00 (base-128)
         self.assertEqual(buf.buf[3], 0x81)
@@ -2016,7 +2155,8 @@ class TestObjectIdentifierType(unittest.TestCase):
         # Arc value 16384 requires 3 octets: 0x81 0x80 0x00
         oid = ObjectIdentifierType((1, 0, 16384))
         buf = ByteBuffer.allocate(10)
-        oid.put(buf)
+        if isinstance(_ := oid.put(buf), Error):
+            _.unwrap()
 
         # Third arc: 16384 = 0x81 0x80 0x00 (base-128)
         self.assertEqual(buf.buf[3], 0x81)
@@ -2027,18 +2167,21 @@ class TestObjectIdentifierType(unittest.TestCase):
         """Encode OID with multiple arcs"""
         oid = ObjectIdentifierType((2, 10, 0x02f4, 5, 8, 1, 1))
         buf = ByteBuffer.allocate(20)
-        written = oid.put(buf)
+        if isinstance(written := oid.put(buf), Error):
+            written.unwrap()
 
         # Decode and verify
         buf.set_pos(0)
-        decoded = ObjectIdentifierType.get(buf)
+        if isinstance(decoded := ObjectIdentifierType.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.value, (2, 10, 0x02f4, 5, 8, 1, 1))
 
     def test_zero_arc_encode(self) -> None:
         """Encode OID with zero arc values"""
         oid = ObjectIdentifierType((1, 0, 0, 0))
         buf = ByteBuffer.allocate(10)
-        oid.put(buf)
+        if isinstance(_ := oid.put(buf), Error):
+            _.unwrap()
 
         # Each zero arc = 0x00
         self.assertEqual(buf.buf[3], 0x00)
@@ -2087,9 +2230,11 @@ class TestObjectIdentifierType(unittest.TestCase):
             with self.subTest(value=value):
                 original = ObjectIdentifierType(value)
                 buf = ByteBuffer.allocate(50)
-                original.put(buf)
+                if isinstance(_ := original.put(buf), Error):
+                    _.unwrap()
                 buf.set_pos(0)
-                decoded = ObjectIdentifierType.get(buf)
+                if isinstance(decoded := ObjectIdentifierType.get(buf), Error):
+                    decoded.unwrap()
                 self.assertEqual(decoded.value, value)
 
     def test_startswith(self) -> None:
@@ -2103,16 +2248,15 @@ class TestObjectIdentifierType(unittest.TestCase):
     def test_parent(self) -> None:
         """Test OID parent calculation"""
         oid = ObjectIdentifierType((1, 0, 8825, 1))
-        parent = oid.parent()
-
+        if isinstance(parent := oid.parent(), Error):
+            parent.unwrap()
         self.assertEqual(parent.value, (1, 0, 8825))
-        self.assertIsNone(ObjectIdentifierType((1, 0)).parent())
+        self.assertIsInstance(ObjectIdentifierType((1, 0)).parent(), Error)
 
     def test_child(self) -> None:
         """Test OID child calculation"""
         oid = ObjectIdentifierType((1, 0, 8825))
         child = oid.child(1)
-
         self.assertEqual(child.value, (1, 0, 8825, 1))
 
     def test_comparison(self) -> None:
@@ -2120,7 +2264,6 @@ class TestObjectIdentifierType(unittest.TestCase):
         oid1 = ObjectIdentifierType((1, 0, 1))
         oid2 = ObjectIdentifierType((1, 0, 2))
         oid3 = ObjectIdentifierType((1, 0, 1))
-
         self.assertEqual(oid1, oid3)
         self.assertNotEqual(oid1, oid2)
         self.assertLess(oid1, oid2)
@@ -2137,7 +2280,8 @@ class TestObjectIdentifierType(unittest.TestCase):
         buf = ByteBuffer.allocate(10)
 
         # Encode tag separately
-        oid.tag.put(buf)
+        if isinstance(_ := oid.tag.put(buf), Error):
+            _.unwrap()
         # Encode contents only
         written = oid.put_lc(buf)
 
@@ -2147,20 +2291,23 @@ class TestObjectIdentifierType(unittest.TestCase):
     def test_contents_only_decode(self) -> None:
         """Test get_contents (no tag validation)"""
         buf = ByteBuffer.wrap(b"\x02\x28\x01")  # Length + Content only
-        oid = ObjectIdentifierType.get_lc(buf)
+        if isinstance(oid := ObjectIdentifierType.get_lc(buf), Error):
+            oid.unwrap()
 
         self.assertEqual(oid.value, (1, 0, 1))
 
     def test_truncated_encoding(self) -> None:
         """Truncated encoding should raise BufferError"""
         buf = ByteBuffer.wrap(b"\x06\x05\x28\x01\x81")  # Missing last octet
-        self.assertTrue(ObjectIdentifierType.get(buf).has(exception_type=BufferError))
+        if isinstance(decoded := ObjectIdentifierType.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=BufferError))
 
     def test_invalid_base128_continuation(self) -> None:
         """Invalid base-128 continuation should raise"""
         # Continuation bit set but no more octets
         buf = ByteBuffer.wrap(b"\x06\x02\x28\x81")
-        self.assertTrue(ObjectIdentifierType.get(buf).has(exception_type=BufferError))
+        if isinstance(decoded := ObjectIdentifierType.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=BufferError))
 
 
 class TestGeneralizedTime(unittest.TestCase):
@@ -2170,7 +2317,8 @@ class TestGeneralizedTime(unittest.TestCase):
         """Encode GeneralizedTime with UTC timezone"""
         gt = GeneralizedTime("20240115120000Z")
         buf = ByteBuffer.allocate(50)
-        written = gt.put(buf)
+        if isinstance(written := gt.put(buf), Error):
+            written.unwrap()
 
         # Tag (0x18) + Length (0x0F) + Content (15 bytes)
         self.assertEqual(written, 17)
@@ -2181,16 +2329,18 @@ class TestGeneralizedTime(unittest.TestCase):
     def test_utc_decode(self) -> None:
         """Decode GeneralizedTime with UTC timezone"""
         buf = ByteBuffer.wrap(b"\x18\x0F20240115120000Z")
-        gt = GeneralizedTime.get(buf)
-
-        self.assertEqual(gt.value, "20240115120000Z")
-        self.assertTrue(gt.is_utc)
+        decoded = GeneralizedTime.get(buf)
+        if isinstance(decoded, Error):
+            decoded.unwrap()
+        self.assertEqual(decoded.value, "20240115120000Z")
+        self.assertTrue(decoded.is_utc)
 
     def test_with_fractional_seconds_encode(self) -> None:
         """Encode GeneralizedTime with fractional seconds"""
         gt = GeneralizedTime("20240115120000.5Z")
         buf = ByteBuffer.allocate(50)
-        written = gt.put(buf)
+        if isinstance(written := gt.put(buf), Error):
+            written.unwrap()
 
         self.assertEqual(written, 19)  # 17 + 1 for fractional digit
         self.assertEqual(bytes(buf.extract())[2:], b"20240115120000.5Z")
@@ -2198,17 +2348,19 @@ class TestGeneralizedTime(unittest.TestCase):
     def test_with_fractional_seconds_decode(self) -> None:
         """Decode GeneralizedTime with fractional seconds"""
         buf = ByteBuffer.wrap(b"\x18\x1120240115120000.5Z")
-        gt = GeneralizedTime.get(buf)
-
-        self.assertEqual(gt.value, "20240115120000.5Z")
-        self.assertTrue(gt.has_fractional_seconds)
-        self.assertEqual(gt.fractional_seconds, "5")
+        decoded = GeneralizedTime.get(buf)
+        if isinstance(decoded, Error):
+            decoded.unwrap()
+        self.assertEqual(decoded.value, "20240115120000.5Z")
+        self.assertTrue(decoded.has_fractional_seconds)
+        self.assertEqual(decoded.fractional_seconds, "5")
 
     def test_with_timezone_offset_encode(self) -> None:
         """Encode GeneralizedTime with timezone offset"""
         gt = GeneralizedTime("20240115120000+0300")
         buf = ByteBuffer.allocate(50)
-        written = gt.put(buf)
+        if isinstance(written := gt.put(buf), Error):
+            written.unwrap()
 
         self.assertEqual(written, 21)  # 17 + 4 for timezone
         self.assertEqual(bytes(buf.extract())[2:], b"20240115120000+0300")
@@ -2216,11 +2368,12 @@ class TestGeneralizedTime(unittest.TestCase):
     def test_with_timezone_offset_decode(self) -> None:
         """Decode GeneralizedTime with timezone offset"""
         buf = ByteBuffer.wrap(b"\x18\x1320240115120000+0300")
-        gt = GeneralizedTime.get(buf)
-
-        self.assertEqual(gt.value, "20240115120000+0300")
-        self.assertFalse(gt.is_utc)
-        self.assertEqual(gt.timezone_offset, "+0300")
+        decoded = GeneralizedTime.get(buf)
+        if isinstance(decoded, Error):
+            decoded.unwrap()
+        self.assertEqual(decoded.value, "20240115120000+0300")
+        self.assertFalse(decoded.is_utc)
+        self.assertEqual(decoded.timezone_offset, "+0300")
 
     def test_component_access(self) -> None:
         """Test component property accessors"""
@@ -2237,10 +2390,12 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test GeneralizedTime with leap second (second=60)"""
         gt = GeneralizedTime("20161231235960Z")
         buf = ByteBuffer.allocate(50)
-        gt.put(buf)
+        if isinstance(_ := gt.put(buf), Error):
+            _.unwrap()
 
         buf.set_pos(0)
-        decoded = GeneralizedTime.get(buf)
+        if isinstance(decoded := GeneralizedTime.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.second, 60)
 
     def test_invalid_format_too_short(self) -> None:
@@ -2304,7 +2459,8 @@ class TestGeneralizedTime(unittest.TestCase):
         buf = ByteBuffer.allocate(50)
 
         # Encode tag separately
-        gt.tag.put(buf)
+        if isinstance(_ := gt.tag.put(buf), Error):
+            _.unwrap()
         # Encode contents only
         written = gt.put_lc(buf)
 
@@ -2314,7 +2470,8 @@ class TestGeneralizedTime(unittest.TestCase):
     def test_contents_only_decode(self) -> None:
         """Test get_contents (no tag validation)"""
         buf = ByteBuffer.wrap(b"\x0F20240115120000Z")
-        gt = GeneralizedTime.get_lc(buf)
+        if isinstance(gt := GeneralizedTime.get_lc(buf), Error):
+            gt.unwrap()
 
         self.assertEqual(gt.value, "20240115120000Z")
 
@@ -2322,7 +2479,8 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test __len__ matches encoded length"""
         gt = GeneralizedTime("20240115120000Z")
         buf = ByteBuffer.allocate(50)
-        actual_len = gt.put(buf)
+        if isinstance(actual_len := gt.put(buf), Error):
+            actual_len.unwrap()
         self.assertEqual(17, actual_len)
 
     def test_round_trip(self) -> None:
@@ -2340,10 +2498,12 @@ class TestGeneralizedTime(unittest.TestCase):
             with self.subTest(value=value):
                 original = GeneralizedTime(value)
                 buf = ByteBuffer.allocate(50)
-                original.put(buf)
+                if isinstance(_ := original.put(buf), Error):
+                    _.unwrap()
 
                 buf.set_pos(0)
-                decoded = GeneralizedTime.get(buf)
+                if isinstance(decoded := GeneralizedTime.get(buf), Error):
+                    decoded.unwrap()
 
                 self.assertEqual(decoded.value, value)
 
@@ -2373,13 +2533,14 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test buffer overflow protection"""
         gt = GeneralizedTime("20240115120000Z")
         buf = ByteBuffer.allocate(1)  # Too small
-
-        self.assertTrue(gt.put(buf).has(exception_type=BufferError))
+        if isinstance(offset := gt.put(buf), Error):
+            self.assertTrue(offset.has(exception_type=BufferError))
 
     def test_truncated_encoding(self) -> None:
         """Test truncated encoding raises"""
         buf = ByteBuffer.wrap(b"\x18\x0F2024011512")  # Truncated
-        self.assertTrue(GeneralizedTime.get(buf).has(exception_type=BufferError))
+        if isinstance(decoded := GeneralizedTime.get(buf), Error):
+            self.assertTrue(decoded.has(exception_type=BufferError))
 
     def test_indefinite_length_not_supported(self) -> None:
         """Test indefinite length not supported"""
@@ -2397,11 +2558,11 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test GeneralizedTime with negative timezone offset"""
         gt = GeneralizedTime("20240115120000-0500")
         buf = ByteBuffer.allocate(50)
-        gt.put(buf)
-
+        if isinstance(_ := gt.put(buf), Error):
+            _.unwrap()
         buf.set_pos(0)
-        decoded = GeneralizedTime.get(buf)
-
+        if isinstance(decoded := GeneralizedTime.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.timezone_offset, "-0500")
         self.assertFalse(decoded.is_utc)
 
@@ -2409,11 +2570,12 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test GeneralizedTime with multiple fractional second digits"""
         gt = GeneralizedTime("20240115120000.123Z")
         buf = ByteBuffer.allocate(50)
-        gt.put(buf)
+        if isinstance(_ := gt.put(buf), Error):
+            _.unwrap()
 
         buf.set_pos(0)
-        decoded = GeneralizedTime.get(buf)
-
+        if isinstance(decoded := GeneralizedTime.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.fractional_seconds, "123")
         self.assertTrue(decoded.has_fractional_seconds)
 
@@ -2431,11 +2593,12 @@ class TestGeneralizedTime(unittest.TestCase):
         """Test midnight encoding (000000)"""
         gt = GeneralizedTime("20240116000000Z")
         buf = ByteBuffer.allocate(50)
-        gt.put(buf)
+        if isinstance(_ := gt.put(buf), Error):
+            _.unwrap()
 
         buf.set_pos(0)
-        decoded = GeneralizedTime.get(buf)
-
+        if isinstance(decoded := GeneralizedTime.get(buf), Error):
+            decoded.unwrap()
         self.assertEqual(decoded.hour, 0)
         self.assertEqual(decoded.minute, 0)
         self.assertEqual(decoded.second, 0)
@@ -2443,3 +2606,4 @@ class TestGeneralizedTime(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

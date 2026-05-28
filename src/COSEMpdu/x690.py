@@ -9,10 +9,6 @@ from .byte_buffer import ByteBuffer
 class TagError(Exception): ...
 
 
-
-
-
-
 @dataclass
 class Length(EDTLV):
     """

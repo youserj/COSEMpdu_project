@@ -3,8 +3,9 @@ Unit tests for ConstrainedType with BER encoding/decoding (X.680 §45, X.690)
 Tests cover ValueRange constraints and validation during encode/decode
 """
 import unittest
+from dataclasses import dataclass
 from src.COSEMpdu.byte_buffer import ByteBuffer
-from src.COSEMpdu.ber import IntegerType, EnumeratedType, ConstrainedType
+from src.COSEMpdu.ber import IntegerType, EnumeratedType, ConstrainedType, BooleanType, SequenceType
 from src.COSEMpdu.x680.constrained_type import ValueRange
 
 
@@ -420,24 +421,22 @@ class TestConstraintRoundTrip(unittest.TestCase):
             TestConstrained(IntegerType(256))
 
 
+class ConstrainedInt(ConstrainedType[IntegerType]):
+    constraint_spec = ValueRange(0, 255)
+    value: IntegerType
+
+
+@dataclass
+class TestSequence(SequenceType):
+    id: ConstrainedInt
+    flag: BooleanType
+
+
 class TestConstraintWithSequence(unittest.TestCase):
     """Test constraints in SEQUENCE components"""
 
     def test_constrained_component_in_sequence(self) -> None:
         """Test constrained type as SEQUENCE component"""
-        from src.COSEMpdu.ber import SequenceType
-        from src.COSEMpdu.x680 import NamedType
-        from src.COSEMpdu.ber import BooleanType
-
-        class ConstrainedInt(ConstrainedType[IntegerType]):
-            constraint_spec = ValueRange(0, 255)
-            value: IntegerType
-
-        class TestSequence(SequenceType):
-            components = (
-                NamedType("id", ConstrainedInt),
-                NamedType("flag", BooleanType),
-            )
 
         # Valid sequence
         seq = TestSequence((
@@ -456,19 +455,6 @@ class TestConstraintWithSequence(unittest.TestCase):
 
     def test_constrained_component_invalid_in_sequence(self) -> None:
         """Test invalid constrained type in SEQUENCE"""
-        from src.COSEMpdu.ber import SequenceType
-        from src.COSEMpdu.x680 import NamedType
-        from src.COSEMpdu.ber import BooleanType
-
-        class ConstrainedInt(ConstrainedType[IntegerType]):
-            constraint_spec = ValueRange(0, 255)
-            value: IntegerType
-
-        class TestSequence(SequenceType):
-            components = (
-                NamedType("id", ConstrainedInt),
-                NamedType("flag", BooleanType),
-            )
 
         # Invalid value should fail at construction
         with self.assertRaises(ValueError):

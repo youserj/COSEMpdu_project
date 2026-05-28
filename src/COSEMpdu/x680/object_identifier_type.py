@@ -9,6 +9,7 @@ Standards:
 - X.680 Table 1: UNIVERSAL tag 6
 """
 from typing import Self
+from StructResult.result import Error, ValueOrError
 from .type import OBJECT_IDENTIFIER, BuiltinType, Simple
 
 
@@ -141,19 +142,19 @@ class ObjectIdentifierType(Simple[OBJECT_IDENTIFIER], BuiltinType):
             raise TypeError("Prefix must be ObjectIdentifierType")
         return self.value[:len(prefix.value)] == prefix.value
 
-    def parent(self) -> "ObjectIdentifierType | None":
+    def parent(self) -> ValueOrError[Self]:
         """
         Return parent OID (all arcs except last).
 
         Returns:
-            Parent OID or None if this is a root arc
+            Parent OID or Error if this is a root arc
 
         Example:
             >>> ObjectIdentifierType((1, 0, 1)).parent()
             ObjectIdentifierType(value=(1, 0))
         """
         if len(self.value) <= 2:
-            return None
+            return Error.from_e(ValueError("parent must be at least with 2 values"))
         return self.__class__(self.value[:-1])
 
     def child(self, arc: int) -> Self:

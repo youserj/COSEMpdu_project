@@ -53,6 +53,23 @@
 
     },
     {
+      "name": "test_ACSE",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": [
+        "-v",
+        "test.test_acse_pdu"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+            "PYTHONPATH": "${workspaceFolder}/src"
+      }
+
+    },
+    {
       "name": "Python: test_constraint",
       "type": "debugpy",
       "request": "launch",

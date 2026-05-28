@@ -3,12 +3,11 @@ COSEM PDU Types Implementation
 Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COSEMpdu_GB83
 """
-from typing import ClassVar, Self, Optional
+from dataclasses import dataclass
+from typing import ClassVar, Optional
 from . import x690
 from .x680 import (
     NamedType,
-    OptionalNamedType,
-    DefaultNamedType,
     TaggingMode,
     NamedBitList,
     NamedBit,
@@ -278,29 +277,26 @@ class CallingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
 
 class AARQApdu(ber.SequenceType):
     """AARQ-apdu"""
-    components = (
-        DefaultNamedType("protocol-version", ProtocolVersion0, DEFAULT_PROTOCOL_VERSION),
-        NamedType("application-context-name", ApplicationContextName1),
-        OptionalNamedType("called-AP-title", CalledAPTitle),
-        OptionalNamedType("called-AE-qualifier", CalledAEQualifier),
-        OptionalNamedType("called-AP-invocation-id", CalledAPInvocationIdentifier),
-        OptionalNamedType("called-AE-invocation-id", CalledAEInvocationIdentifier),
-        OptionalNamedType("calling-AP-title", CallingAPTitle),
-        OptionalNamedType("calling-AE-qualifier", CallingAEQualifier),
-        OptionalNamedType("calling-AP-invocation-id", CallingAPInvocationIdentifier),
-        OptionalNamedType("calling-AE-invocation-id", CallingAEInvocationIdentifier),
-        OptionalNamedType("sender-acse-requirements", SenderACSERequirements),
-        OptionalNamedType("mechanism-name", MechanismName11),
-        OptionalNamedType("calling-authentication-value", CallingAuthenticationValue),
-        OptionalNamedType("implementation-information", ImplementationData29),
-        OptionalNamedType("user-information", AssociationInformation30),
-    )
+    protocol_version: ProtocolVersion0 = DEFAULT_PROTOCOL_VERSION
+    application_context_name: ApplicationContextName1
+    called_ap_title: Optional[CalledAPTitle]
+    called_ae_qualifier: Optional[CalledAEQualifier]
+    called_ap_invocation_id: Optional[CalledAPInvocationIdentifier]
+    called_ae_invocation_id: Optional[CalledAEInvocationIdentifier]
+    calling_ap_title: Optional[CallingAPTitle]
+    calling_ae_qualifier: Optional[CallingAEQualifier]
+    calling_ap_invocation_id: Optional[CallingAPInvocationIdentifier]
+    calling_ae_invocation_id: Optional[CallingAEInvocationIdentifier]
+    sender_acse_requirements: Optional[SenderACSERequirements]
+    mechanism_name: Optional[MechanismName11]
+    calling_authentication_value: Optional[CallingAuthenticationValue]
+    implementation_information: Optional[ImplementationData29]
+    user_information: Optional[AssociationInformation30]
 
-    @classmethod
-    def from_components(
-        cls,
+    def __init__(
+        self,
         *,
-        protocol_version: Optional[ProtocolVersion0] = None,
+        protocol_version: ProtocolVersion0 = DEFAULT_PROTOCOL_VERSION,
         application_context_name: ApplicationContextName1,
         called_ap_title: Optional[CalledAPTitle] = None,
         called_ae_qualifier: Optional[CalledAEQualifier] = None,
@@ -309,36 +305,28 @@ class AARQApdu(ber.SequenceType):
         calling_ap_title: Optional[CallingAPTitle] = None,
         calling_ae_qualifier: Optional[CallingAEQualifier] = None,
         calling_ap_invocation_id: Optional[CallingAPInvocationIdentifier] = None,
-        calling_ae_invocation_id: Optional[CalledAEInvocationIdentifier] = None,
+        calling_ae_invocation_id: Optional[CallingAEInvocationIdentifier] = None,
         sender_acse_requirements: Optional[SenderACSERequirements] = None,
         mechanism_name: Optional[MechanismName11] = None,
         calling_authentication_value: Optional[CallingAuthenticationValue] = None,
         implementation_information: Optional[ImplementationData29] = None,
         user_information: Optional[AssociationInformation30] = None,
-    ) -> Self:
-        """
-        Create AARQApdu instance from named components.
-
-        Returns:
-            Self: New AARQApdu instance with value set to _AARQApdu
-        """
-        return cls((
-            DEFAULT_PROTOCOL_VERSION if protocol_version is None else protocol_version,
-            application_context_name,
-            called_ap_title,
-            called_ae_qualifier,
-            called_ap_invocation_id,
-            called_ae_invocation_id,
-            calling_ap_title,
-            calling_ae_qualifier,
-            calling_ap_invocation_id,
-            calling_ae_invocation_id,
-            sender_acse_requirements,
-            mechanism_name,
-            calling_authentication_value,
-            implementation_information,
-            user_information
-        ))
+    ) -> None:
+        self.protocol_version = protocol_version
+        self.application_context_name = application_context_name
+        self.called_ap_title = called_ap_title
+        self.called_ae_qualifier = called_ae_qualifier
+        self.called_ap_invocation_id = called_ap_invocation_id
+        self.called_ae_invocation_id = called_ae_invocation_id
+        self.calling_ap_title = calling_ap_title
+        self.calling_ae_qualifier = calling_ae_qualifier
+        self.calling_ap_invocation_id = calling_ap_invocation_id
+        self.calling_ae_invocation_id = calling_ae_invocation_id
+        self.sender_acse_requirements = sender_acse_requirements
+        self.mechanism_name = mechanism_name
+        self.calling_authentication_value = calling_authentication_value
+        self.implementation_information = implementation_information
+        self.user_information = user_information
 
 
 class AARQ(ber.TaggedType[AARQApdu]):
@@ -395,27 +383,24 @@ class RespondingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
 
 class AAREApdu(ber.SequenceType):
     """AARE-apdu"""
-    components = (
-        DefaultNamedType("protocol-version", ProtocolVersion0, DEFAULT_PROTOCOL_VERSION),
-        NamedType("application-context-name", ApplicationContextName1),
-        NamedType("result", Result),
-        NamedType("result-source-diagnostic", ResultSourceDiagnostic),
-        OptionalNamedType("responding-AP-title", RespondingAPTitle),
-        OptionalNamedType("responding-AE-qualifier", RespondingAEQualifier),
-        OptionalNamedType("responding-AP-invocation-id", RespondingAPInvocationIdentifier),
-        OptionalNamedType("responding-AE-invocation-id", RespondingAEInvocationIdentifier),
-        OptionalNamedType("responder-acse-requirements", ResponderACSERequirements),
-        OptionalNamedType("mechanism-name", MechanismName9),
-        OptionalNamedType("responding-authentication-value", RespondingAuthenticationValue),
-        OptionalNamedType("implementation-information", ImplementationData29),
-        OptionalNamedType("user-information", AssociationInformation30),
-    )
+    protocol_version: ProtocolVersion0 = DEFAULT_PROTOCOL_VERSION
+    application_context_name: ApplicationContextName1
+    result: Result
+    result_source_diagnostic: ResultSourceDiagnostic
+    responding_ap_title: Optional[RespondingAPTitle]
+    responding_ae_qualifier: Optional[RespondingAEQualifier]
+    responding_ap_invocation_id: Optional[RespondingAPInvocationIdentifier]
+    responding_ae_invocation_id: Optional[RespondingAEInvocationIdentifier]
+    responder_acse_requirements: Optional[ResponderACSERequirements]
+    mechanism_name: Optional[MechanismName9]
+    responding_authentication_value: Optional[RespondingAuthenticationValue]
+    implementation_information: Optional[ImplementationData29]
+    user_information: Optional[AssociationInformation30]
 
-    @classmethod
-    def from_components(
-        cls,
+    def __init__(
+        self,
         *,
-        protocol_version: Optional[ProtocolVersion0] = None,
+        protocol_version: ProtocolVersion0 = DEFAULT_PROTOCOL_VERSION,
         application_context_name: ApplicationContextName1,
         result: Result,
         result_source_diagnostic: ResultSourceDiagnostic,
@@ -428,22 +413,20 @@ class AAREApdu(ber.SequenceType):
         responding_authentication_value: Optional[RespondingAuthenticationValue] = None,
         implementation_information: Optional[ImplementationData29] = None,
         user_information: Optional[AssociationInformation30] = None,
-    ) -> Self:
-        return cls((
-            DEFAULT_PROTOCOL_VERSION if protocol_version is None else protocol_version,
-            application_context_name,
-            result,
-            result_source_diagnostic,
-            responding_ap_title,
-            responding_ae_qualifier,
-            responding_ap_invocation_id,
-            responding_ae_invocation_id,
-            responder_acse_requirements,
-            mechanism_name,
-            responding_authentication_value,
-            implementation_information,
-            user_information
-        ))
+    ) -> None:
+        self.protocol_version = protocol_version
+        self.application_context_name = application_context_name
+        self.result = result
+        self.result_source_diagnostic = result_source_diagnostic
+        self.responding_ap_title = responding_ap_title
+        self.responding_ae_qualifier = responding_ae_qualifier
+        self.responding_ap_invocation_id = responding_ap_invocation_id
+        self.responding_ae_invocation_id = responding_ae_invocation_id
+        self.responder_acse_requirements = responder_acse_requirements
+        self.mechanism_name = mechanism_name
+        self.responding_authentication_value = responding_authentication_value
+        self.implementation_information = implementation_information
+        self.user_information = user_information
 
 
 class AARE(ber.TaggedType[AAREApdu]):
@@ -456,30 +439,11 @@ class AARE(ber.TaggedType[AAREApdu]):
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
 
 
+@dataclass
 class RLRQApdu(ber.SequenceType):
     """RLRQ-apdu internal sequence"""
-    components = (
-        OptionalNamedType("reason", RequestReason),
-        OptionalNamedType("user-information", AssociationInformation30),
-    )
-
-    @classmethod
-    def from_components(
-        cls,
-        *,
-        reason: Optional[RequestReason] = None,
-        user_information: Optional[AssociationInformation30] = None,
-    ) -> Self:
-        """
-        Create RLREApdu instance from named components.
-
-        Returns:
-            Self: New RLREApdu instance
-        """
-        return cls((
-            reason,
-            user_information,
-        ))
+    reason: Optional[RequestReason] = None
+    user_information: Optional[AssociationInformation30] = None
 
 
 class RLRQ(ber.TaggedType[RLRQApdu]):
@@ -492,30 +456,11 @@ class RLRQ(ber.TaggedType[RLRQApdu]):
     mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
 
 
+@dataclass
 class RLREApdu(ber.SequenceType):
     """RLRE-apdu internal sequence"""
-    components = (
-        OptionalNamedType("reason", ResponseReason),
-        OptionalNamedType("user-information", AssociationInformation30),
-    )
-
-    @classmethod
-    def from_components(
-        cls,
-        *,
-        reason: Optional[ResponseReason] = None,
-        user_information: Optional[AssociationInformation30] = None,
-    ) -> Self:
-        """
-        Create RLREApdu instance from named components.
-
-        Returns:
-            Self: New RLREApdu instance
-        """
-        return cls((
-            reason,
-            user_information,
-        ))
+    reason: Optional[ResponseReason] = None
+    user_information: Optional[AssociationInformation30] = None
 
 
 class RLRE(ber.TaggedType[RLREApdu]):

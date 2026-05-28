@@ -11,6 +11,7 @@ Note:
     - SEQUENCE OF is a BUILTIN type per X.680 §16.2
 """
 from typing import Iterator, Self
+from StructResult.result import Error, ValueOrError
 from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE
 
 
@@ -19,7 +20,7 @@ class SequenceOfType[T: Type](BuiltinType):
     component_type: type[T]
     value: SEQUENCE_OF[T]
 
-    def __init__(self, value: SEQUENCE_OF[T]) -> None:
+    def __init__(self, value: SEQUENCE_OF[T] = []) -> None:
         self.value = value
 
     @classmethod
@@ -79,19 +80,23 @@ class SequenceOfType[T: Type](BuiltinType):
         return len(self.value) == 0
 
     @property
-    def first(self) -> T | None:
+    def first(self) -> ValueOrError[T]:
         """Get first component if present"""
-        return self.value[0] if self.value else None
+        if self.value:
+            return self.value[0]
+        return Error.from_e(IndexError("Sequence is empty"))
 
     @property
-    def last(self) -> T | None:
+    def last(self) -> ValueOrError[T]:
         """Get last component if present"""
-        return self.value[-1] if self.value else None
+        if self.value:
+            return self.value[-1]
+        return Error.from_e(IndexError("Sequence is empty"))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SequenceOfType):
             return False
         return (
-            self.component_type == other.component_type and
-            self.normalize() == other.normalize()
+            self.component_type == other.component_type
+            and self.normalize() == other.normalize()
         )

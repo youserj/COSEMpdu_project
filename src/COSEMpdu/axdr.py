@@ -19,7 +19,7 @@ Standards:
 """
 from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override, runtime_checkable
 from StructResult.result import ValueOrError, Error
-from COSEMpdu import x690
+from . import x690
 from .x680.tagged_type import TaggingMode
 from .x680.constrained_type import ValueRange, SizeConstraint
 from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
@@ -92,7 +92,6 @@ class Type(x680.Type, Protocol):
 
 
 TagNumber: TypeAlias = Annotated[int, "0-255"]
-type SEQUENCE = tuple[Optional[Type], ...]
 
 
 class TaggedType[T: Type](Type, x680.TaggedType[T]):
@@ -548,7 +547,7 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
 # SEQUENCE Type (IEC 61334-6 §6.9)
 # =============================================================================
 
-class SequenceType(Type, x680.SequenceType[SEQUENCE]):
+class SequenceType(Type, x680.SequenceType):
     """
     SEQUENCE with A-XDR encoding/decoding (IEC 61334-6 §6.9)
 
@@ -570,7 +569,11 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         - Component order fixed by ASN.1 definition
         - DLMS uses extensively for APDUs
     """
-    components: ClassVar[tuple[NamedType[Type] | OptionalNamedType, ...]]
+    components: ClassVar[tuple[x680.NamedType[Type], ...]]
+
+    def __init_subclass__(cls) -> None:
+        """create <components> from annotations"""
+        cls._init_sequence_components()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -579,7 +582,7 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
 
         Returns instance and advances buffer position.
         """
-        components_data: list[Optional[Type]] = []
+        components_data: dict[str, Optional[Type]] = {}
         for n_t in cls.components:
             # Check for OPTIONAL/DEFAULT presence flag
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
@@ -588,15 +591,15 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
                 if presence_flag == 0:
                     # Component absent
                     if isinstance(n_t, x680.DefaultNamedType):
-                        components_data.append(n_t.default)
+                        components_data[n_t.identifier] = n_t.default
                     else:
-                        components_data.append(None)
+                        components_data[n_t.identifier] = None
                     continue
             # Decode the component using its A-XDR get_contents()
             if isinstance(value := n_t.type_.get_lc(buf), Error):
                 return value
-            components_data.append(value)
-        return cls(tuple(components_data))
+            components_data[n_t.identifier] = value
+        return cls(**components_data)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -605,13 +608,16 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         Returns number of bytes written.
         """
         written = 0
-        for value, n_t in zip(self.value, self.components):
+        for n_t in self.components:
+            value = getattr(self, n_t.identifier)
             # Handle OPTIONAL/DEFAULT with presence flag
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
-                if value is None or (
-                    isinstance(n_t, DefaultNamedType)
-                    and value == n_t.default
-                ):
+                if (
+                    value is None
+                    or (
+                        isinstance(n_t, DefaultNamedType)
+                        and value == n_t.default
+                )):
                     if isinstance(tmp := buf.put_u8(0), Error):  # Component absent
                         return tmp
                     written += tmp
@@ -619,8 +625,8 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
                 if isinstance(tmp := buf.put_u8(1), Error):  # Component present
                     return tmp
                 written += tmp
-            if value is None:
-                return Error.from_e(ValueError(f"Required component <{n_t.identifier}> not set"))
+            # if not isinstance(value, n_t.type_):
+            #     return Error.from_e(TypeError(f"got {value} in Required component <{n_t.identifier}>, expected {n_t.type_}"))
             if isinstance(tmp := value.put_lc(buf), Error):  # Component present
                 return tmp
             written += tmp  # Encode component contents (no tag/length)

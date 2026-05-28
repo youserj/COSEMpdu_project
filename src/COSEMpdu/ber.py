@@ -1,5 +1,5 @@
 # src/COSEMpdu/x690/bit_string.py
-from typing import ClassVar, Self, cast, Optional, Protocol, Any
+from typing import ClassVar, Self, cast, Optional, Protocol
 from StructResult.result import ValueOrError, Error
 from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
 from . import x680
@@ -18,7 +18,6 @@ def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
 
 class Type(x680.Type, Protocol):
     tag: ClassVar[Tag]
-    value: Any
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -703,7 +702,7 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
                 for i in range(len(chunks) - 1):
                     chunks[i] |= 0x80
                 content_bytes.extend(chunks)
-        return put_lc(buf, len(content_bytes), content_bytes)
+        return put_lc(buf, len(content_bytes), bytes(content_bytes))
 
 
 class OctetStringType(Type, x680.OctetStringType):
@@ -759,7 +758,7 @@ class OctetStringType(Type, x680.OctetStringType):
         return put_lc(buf, len(self.value), self.value)
 
 
-class SequenceType(Type, x680.SequenceType[SEQUENCE]):
+class SequenceType(Type, x680.SequenceType):
     """
     SEQUENCE with BER encoding/decoding (X.690 §8.9)
 
@@ -772,12 +771,6 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         - Components encoded in definition order (X.690 §8.9.2)
         - OPTIONAL/DEFAULT components may be absent (X.690 §8.9.3)
         - IEC 61334-6 §6.9: SEQUENCE component tags NOT encoded
-
-    Note:
-        - Encoding is concatenation of component encodings
-        - Component order is fixed by ASN.1 definition
-        - For DLMS/COSEM, component tags are omitted (unlike BER)
-        - OPTIONAL/DEFAULT indicated by presence flag in A-XDR
     """
     # Cached BER tag instance (constructed form)
     tag: ClassVar[Tag] = Tag(
@@ -785,6 +778,10 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         constructed=True
     )
     components: ClassVar[tuple[NamedType, ...]]
+
+    def __init_subclass__(cls) -> None:
+        """create <components> from annotations"""
+        cls._init_sequence_components()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -798,25 +795,24 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
             return Error.from_e(ValueError("Indefinite length form not supported for SEQUENCE"))
         # Read all component encodings within the length
         start_pos = buf.get_pos()
-        components_data: list[Optional[Type]] = []
+        components_data: dict[str, Optional[Type]] = {}
         for n_t in cls.components:
-            if buf.get_pos() - start_pos >= length.value:
-                # Component is absent (OPTIONAL or DEFAULT)
-                components_data.append(None)
+            if buf.get_pos() - start_pos >= length.value:  # Component is absent (OPTIONAL or DEFAULT)
+                components_data[n_t.identifier] = None
                 continue
-            # Decode the component using its own get() method
-            # This handles tag, length, and contents for each component
+            # Decode the component using its own get() method. This handles tag, length, and contents for each component
             if isinstance(value := n_t.type_.get(buf), Error):
                 if value.has(exception_type=TagError):
                     if isinstance(n_t, x680.OptionalNamedType):
-                        components_data.append(None)
+                        value = None
                     elif isinstance(n_t, x680.DefaultNamedType):
-                        components_data.append(n_t.default)
+                        value = n_t.default
                     else:
                         return Error.from_e(ValueError(f"can't get {cls.__name__} from {buf}"))
-            else:
-                components_data.append(value)
-        return cls(tuple(components_data))
+                else:
+                    return Error.from_e(RuntimeError(f"unknown exception {value}, can't get {cls.__name__} from {buf}"))
+            components_data[n_t.identifier] = value
+        return cls(**components_data)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -830,10 +826,11 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
         """
         # Encode all present components
         counter: int = 0
-        length_pos: int = buf.get_pos()
+        l_pos: int = buf.get_pos()
         if isinstance(err := buf.shift_pos(1), Error):
             return err
-        for value, n_t in zip(self.value, self.components):
+        for n_t in self.components:
+            value = getattr(self, n_t.identifier)
             if (
                 isinstance(n_t, x680.DefaultNamedType)
                 and value == n_t.default
@@ -848,11 +845,11 @@ class SequenceType(Type, x680.SequenceType[SEQUENCE]):
             counter += tmp
         length = Length(counter)
         if (step := len(length) - 1) > 0:
-            if isinstance(end := buf.shift_right(length_pos + 1, counter, step), Error):
+            if isinstance(end := buf.shift_right(l_pos + 1, counter, step), Error):
                 return end
         else:
             end = buf.get_pos()
-        if isinstance(err := buf.set_pos(length_pos), Error):
+        if isinstance(err := buf.set_pos(l_pos), Error):
             return err
         length.put(buf)
         if isinstance(err := buf.set_pos(end), Error):
@@ -920,8 +917,9 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         Returns number of bytes written.
         """
         counter: int = 0
-        if isinstance(l_pos := buf.shift_pos(1), Error):
-            return l_pos
+        l_pos: int = buf.get_pos()
+        if isinstance(_ := buf.shift_pos(1), Error):
+            return _
         for component in self.value:
             if isinstance(tmp := component.put(buf), Error):
                 return tmp

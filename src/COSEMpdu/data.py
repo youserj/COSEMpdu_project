@@ -443,7 +443,7 @@ class CompactArraySequenceType(axdr.SequenceType):
         NamedType("array-contents", ArrayContents),
     )
 
-    def get_array(self) -> list["Data[CDT]"]:
+    def get_array(self) -> list["CommonDataType[CDT]"]:
         if (type_ := Data.alternatives.get(self.value[0].value.value.tag)) is None:
             raise ValueError(f"Unknown TypeDescription tag: {self.value[0]}")
         data_class = type_.type_
@@ -697,8 +697,7 @@ data_alternatives: Alternatives = {
 }
 
 
-
-class Data[T: ImplicitTaggedType[Any]](axdr.ChoiceType, Protocol):
+class CommonDataType[T: ImplicitTaggedType[Any]](axdr.ChoiceType, Protocol):
     """Data"""
     alternatives: Alternatives
     value: T
@@ -889,9 +888,8 @@ class Data[T: ImplicitTaggedType[Any]](axdr.ChoiceType, Protocol):
         return f"Data.{self.value!r}"
 
 
-class CommonDataType(Data[CDT]):
+class Data(CommonDataType[CDT]):
     alternatives = data_alternatives
-    
 
 
 def union2alternatives(item: UnionType) -> Alternatives:
@@ -924,7 +922,7 @@ setattr(TypeDescriptionArrayContent, "components", (
     ))
 
 
-class ExternallyData[T: ImplicitTaggedType[Any]](Data[T]):
+class ExternallyData[T: ImplicitTaggedType[Any]](CommonDataType[T]):
 
     @property
     def selected(self) -> str:

@@ -1,9 +1,6 @@
 from typing import Optional, Self, ClassVar, Literal
 from .x680 import tag, TaggingMode
 from .x680.type import (
-    OptionalNamedType,
-    DefaultNamedType,
-    NamedType,
     INTEGER
 )
 from .x680.bit_string import NamedBitList, NamedBit
@@ -95,69 +92,50 @@ SN_REFERENCE = ObjectName(axdr.IntegerType(-1536))  # 0xFA00
 
 class InitiateRequest(axdr.SequenceType):
     """InitiateRequest"""
-    components = (
-        OptionalNamedType("dedicated-key", axdr.OctetStringType),
-        DefaultNamedType("response-allowed", axdr.BooleanType, axdr.BooleanType(True)),
-        OptionalNamedType("proposed-quality-of-service", Integer8),
-        NamedType("proposed-dlms-version-number", Unsigned8),
-        NamedType("proposed-conformance", Conformance),
-        NamedType("client-max-receive-pdu-size", Unsigned16),
-    )
+    dedicated_key: Optional[axdr.OctetStringType] = None
+    response_allowed: axdr.BooleanType = axdr.BooleanType(True)
+    proposed_quality_of_service: Optional[Integer8] = None
+    proposed_dlms_version_number: Unsigned8
+    proposed_conformance: Conformance
+    client_max_receive_pdu_size: Unsigned16
 
-    @classmethod
-    def from_components(cls, *,
-        dedicated_key: Optional[axdr.OctetStringType],
-        response_allowed: Optional[axdr.BooleanType],
-        proposed_quality_of_service: Optional[Integer8],
+    def __init__(
+        self,
+        *,
         proposed_dlms_version_number: Unsigned8,
         proposed_conformance: Conformance,
-        client_max_receive_pdu_size: Unsigned16
-    ) -> Self:
-        return cls((
-            dedicated_key,
-            axdr.BooleanType(True) if response_allowed is None else response_allowed,
-            proposed_quality_of_service,
-            proposed_dlms_version_number,
-            proposed_conformance,
-            client_max_receive_pdu_size
-        ))
+        client_max_receive_pdu_size: Unsigned16,
+        dedicated_key: Optional[axdr.OctetStringType] = None,
+        response_allowed: axdr.BooleanType = axdr.BooleanType(True),
+        proposed_quality_of_service: Optional[Integer8] = None,
+    ) -> None:
+        self.dedicated_key = dedicated_key
+        self.response_allowed = response_allowed
+        self.proposed_quality_of_service = proposed_quality_of_service
+        self.proposed_dlms_version_number = proposed_dlms_version_number
+        self.proposed_conformance = proposed_conformance
+        self.client_max_receive_pdu_size = client_max_receive_pdu_size
 
 
 class InitiateResponse(axdr.SequenceType):
     """InitiateResponse"""
-    components = (
-        OptionalNamedType("negotiated-quality-of-service", Integer8),
-        NamedType("negotiated-dlms-version-number", Unsigned8),
-        NamedType("negotiated-conformance", Conformance),
-        NamedType("server-max-receive-pdu-size", Unsigned16),
-        NamedType("vaa-name", ObjectName),
-    )
+    negotiated_quality_of_service: Optional[Integer8] = None
+    negotiated_dlms_version_number: Unsigned8
+    negotiated_conformance: Conformance
+    server_max_receive_pdu_size: Unsigned16
+    vaa_name: ObjectName
 
-    @classmethod
-    def from_components(cls, *,
-        negotiated_quality_of_service: Optional[Integer8],
+    def __init__(
+        self,
+        *,
         negotiated_dlms_version_number: Unsigned8,
         negotiated_conformance: Conformance,
         server_max_receive_pdu_size: Unsigned16,
-        vaa_name: ObjectName
-    ) -> Self:
-        """
-        Create InitiateResponse from components.
-
-        Args:
-            negotiated_quality_of_service: QoS parameter (optional, not used in DLMS/COSEM)
-            negotiated_dlms_version_number: DLMS version (typically 1)
-            negotiated_conformance: Conformance block (BER encoded)
-            server_max_receive_pdu_size: Maximum PDU size server can receive
-            vaa_name: Virtual Association Entity name (ObjectName)
-
-        Returns:
-            InitiateResponse instance
-        """
-        return cls((
-            negotiated_quality_of_service,
-            negotiated_dlms_version_number,
-            negotiated_conformance,
-            server_max_receive_pdu_size,
-            vaa_name
-        ))
+        vaa_name: ObjectName,
+        negotiated_quality_of_service: Optional[Integer8] = None,
+    ) -> None:
+        self.negotiated_quality_of_service = negotiated_quality_of_service
+        self.negotiated_dlms_version_number = negotiated_dlms_version_number
+        self.negotiated_conformance = negotiated_conformance
+        self.server_max_receive_pdu_size = server_max_receive_pdu_size
+        self.vaa_name = vaa_name

@@ -1,7 +1,8 @@
-from typing import Optional, Self, Literal, ClassVar, Any
+from typing import Optional, Self, Literal, ClassVar, Any, TypeAlias
+from dataclasses import dataclass
 from StructResult.result import ValueOrError, Error
 from .x680.type import (
-    TYPE_VALUE, NamedType, INTEGER, OCTET_STRING, OptionalNamedType, BOOLEAN
+    TYPE_VALUE, NamedType, INTEGER, OCTET_STRING, BOOLEAN
 )
 from .byte_buffer import ByteBuffer
 from .x680.enumerated_type import EnumerationList, EnumerationMember
@@ -58,7 +59,7 @@ DataAccessResult.SUCCESS = DataAccessResult(0)
 
 
 class DataAccessResult1(TaggedType[DataAccessResult]):
-    """ [1] IMPLICIT Data-Access-Result"""
+    """[1] IMPLICIT Data-Access-Result"""
     tag = 1
     mode = TaggingMode.IMPLICIT
     value: DataAccessResult
@@ -115,66 +116,35 @@ class CosemObjectMethodId(Integer8):
 # =============================================================================
 
 
+@dataclass
 class CosemAttributeDescriptor(SequenceType):
     """Cosem-Attribute-Descriptor"""
-    components = (
-        NamedType("class-id", CosemClassId),
-        NamedType("instance-id", CosemObjectInstanceId),
-        NamedType("attribute-id", CosemObjectAttributeId),
-    )
-
-    @classmethod
-    def from_components(
-        cls,
-        class_id: INTEGER,
-        instance_id: OCTET_STRING,
-        attribute_id: INTEGER
-    ) -> Self:
-        return cls((
-            CosemClassId(IntegerType(class_id)),
-            CosemObjectInstanceId(OctetStringType(instance_id)),
-            CosemObjectAttributeId(IntegerType(attribute_id))
-        ))
+    class_id: CosemClassId
+    instance_id: CosemObjectInstanceId
+    attribute_id: CosemObjectAttributeId
 
 
+@dataclass
 class CosemMethodDescriptor(SequenceType):
     """Cosem-Method-Descriptor"""
-    components = (
-        NamedType("class-id", CosemClassId),
-        NamedType("instance-id", CosemObjectInstanceId),
-        NamedType("method-id", CosemObjectMethodId),
-    )
-
-    @classmethod
-    def from_components(
-        cls,
-        class_id: INTEGER,
-        instance_id: OCTET_STRING,
-        method_id: INTEGER
-    ) -> Self:
-        return cls((
-            CosemClassId(IntegerType(class_id)),
-            CosemObjectInstanceId(OctetStringType(instance_id)),
-            CosemObjectMethodId(IntegerType(method_id))
-        ))
+    class_id: CosemClassId
+    instance_id: CosemObjectInstanceId
+    method_id: CosemObjectMethodId
 
 
+@dataclass
 class SelectiveAccessDescriptor(SequenceType):
     """Selective-Access-Descriptor"""
-    components = (
-            NamedType("access-selector", Unsigned8),
-            NamedType("access-parameters", Data),
-        )
+    access_selector: Unsigned8
+    access_parameters: Data
     selector_parameters: ClassVar[Optional[dict[int, type[ImplicitTaggedType[Any]]]]] = None
 
-    def __init__(self, value: tuple[Unsigned8, ImplicitTaggedType[Any]]) -> None:
-        selector, parameter = value
+    def __post_init__(self) -> None:
         if self.selector_parameters is not None:
-            if (expected_type := self.selector_parameters.get(selector.normalize())) is None:
-                raise InitError(f"Unknown access-selector value: {selector.value}")
-            if not isinstance(parameter, expected_type):
-                raise InitError(f"Expected access-parameters type {expected_type.__name__} for selector {selector.value}, got {type(parameter).__name__}")
-        self.value = value
+            if (expected_type := self.selector_parameters.get(self.selector.normalize())) is None:
+                raise InitError(f"Unknown access-selector value: {self.access_selector.value}")
+            if not isinstance(self.access_parameters, expected_type):
+                raise InitError(f"Expected access-parameters type {expected_type.__name__} for selector {self.access_selector.value}, got {type(self.access_parameters).__name__}")
 
     @classmethod
     def parse(cls, value: tuple[INTEGER, TYPE_VALUE]) -> Self:
@@ -192,24 +162,12 @@ class SelectiveAccessDescriptor(SequenceType):
         except InitError as e:
             return Error.from_e(e)
 
-    @classmethod
-    def from_components(
-        cls,
-        access_selector: INTEGER,
-        access_parameters: ImplicitTaggedType[Any]
-    ) -> Self:
-        return cls((
-            Unsigned8(IntegerType(access_selector)),
-            access_parameters
-        ))
 
-
+@dataclass
 class CosemAttributeDescriptorWithSelection(SequenceType):
     """Cosem-Attribute-Descriptor-With-Selection"""
-    components = (
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        OptionalNamedType("access-selection", SelectiveAccessDescriptor),
-    )
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None
 
 
 # =============================================================================
@@ -224,13 +182,12 @@ class VariableName2(TaggedType[ObjectName]):
     value: ObjectName
 
 
+@dataclass
 class ParameterizedAccess(SequenceType):
     """Parameterized-Access"""
-    components = (
-        NamedType("variable-name", ObjectName),
-        NamedType("selector", Unsigned8),
-        NamedType("parameter", Data),
-    )
+    variable_name: ObjectName
+    selector: Unsigned8
+    parameter: Data
 
 
 class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
@@ -240,11 +197,10 @@ class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
     value: ParameterizedAccess
 
 
+@dataclass
 class BlockNumberAccess(SequenceType):
     """Block-Number-Access"""
-    components = (
-        NamedType("block-number", Unsigned16),
-    )
+    block_number: Unsigned16
 
 
 class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
@@ -254,13 +210,12 @@ class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
     value: BlockNumberAccess
 
 
+@dataclass
 class ReadDataBlockAccess(SequenceType):
     """Read-Data-Block-Access"""
-    components = (
-        NamedType("last-block", BooleanType),
-        NamedType("block-number", Unsigned16),
-        NamedType("raw-data", OctetStringType),
-    )
+    last_block: BooleanType
+    block_number: Unsigned16
+    raw_data: OctetStringType
 
 
 class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
@@ -270,12 +225,11 @@ class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
     value: ReadDataBlockAccess
 
 
+@dataclass
 class WriteDataBlockAccess(SequenceType):
     """Write-Data-Block-Access"""
-    components = (
-        NamedType("last-block", BooleanType),
-        NamedType("block-number", Unsigned16),
-    )
+    last_block: BooleanType
+    block_number: Unsigned16
 
 
 class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
@@ -433,18 +387,11 @@ class Data0(TaggedType[Data]):
     value: Data
 
 
-class DataAccesResult1(TaggedType[DataAccessResult1]):
-    """[1] IMPLICIT Data-Access-Result"""
-    tag = 1
-    mode = TaggingMode.IMPLICIT
-    value: DataAccessResult1
-
-
 class GetDataResult(ChoiceType):
     """Get-Data-Result"""
     alternatives = {
         0: NamedType("data", Data0),
-        1: NamedType("data-access-result", DataAccesResult1)
+        1: NamedType("data-access-result", DataAccessResult1)
     }
 
     @classmethod
@@ -453,7 +400,7 @@ class GetDataResult(ChoiceType):
 
     @classmethod
     def data_access_result(cls, result: DataAccessResult1) -> Self:
-        return cls(DataAccesResult1(result))
+        return cls(DataAccessResult1(result))
 
 
 # =============================================================================
@@ -461,13 +408,12 @@ class GetDataResult(ChoiceType):
 # =============================================================================
 
 
+@dataclass
 class DataBlockResult(SequenceType):
     """Data-Block-Result"""
-    components = (
-        NamedType("last-block", BooleanType),
-        NamedType("block-number", Unsigned16),
-        NamedType("raw-data", OctetStringType),
-    )
+    last_block: BooleanType
+    block_number: Unsigned16
+    raw_data: OctetStringType
 
 
 class RawData(TaggedType[OctetStringType]):
@@ -491,22 +437,20 @@ class DataBlockGResult(ChoiceType):
     )
 
 
+@dataclass
 class DataBlockG(SequenceType):
     """DataBlock-G"""
-    components = (
-        NamedType("last-block", BooleanType),
-        NamedType("block-number", Unsigned32),
-        NamedType("result", DataBlockGResult),
-    )
+    last_block: BooleanType
+    block_number: Unsigned32
+    result: DataBlockGResult
 
 
+@dataclass
 class DataBlockSA(SequenceType):
     """DataBlock-SA"""
-    components = (
-        NamedType("last-block", BooleanType),
-        NamedType("block-number", Unsigned32),
-        NamedType("raw-data", OctetStringType),
-    )
+    last_block: BooleanType
+    block_number: Unsigned32
+    raw_data: OctetStringType
 
 
 # =============================================================================
@@ -514,12 +458,11 @@ class DataBlockSA(SequenceType):
 # =============================================================================
 
 
+@dataclass
 class ActionResponseWithOptionalData(SequenceType):
     """Action-Response-With-Optional-Data"""
-    components = (
-        NamedType("result", ActionResult),
-        NamedType("return-parameters", GetDataResult),
-    )
+    result: ActionResult
+    return_parameters: Optional[GetDataResult] = None
 
 
 # =============================================================================
@@ -527,11 +470,10 @@ class ActionResponseWithOptionalData(SequenceType):
 # =============================================================================
 
 
+@dataclass
 class NotificationBody(SequenceType):
     """Notification-Body"""
-    components = (
-        NamedType("data-value", Data),
-    )
+    data_value: Data
 
 
 # =============================================================================
@@ -539,9 +481,8 @@ class NotificationBody(SequenceType):
 # =============================================================================
 
 
-class ListOfData(SequenceOfType[Data]):
-    """List-Of-Data"""
-    component_type = Data
+ListOfData: TypeAlias = SequenceOfType[Data]
+"""List-Of-Data"""
 
 
 # =============================================================================
@@ -549,11 +490,10 @@ class ListOfData(SequenceOfType[Data]):
 # =============================================================================
 
 
+@dataclass
 class AccessRequestGet(SequenceType):
     """Access-Request-Get"""
-    components = (
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-    )
+    cosem_attribute_descriptor: CosemAttributeDescriptor
 
 
 class AccessRequestGet1(TaggedType[AccessRequestGet]):
@@ -563,12 +503,11 @@ class AccessRequestGet1(TaggedType[AccessRequestGet]):
     value: AccessRequestGet
 
 
+@dataclass
 class AccessRequestGetWithSelection(SequenceType):
     """Access-Request-Get-With-Selection"""
-    components = (
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        NamedType("access-selection", SelectiveAccessDescriptor),
-    )
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
 
 
 class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
@@ -578,11 +517,10 @@ class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
     value: AccessRequestGetWithSelection
 
 
+@dataclass
 class AccessRequestSet(SequenceType):
     """Access-Request-Set"""
-    components = (
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-    )
+    cosem_attribute_descriptor: CosemAttributeDescriptor
 
 
 class AccessRequestSet2(TaggedType[AccessRequestSet]):
@@ -592,12 +530,11 @@ class AccessRequestSet2(TaggedType[AccessRequestSet]):
     value: AccessRequestSet
 
 
+@dataclass
 class AccessRequestSetWithSelection(SequenceType):
     """Access-Request-Set-With-Selection"""
-    components = (
-        NamedType("cosem-attribute-descriptor", CosemAttributeDescriptor),
-        NamedType("access-selection", SelectiveAccessDescriptor),
-    )
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
 
 
 class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
@@ -607,11 +544,10 @@ class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
     value: AccessRequestSetWithSelection
 
 
+@dataclass
 class AccessRequestAction(SequenceType):
     """Access-Request-Action"""
-    components = (
-        NamedType("cosem-method-descriptor", CosemMethodDescriptor),
-    )
+    cosem_method_descriptor: CosemMethodDescriptor
 
 
 class AccessRequestAction3(TaggedType[AccessRequestAction]):
@@ -643,12 +579,11 @@ class ListOfAccessRequestSpecification0(TaggedType[ListOfAccessRequestSpecificat
     value: ListOfAccessRequestSpecification
 
 
+@dataclass
 class AccessRequestBody(SequenceType):
     """Access-Request-Body"""
-    components = (
-        NamedType("access-request-specification", ListOfAccessRequestSpecification),
-        NamedType("access-request-list-of-data", ListOfData),
-    )
+    access_request_specification: ListOfAccessRequestSpecification
+    access_request_list_of_data: ListOfData
 
 
 # =============================================================================
@@ -656,11 +591,10 @@ class AccessRequestBody(SequenceType):
 # =============================================================================
 
 
+@dataclass
 class AccessResponseGet(SequenceType):
     """Access-Response-Get"""
-    components = (
-        NamedType("result", DataAccessResult1),
-    )
+    result: DataAccessResult1
 
 
 class AccessResponseGet1(TaggedType[AccessResponseGet]):
@@ -670,11 +604,10 @@ class AccessResponseGet1(TaggedType[AccessResponseGet]):
     value: AccessResponseGet
 
 
+@dataclass
 class AccessResponseSet(SequenceType):
     """Access-Response-Set"""
-    components = (
-        NamedType("result", DataAccessResult1),
-    )
+    result: DataAccessResult1
 
 
 class AccessResponseSet2(TaggedType[AccessResponseSet]):
@@ -684,11 +617,10 @@ class AccessResponseSet2(TaggedType[AccessResponseSet]):
     value: AccessResponseSet
 
 
+@dataclass
 class AccessResponseAction(SequenceType):
     """Access-Response-Action"""
-    components = (
-        NamedType("result", ActionResult),
-    )
+    result: ActionResult
 
 
 class AccessResponseAction3(TaggedType[AccessResponseAction]):
@@ -714,8 +646,13 @@ class ListOfAccessResponseSpecification(SequenceOfType[AccessResponseSpecificati
 
 class AccessResponseBody(SequenceType):
     """Access-Response-Body"""
-    components = (
-        OptionalNamedType("access-request-specification", ListOfAccessRequestSpecification0),
-        NamedType("access-response-list-of-data", ListOfData),
-        NamedType("access-response-specification", ListOfAccessResponseSpecification),
-    )
+    access_request_specification: Optional[ListOfAccessRequestSpecification0] = None  # OPTIONAL — before mandatory
+    access_response_list_of_data: ListOfData
+    access_response_specification: ListOfAccessResponseSpecification
+
+    def __init__(self, access_response_list_of_data: ListOfData,
+                 access_response_specification: ListOfAccessResponseSpecification,
+                 access_request_specification: Optional[ListOfAccessRequestSpecification0] = None) -> None:
+        self.access_response_list_of_data = access_response_list_of_data
+        self.access_response_specification = access_response_specification
+        self.access_request_specification = access_request_specification
