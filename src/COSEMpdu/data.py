@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import dataclass
 from types import UnionType
 from typing import Self, ClassVar, TypeAlias, Optional, Union, Protocol, get_args, Any, cast, Iterator, TypeVar
 from struct import pack, unpack
@@ -84,8 +85,11 @@ class TypeDescriptionNullData(TaggedNullType):
     tag = 0
 
 
+@dataclass
 class TypeDescriptionArrayContent(axdr.SequenceType):
     """array content: SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }"""
+    number_of_elements: Unsigned16
+    type_description: TypeDescription
 
 
 class TypeDescriptionArray(ImplicitTaggedType[TypeDescriptionArrayContent]):
@@ -436,24 +440,27 @@ class ArrayContents(ImplicitTaggedType[OctetStringType]):
     tag = 1
 
 
+@dataclass
 class CompactArraySequenceType(axdr.SequenceType):
     """compact-array content: SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }"""
-    components = (
-        NamedType("contents-description", ContentsDescription),
-        NamedType("array-contents", ArrayContents),
-    )
+    contents_description: ContentsDescription
+    array_contents: ArrayContents
 
     def get_array(self) -> list["CommonDataType[CDT]"]:
-        if (type_ := Data.alternatives.get(self.value[0].value.value.tag)) is None:
-            raise ValueError(f"Unknown TypeDescription tag: {self.value[0]}")
+        if (type_ := Data.alternatives.get(self.contents_description.value.value.tag)) is None:
+            raise ValueError(f"Unknown TypeDescription tag: {self.contents_description}")
         data_class = type_.type_
-        contents_bytes = bytes(self.value[1].value)
+        contents_bytes = bytes(self.array_contents.value)
         if not contents_bytes:
             return []
         result: list["Data"] = []
         buf = ByteBuffer.wrap(contents_bytes)
+        pos: int = 0
         while buf.remaining() > 0:
             data = data_class.get_lc(buf)
+            if pos == buf.get_pos():
+                raise ValueError("infinity <array-contents>")
+            pos = buf.get_pos()
             result.append(data)
         return result
 
@@ -892,6 +899,9 @@ class Data(CommonDataType[CDT]):
     alternatives = data_alternatives
 
 
+data_alternatives[1] = NamedType("array", Array[Data])
+
+
 def union2alternatives(item: UnionType) -> Alternatives:
     new = {}
     args = cast("tuple[ImplicitTaggedType[Any], ...]", get_args(item))
@@ -905,7 +915,6 @@ def union2alternatives(item: UnionType) -> Alternatives:
     return new
 
 
-
 def include_alternatives(type_alias: TypeAlias) -> dict[int, NamedType[CDT]]:
     new = {}
     for type_ in get_args(type_alias):
@@ -916,10 +925,6 @@ def include_alternatives(type_alias: TypeAlias) -> dict[int, NamedType[CDT]]:
 
 
 setattr(SequenceOfData, "component_type", Data)
-setattr(TypeDescriptionArrayContent, "components", (
-        NamedType("number-of-elements", Unsigned16),
-        NamedType("type-description", TypeDescription),
-    ))
 
 
 class ExternallyData[T: ImplicitTaggedType[Any]](CommonDataType[T]):

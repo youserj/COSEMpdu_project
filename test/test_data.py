@@ -6,12 +6,13 @@ Standards:
     - IEC 61334-6 §6.6: CHOICE encoding (A-XDR)
     - IEC 61334-6 §6.4-6.5: BIT STRING, OCTET STRING encoding
 """
-from typing import Any, Final
+from typing import Any, Final, TypeAlias
 import unittest
 from StructResult.result import Error
-from COSEMpdu.x680.type import CHOICE
+from src.COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.data import (
+    union2alternatives,
     # TypeDescription types
     NamedType,
     CommonDataType,
@@ -118,10 +119,10 @@ class TestTypeDescriptionArray(unittest.TestCase):
     def test_encode_decode(self) -> None:
         """Test array encoding/decoding"""
         # array: SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }
-        content = TypeDescriptionArrayContent((
+        content = TypeDescriptionArrayContent(
             Unsigned16(axdr.IntegerType(5)),
             TypeDescription(TypeDescriptionInteger(axdr.NullType(None)))
-        ))
+        )
         original = TypeDescription(TypeDescriptionArray(content))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
@@ -672,20 +673,18 @@ class TestDataCompactArray(unittest.TestCase):
     def test_encode_decode(self) -> None:
         """Test compact-array encoding/decoding"""
         # compact-array: SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }
-        content = CompactArraySequenceType((
-            ContentsDescription(TypeDescription(TypeDescriptionInteger(axdr.null))),
-            ArrayContents(axdr.OctetStringType(b"\x00\x01\x02\x03"))
-        ))
-        x = content.get_array()
-        z = CompactArraySequenceType.from_array(ContentsDescription(TypeDescription.null_data()), x)
+        content = CompactArraySequenceType(
+            contents_description=(TypeDescription(TypeDescriptionInteger(axdr.null))),
+            array_contents=ArrayContents(axdr.OctetStringType(b"\x00\x01\x02\x03"))
+        )
         original = Data(CompactArray(content))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "compact-array")
-        self.assertEqual(decoded.value.value[0].value.selected, "integer")
-        self.assertEqual(decoded.value.value[1].value.value, b"\x00\x01\x02\x03")
+        self.assertEqual(decoded.value.value.contents_description.value.selected, "integer")
+        self.assertEqual(decoded.value.value.array_contents.value.value, b"\x00\x01\x02\x03")
 
 
 class TestDataDontCare(unittest.TestCase):
@@ -888,8 +887,8 @@ class TestDataNestedStructures(unittest.TestCase):
 
     def test_nested_array(self) -> None:
         """Test nested array encoding/decoding"""
-        inner_array = Data.array([Data.integer(1), Data.integer(2)])
-        outer_array = Data.array([inner_array, Data.integer(3)])
+        inner_array = Data(Array(SequenceOfData([Data.integer(1), Data.integer(2)])))
+        outer_array = Data(Array(SequenceOfData([inner_array, Data.integer(3)])))
         buf = ByteBuffer.allocate(100)
         outer_array.put(buf)
         buf.set_pos(0)
@@ -996,7 +995,10 @@ class TestDataOctetImplicit(unittest.TestCase):
     def test_octetObj(self) -> None:
         from .test_axdr import OctetStringObjectIdentifierType
 
-        class IdentifierData(Data[OctetStringObjectIdentifierType | Unsigned]): ...
+        IdentifierDataType: TypeAlias = OctetStringObjectIdentifierType | Unsigned
+
+        class IdentifierData(CommonDataType[IdentifierDataType]):
+            alternatives = union2alternatives(IdentifierDataType)
 
         buf = ByteBuffer.allocate(20)
         iddata = IdentifierData.parse(CHOICE(9, (2, 16, 0x2f4, 5, 8, 1, 1)))
@@ -1043,7 +1045,7 @@ class TestExternallyData_(unittest.TestCase):
         result = TestExternallyData.get(buf)
 
         self.assertIsInstance(result, Error)
-        self.assertIn("can't get TestExternallyData separately", str(result.exception))
+        self.assertIn("can't get TestExternallyData separately", str(result.err.exceptions))
 
     def test_selected_property_returns_correct_identifier(self) -> None:
         """selected property should dynamically match the wrapped type's tag."""
@@ -1086,7 +1088,7 @@ class TestDiscriminatedUnion_(unittest.TestCase):
         result = TestDiscriminatedUnion.get_lc(buf)
 
         self.assertIsInstance(result, Error)
-        self.assertIn("Invalid length", str(result.exception))
+        self.assertIn("Invalid length", str(result.err.exceptions))
 
     def test_get_lc_rejects_unknown_selector(self) -> None:
         """Parser must fail if selector tag is not in payload.alternatives."""
@@ -1095,7 +1097,7 @@ class TestDiscriminatedUnion_(unittest.TestCase):
         result = TestDiscriminatedUnion.get_lc(buf)
 
         self.assertIsInstance(result, Error)
-        self.assertIn("expected", str(result.exception))
+        self.assertIn("expected", str(result.err.exceptions))
 
     def test_roundtrip_null_data(self) -> None:
         """Full encode -> decode cycle for selector=0 (null-data)."""

@@ -126,7 +126,7 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         if isinstance(tag_number := buf.get_u8(), Error):
             return tag_number
         if tag_number != cls.tag:
-            return Error.from_e(ValueError(f"Expected tag {cls.tag}, got {tag_number}"))
+            return Error.from_e(ValueError(f"expected tag {cls.tag}, got {tag_number}"))
         return cls.get_lc(buf)
 
     @classmethod
