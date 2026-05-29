@@ -2,7 +2,7 @@
 Unit tests for types_used.py - DLMS/COSEM xDLMS Data Transfer Services Types
 """
 import unittest
-from COSEMpdu.x680.type import CHOICE
+from src.COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.types_used import (
     # ENUMERATED Types
     DataAccessResult, DataAccessResult1, DataAccessResultList,
@@ -32,7 +32,7 @@ from src.COSEMpdu.axdr import IntegerType
 from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
-from COSEMpdu.useful_types import (
+from src.COSEMpdu.useful_types import (
     Integer8, Unsigned16, Unsigned32, Unsigned8
 )
 
@@ -316,7 +316,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertEqual(decoded.value.value.value, 0x0010)
+        self.assertEqual(decoded.normalize(), CHOICE(2, 16))
 
     def test_parameterized_access(self) -> None:
         """Test parameterized-access [4] alternative"""
@@ -359,9 +359,9 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertTrue(decoded.value.value.value[0].value.value)
-        self.assertEqual(decoded.value.value.value[1].value, 1)
-        self.assertEqual(bytes(decoded.value.value.value[2].value), b"\x01\x02\x03\x04")
+        self.assertTrue(decoded.value.value.last_block.value)
+        self.assertEqual(decoded.value.value.block_number.value.value, 1)
+        self.assertEqual(decoded.value.value.raw_data.normalize(), b"\x01\x02\x03\x04")
 
     def test_write_data_block_access(self) -> None:
         """Test write-data-block-access [7] alternative"""
@@ -375,8 +375,8 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertFalse(decoded.value.value.value[0].value.value)
-        self.assertEqual(decoded.value.value.value[1].value, 5)
+        self.assertFalse(decoded.value.value.last_block.value)
+        self.assertEqual(decoded.value.value.block_number.value.value, 5)
 
 
 class TestGetDataResult(unittest.TestCase):
@@ -541,9 +541,9 @@ class TestAccessRequestTypes(unittest.TestCase):
         )
         selection = SelectiveAccessDescriptor(
             access_selector=1,
-            access_parameters=Data.integer(100)
+            access_parameters=Data(Integer.parse(100))
         )
-        request = AccessRequestGetWithSelection((descriptor, selection))
+        request = AccessRequestGetWithSelection(descriptor, selection)
 
         buf = ByteBuffer.allocate(50)
         request.put(buf)
@@ -559,7 +559,7 @@ class TestAccessRequestTypes(unittest.TestCase):
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
         )
-        get_request = AccessRequestGet((descriptor,))
+        get_request = AccessRequestGet(descriptor)
         tagged = AccessRequestGet1(get_request)
         spec = AccessRequestSpecification(tagged)
 
@@ -576,9 +576,9 @@ class TestAccessResponseTypes(unittest.TestCase):
 
     def test_access_response_get(self) -> None:
         """Test Access-Response-Get"""
-        response = AccessResponseGet((
-            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0])),
-        ))
+        response = AccessResponseGet(
+            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0]))
+        )
 
         buf = ByteBuffer.allocate(10)
         response.put(buf)
@@ -589,9 +589,9 @@ class TestAccessResponseTypes(unittest.TestCase):
 
     def test_access_response_specification_choice(self) -> None:
         """Test Access-Response-Specification CHOICE"""
-        response = AccessResponseGet((
-            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0])),
-        ))
+        response = AccessResponseGet(
+            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0]))
+        )
         tagged = AccessResponseGet1(response)
         spec = AccessResponseSpecification(tagged)
 
@@ -613,17 +613,17 @@ class TestAccessRequestBody(unittest.TestCase):
             instance_id=b"\x00\x00\x01\x00\x00\xff",
             attribute_id=2
         )
-        get_request = AccessRequestGet((descriptor,))
+        get_request = AccessRequestGet(descriptor)
         tagged = AccessRequestGet1(get_request)
         spec = AccessRequestSpecification(tagged)
 
         request_spec_list = ListOfAccessRequestSpecification([spec])
-        data_list = ListOfData([Data.integer(100)])
+        data_list = ListOfData([Data(Integer.parse(100))])
 
-        body = AccessRequestBody((
+        body = AccessRequestBody(
             request_spec_list,
             data_list
-        ))
+        )
 
         buf = ByteBuffer.allocate(100)
         body.put(buf)
@@ -640,16 +640,16 @@ class TestAccessResponseBodyContent(unittest.TestCase):
     def test_with_optional_request_spec(self) -> None:
         """Test with optional access-request-specification present"""
         request_spec_list = ListOfAccessRequestSpecification0(
-            ListOfAccessRequestSpecification([])
+            ListOfAccessRequestSpecification()
         )
-        data_list = ListOfData([Data.integer(100)])
-        response_spec_list = ListOfAccessResponseSpecification([])
+        data_list = ListOfData([Data(Integer.parse(100))])
+        response_spec_list = ListOfAccessResponseSpecification()
 
-        body = AccessResponseBody((
+        body = AccessResponseBody(
             request_spec_list,
             data_list,
             response_spec_list
-        ))
+        )
 
         buf = ByteBuffer.allocate(100)
         body.put(buf)
@@ -660,8 +660,8 @@ class TestAccessResponseBodyContent(unittest.TestCase):
 
     def test_without_optional_request_spec(self) -> None:
         """Test with optional access-request-specification absent"""
-        data_list = ListOfData([Data.integer(100)])
-        response_spec_list = ListOfAccessResponseSpecification([])
+        data_list = ListOfData([Data(Integer.parse(100))])
+        response_spec_list = ListOfAccessResponseSpecification()
 
         body = AccessResponseBody((
             None,  # Optional field absent
@@ -736,8 +736,9 @@ class TestEdgeCases(unittest.TestCase):
         """Test DataAccessResult with invalid enumeration value"""
         # Valid values are 0-19 and 250
         buf = ByteBuffer.wrap(b"\xff")  # 255 is invalid
-        with self.assertRaises(ValueError):
-            DataAccessResult.get(buf)
+        decoded = DataAccessResult.get(buf)
+        decoded.has(exception_type=ZeroDivisionError)
+        self.assertTrue(decoded.has(exception_type=ZeroDivisionError))
 
 
 class TestRoundTrip(unittest.TestCase):

@@ -7,6 +7,7 @@ Standards:
     - IEC 61334-6 §6.4-6.5: BIT STRING, OCTET STRING encoding
 """
 from typing import Any, Final, TypeAlias
+from dataclasses import dataclass
 import unittest
 from StructResult.result import Error
 from src.COSEMpdu.x680.type import CHOICE
@@ -78,6 +79,7 @@ from src.COSEMpdu import axdr
 from src.COSEMpdu.axdr import IntegerType
 
 
+@dataclass
 class RestrictionByEntry(Structure):
     """restriction_by_entry"""
     from_entry: DoubleLongUnsigned
@@ -636,28 +638,26 @@ class TestDataStructure(unittest.TestCase):
 
     def test_encode_decode_empty(self) -> None:
         """Test structure empty encoding/decoding"""
-        original = Data(Structure(SequenceOfData([])))
+        original = Data(Structure.from_data())
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "structure")
-        self.assertEqual(len(decoded.value.value), 0)
+        self.assertEqual(len(decoded.value.components), 0)
 
     def test_encode_decode_with_elements(self) -> None:
         """Test structure with elements encoding/decoding"""
-        elements = SequenceOfData([
+        original = Data(Structure.from_data(
             Data(Integer(IntegerType(100))),
             Data(Boolean(True)),
-            Data(OctetString(b"test")),
-        ])
-        original = Data(Structure(elements))
+            Data(OctetString(b"test"))))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "structure")
-        self.assertEqual(len(decoded.value.value), 3)
+        self.assertEqual(len(decoded.value.components), 3)
 
 
 class TestDataCompactArray(unittest.TestCase):
@@ -767,10 +767,9 @@ class TestDataConvenienceConstructors(unittest.TestCase):
 
     def test_structure_constructor(self) -> None:
         """Test structure() constructor"""
-        elements: list[Data[Any]] = [Data(Integer(IntegerType(1))), Data(Boolean(True))]
-        data = Data.structure(elements)
+        data = Data(Structure.from_data(Data(Integer(IntegerType(1))), Data(Boolean(True))))
         self.assertEqual(data.selected, "structure")
-        self.assertEqual(len(data.value.value), 2)
+        self.assertEqual(len(data.value.components), 2)
 
     def test_float32_constructor(self) -> None:
         """Test float32() constructor"""
@@ -893,27 +892,27 @@ class TestDataNestedStructures(unittest.TestCase):
 
     def test_nested_structure(self) -> None:
         """Test nested structure encoding/decoding"""
-        inner_struct = Data.structure([Data(Integer(IntegerType(10))), Data(Boolean(True))])
-        outer_struct = Data.structure([inner_struct, Data(OctetString(b"test"))])
+        inner_struct = Data(Structure.from_data(Data(Integer(IntegerType(10))), Data(Boolean(True))))
+        outer_struct = Data(Structure.from_data(inner_struct, Data(OctetString(b"test"))))
         buf = ByteBuffer.allocate(100)
         outer_struct.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "structure")
-        self.assertEqual(len(decoded.value.value), 2)
+        self.assertEqual(len(decoded.value.components), 2)
 
     def test_mixed_nested(self) -> None:
         """Test mixed nested array and structure"""
-        mixed = Data.structure([
+        mixed = Data(Structure.from_data(
             Data(Array([Data(Integer(IntegerType(1))), Data(Integer(IntegerType(2)))])),
-            Data.structure([Data(Boolean(True)), Data(OctetString(b"data"))]),
-        ])
+            Data(Structure.from_data(Data(Boolean(True)), Data(OctetString(b"data")))),
+        ))
         buf = ByteBuffer.allocate(100)
         mixed.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "structure")
-        self.assertEqual(len(decoded.value.value), 2)
+        self.assertEqual(len(decoded.value.components), 2)
 
 
 class TestDataEdgeCases(unittest.TestCase):
@@ -921,19 +920,19 @@ class TestDataEdgeCases(unittest.TestCase):
 
     def test_buffer_overflow(self) -> None:
         """Test buffer overflow protection"""
-        data = Data.structure([Data(Integer(IntegerType(i))) for i in range(100)])
+        data = Data(Structure.from_data(*(Data(Integer(IntegerType(i))) for i in range(10))))
         buf = ByteBuffer.allocate(1)  # Too small
         self.assertTrue(data.put(buf).has(exception_type=BufferError))
 
     def test_empty_structure(self) -> None:
         """Test empty structure encoding/decoding"""
-        data = Data.structure([])
+        data = Data(Structure.from_data())
         buf = ByteBuffer.allocate(10)
         data.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(decoded.selected, "structure")
-        self.assertEqual(len(decoded.value.value), 0)
+        self.assertEqual(len(decoded.value.components), 0)
 
     def test_empty_array(self) -> None:
         """Test empty array encoding/decoding"""
@@ -1020,7 +1019,7 @@ class TestExternallyData(ExternallyData[CommonDataType]):
         3: NamedType("boolean", Boolean),
     }
 
-
+@dataclass
 class TestDiscriminatedUnion(DiscriminatedUnion):
     """Concrete DiscriminatedUnion using the test fixtures above"""
     selector: TestSelector
@@ -1096,10 +1095,10 @@ class TestDiscriminatedUnion_(unittest.TestCase):
 
     def test_roundtrip_null_data(self) -> None:
         """Full encode -> decode cycle for selector=0 (null-data)."""
-        original = TestDiscriminatedUnion(SequenceOfData([
+        original = TestDiscriminatedUnion(
             TestSelector(IntegerType(0)),
             TestExternallyData(NullData())
-        ]))
+        )
         original1 = TestDiscriminatedUnion.parse((0, CHOICE(0, None)))
 
 
@@ -1113,10 +1112,10 @@ class TestDiscriminatedUnion_(unittest.TestCase):
 
     def test_roundtrip_boolean(self) -> None:
         """Full encode -> decode cycle for selector=3 (boolean)."""
-        original = TestDiscriminatedUnion(SequenceOfData([
+        original = TestDiscriminatedUnion(
             TestSelector(IntegerType(3)),
             TestExternallyData(Boolean(False))
-        ]))
+        )
 
         buf = ByteBuffer.allocate(20)
         original.put(buf)

@@ -439,10 +439,10 @@ class TestConstraintWithSequence(unittest.TestCase):
         """Test constrained type as SEQUENCE component"""
 
         # Valid sequence
-        seq = TestSequence((
+        seq = TestSequence(
             ConstrainedInt(IntegerType(100)),
             BooleanType(True)
-        ))
+        )
 
         buf = ByteBuffer.allocate(50)
         seq.put(buf)

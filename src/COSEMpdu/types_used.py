@@ -261,9 +261,9 @@ class VariableAccessSpecification(ChoiceType):
         selector: Unsigned8,
         parameter: Data
     ) -> Self:
-        return cls(ParameterizedAccess4(ParameterizedAccess((
+        return cls(ParameterizedAccess4(ParameterizedAccess(
             variable_name, selector, parameter
-        ))))
+        )))
 
     @classmethod
     def block_number(cls, block_number: Unsigned16) -> Self:
@@ -276,11 +276,11 @@ class VariableAccessSpecification(ChoiceType):
         block_number: INTEGER,
         raw_data: OCTET_STRING
     ) -> Self:
-        return cls(ReadDataBlockAccess6(ReadDataBlockAccess((
+        return cls(ReadDataBlockAccess6(ReadDataBlockAccess(
             BooleanType(last_block),
             Unsigned16(IntegerType(block_number)),
             OctetStringType(raw_data)
-        ))))
+        )))
 
     @classmethod
     def from_write_data_block(
@@ -288,10 +288,10 @@ class VariableAccessSpecification(ChoiceType):
         last_block: BOOLEAN,
         block_number: INTEGER
     ) -> Self:
-        return cls(WriteDataBlockAccess7(WriteDataBlockAccess((
+        return cls(WriteDataBlockAccess7(WriteDataBlockAccess(
             BooleanType(last_block),
             Unsigned16(IntegerType(block_number))
-        ))))
+        )))
 
 
 # =============================================================================

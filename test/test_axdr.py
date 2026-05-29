@@ -3,6 +3,8 @@ Unit tests for A-XDR encoding rules (IEC 61334-6:2000)
 Tests cover all type encodings per standard specifications.
 """
 import unittest
+from dataclasses import dataclass
+from typing import Optional
 from src.COSEMpdu import x680
 from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
@@ -439,19 +441,33 @@ class TestChoiceType(unittest.TestCase):
             TestChoice.from_id("5", IntegerType(0))
 
 
+@dataclass
+class TestSeq(SequenceType):
+    a: IntegerType
+    b: Optional[BooleanType]
+
+
+class TestSeq2(SequenceType):
+    a: IntegerType
+    b: BooleanType = BooleanType(False)
+
+    def __init__(self, a: IntegerType, b: BooleanType = BooleanType(False)) -> None:
+        self.a = a
+        self.b = b
+
+
+@dataclass
+class TestSeq3(SequenceType):
+    a: IntegerType
+    b: BooleanType
+
+
 class TestSequenceType(unittest.TestCase):
     """Test SEQUENCE encoding per IEC 61334-6 §6.9"""
 
     def test_encode_no_optional(self) -> None:
         """SEQUENCE without OPTIONAL encodes components consecutively (§6.9)"""
-
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                NamedType("b", BooleanType),
-            )
-
-        val = TestSeq((IntegerType(value=10), BooleanType(value=True)))
+        val = TestSeq3(IntegerType(10), BooleanType(True))
         buf = ByteBuffer.allocate(3)
         written = val.put(buf)
         # a=10 (0x0A), b=TRUE (0xFF)
@@ -460,13 +476,8 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_with_optional_present(self) -> None:
         """SEQUENCE with OPTIONAL present encodes presence flag=1"""
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                OptionalNamedType("b", BooleanType),
-            )
 
-        val = TestSeq((IntegerType(value=10), BooleanType(value=True)))
+        val = TestSeq(IntegerType(value=10), BooleanType(value=True))
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         self.assertEqual(written, 3)
@@ -475,13 +486,7 @@ class TestSequenceType(unittest.TestCase):
     def test_encode_with_optional_absent(self) -> None:
         """SEQUENCE with OPTIONAL absent encodes presence flag=0"""
 
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                OptionalNamedType("b", BooleanType),
-            )
-
-        val = TestSeq((IntegerType(value=10), None))
+        val = TestSeq(IntegerType(value=10), None)
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         # presence=0, a=10
@@ -491,13 +496,7 @@ class TestSequenceType(unittest.TestCase):
     def test_encode_with_default_present(self) -> None:
         """SEQUENCE with DEFAULT present encodes presence flag=1"""
 
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                DefaultNamedType("b", BooleanType, default=BooleanType(False)),
-            )
-
-        val = TestSeq((IntegerType(value=10), BooleanType(value=True)))
+        val = TestSeq2(IntegerType(10), BooleanType(True))
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         # presence=1, a=10, b=TRUE
@@ -506,13 +505,7 @@ class TestSequenceType(unittest.TestCase):
     def test_encode_with_default_absent(self) -> None:
         """SEQUENCE with DEFAULT absent encodes presence flag=0"""
 
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                DefaultNamedType("b", BooleanType, default=BooleanType(False)),
-            )
-
-        val = TestSeq((IntegerType(value=10), BooleanType(value=False)))
+        val = TestSeq2(IntegerType(value=10), BooleanType(value=False))
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         # presence=0, a=10
@@ -522,12 +515,6 @@ class TestSequenceType(unittest.TestCase):
     def test_decode_with_optional_present(self) -> None:
         """Decode SEQUENCE with OPTIONAL present"""
 
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                OptionalNamedType("b", BooleanType),
-            )
-
         buf = ByteBuffer.wrap(b"\x0A\x01\xFF")
         val = TestSeq.get(buf)
         self.assertEqual(val["a"].value, 10)
@@ -535,12 +522,6 @@ class TestSequenceType(unittest.TestCase):
 
     def test_decode_with_optional_absent(self) -> None:
         """Decode SEQUENCE with OPTIONAL absent"""
-
-        class TestSeq(SequenceType):
-            components = (
-                NamedType("a", IntegerType),
-                OptionalNamedType("b", BooleanType),
-            )
 
         buf = ByteBuffer.wrap(b"\x0A\x00")
         val = TestSeq.get(buf)
@@ -665,16 +646,15 @@ class TestIntegration(unittest.TestCase):
                 NamedType("second", Boolean1)
             )
 
+        @dataclass
         class OuterSeq(SequenceType):
-            components = (
-                NamedType("flag", BooleanType),
-                NamedType("choice", InnerChoice),
-            )
+            flag: BooleanType
+            choice: InnerChoice
 
-        val = OuterSeq((
+        val = OuterSeq(
             BooleanType(value=True),
             InnerChoice.from_id("first", value=IntegerType(value=42))
-        ))
+        )
         buf = ByteBuffer.allocate(10)
         written = val.put(buf)
         # flag=1, choice_tag=0, choice_value=42
@@ -716,18 +696,21 @@ class TestIntegration(unittest.TestCase):
         """Test encode/decode roundtrip for complex structure"""
 
         class TestSeq(SequenceType):
-            components = (
-                NamedType("id", IntegerType),
-                OptionalNamedType("data", OctetStringType),
-                NamedType("choice", TestChoice),
-            )
+            id: IntegerType
+            data: Optional[OctetStringType]
+            choice: TestChoice
+
+            def __init__(self, id: IntegerType, choice: TestChoice, data: Optional[OctetStringType] = None) -> None:
+                self.id = id
+                self.data = data
+                self.choice = choice
 
         # Encode
-        original = TestSeq((
+        original = TestSeq(
             IntegerType(value=123),
+            TestChoice.from_id("first", value=IntegerType(value=456)),
             OctetStringType(value=b"TEST"),
-            TestChoice.from_id("first", value=IntegerType(value=456))
-        ))
+        )
         buf = ByteBuffer.allocate(20)
         original.put(buf)
 
@@ -736,10 +719,10 @@ class TestIntegration(unittest.TestCase):
         decoded = TestSeq.get(buf)
 
         # Verify
-        self.assertEqual(decoded["id"].value, 123)
-        self.assertEqual(decoded["data"].value, b"TEST")
-        self.assertEqual(decoded["choice"].selected, "first")
-        self.assertEqual(decoded["choice"].value.value.value, 456)
+        self.assertEqual(decoded.id.value, 123)
+        self.assertEqual(decoded.data.value, b"TEST")
+        self.assertEqual(decoded.choice.selected, "first")
+        self.assertEqual(decoded.choice.value.value.value, 456)
 
 
 class TestObjectIdentifierType(unittest.TestCase):

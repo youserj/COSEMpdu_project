@@ -1,17 +1,17 @@
 import datetime
 from dataclasses import dataclass
 from types import UnionType
-from typing import Self, ClassVar, TypeAlias, Optional, Union, Protocol, get_args, Any, cast, Iterator
+from typing import Self, ClassVar, TypeAlias, Optional, Union, Protocol, get_args, Any, cast
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
 from .byte_buffer import ByteBuffer, put_chain
 from .x680.constrained_type import SizeConstraint
-from .x680.type import NamedType, REAL, TYPE_VALUE, OCTET_STRING, INTEGER, STRING
+from .x680.type import NamedType, INTEGER
 from . import x680
 from .x680.tagged_type import TaggingMode
 from . import axdr
 from .useful_types import Integer8, Integer16, Integer32, Integer64, Unsigned8, Unsigned16, Unsigned32, Unsigned64
-from .axdr import ConstrainedOctetStringType, IntegerType, OctetStringType, NullType, BooleanType, Type, get_length, ImplicitTaggedType, ObjectIdentifierType, TaggedType
+from .axdr import ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, TaggedType
 
 
 class TaggedNullType(ImplicitTaggedType[NullType]): ...
@@ -285,80 +285,45 @@ class Array[T: DataType](DataType, SequenceOfData[T]):
     tag = 1
 
 
-class Structure(ImplicitTaggedType[SequenceOfData[ImplicitTaggedType[Any]]]):
-    """[2] IMPLICIT SEQUENCE OF Data"""
-    tag = 2
-    components: ClassVar[Optional[tuple[NamedType[Type], ...]]] = None  # 4.1.5 Common data types Table 2
+class Structure(DataType, x680.SequenceType):
+    """[2] IMPLICIT SEQUENCE OF Data
+
+    Although the specification defines this as a SEQUENCE OF, the implementation
+    uses ``x680.SequenceType`` rather than ``SequenceOfType`` for convenience.
+    ``SequenceType`` allows working with components by name (via ``self.components``),
+    whereas ``SequenceOfType`` assumes a homogeneous list of identically-typed elements.
+    Semantically, a COSEM Structure is a record with arbitrary named fields rather
+    than a plain array, so using ``SequenceType`` more accurately reflects the
+    actual data model.
+    """
+    tag: ClassVar[int] = 2
 
     @classmethod
-    def default(cls) -> Self:
-        return cls(SequenceOfData([component.type_.default() for component in cls.components]))
+    def from_data(cls, *args: DataType) -> Self:
+        """Dynamically create a Structure subclass from positional arguments.
 
-    @property
-    def get_el0(self):
-        return self.value[0]
+        Generates single-letter field names (``a``, ``b``, ``c``, …) for each
+        positional argument, uses each argument's type as the field annotation,
+        builds a new :func:`dataclass` subclass on the fly, and instantiates it
+        with the supplied values.
 
-    @property
-    def get_el1(self):
-        return self.value[1]
+        This allows constructing a typed Structure inline without manually
+        defining a subclass::
 
-    @property
-    def get_el2(self):
-        return self.value[2]
+            s = Structure.from_data(Integer(42), OctetStringType(b"hello"))
+        """
+        components_data: dict[str, Data] = {}
+        for i, value in enumerate(args):
+            components_data[chr(i + 97)] = value.__class__
+        return dataclass(type(
+            f"{cls.__name__}[{len(args)}]",
+            (cls,),
+            {"__annotations__": components_data}
+        ))(*args)
 
-    @property
-    def get_el3(self):
-        return self.value[3]
-
-    @property
-    def get_el4(self):
-        return self.value[4]
-
-    @property
-    def get_el5(self):
-        return self.value[5]
-
-    @property
-    def get_el6(self):
-        return self.value[6]
-
-    @property
-    def get_el7(self):
-        return self.value[7]
-
-    @property
-    def get_el8(self):
-        return self.value[8]
-
-    @property
-    def get_el9(self):
-        return self.value[9]
-
-    def __init_subclass__(cls, **kwargs) -> None:
+    def __init_subclass__(cls) -> None:
         """create <components> from annotations"""
-        elements: list[NamedType[Type]] = []
-        if cls.components is not None:
-            elements.extend(cls.components)
-            for identifier, type_ in cls.__annotations__.items():
-                for i, el in enumerate(cls.components):
-                    if identifier == el.identifier:
-                        elements[i] = NamedType(identifier, type_)
-                        break
-        else:
-            for (identifier, type_), f in zip(cls.__annotations__.items(), (
-                    Structure.get_el0, Structure.get_el1, Structure.get_el2, Structure.get_el3, Structure.get_el4, Structure.get_el5, Structure.get_el6, Structure.get_el7,
-                    Structure.get_el8, Structure.get_el9)):
-                elements.append((NamedType(identifier, type_)))
-                setattr(cls, identifier, f)
-        cls.components = tuple(elements)
-
-    @classmethod
-    def parse(cls, value: TYPE_VALUE) -> Self:
-        if not isinstance(value, tuple):
-            raise ValueError(f"in Structure.parse got {value}, expected <tuple>")
-        if cls.components:
-            return cls(SequenceOfData([comp.type_.parse(val) for comp, val in zip(cls.components, value, strict=True)]))
-        return super().parse(value)
+        cls._init_sequence_components()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -368,16 +333,56 @@ class Structure(ImplicitTaggedType[SequenceOfData[ImplicitTaggedType[Any]]]):
 
     @classmethod
     def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
-        if cls.components is None:
-            if isinstance(value := SequenceOfData.get_c(buf, length), Error):
-                return value
-            return cls(value)
-        components_data: list[Type] = []
+        """Decode SEQUENCE OF content from a buffer.
+
+        Operates in two modes:
+
+        1. **Dynamic** — when ``cls`` has no ``components`` attribute (i.e. decoding
+           an externally-defined or runtime-generated Structure). Reads *length*
+           elements via ``Data.get()``, assigns them single-letter field names
+           (``a``, ``b``, ``c``, …), and returns a dynamically-created dataclass
+           subclass.
+
+        2. **Static** — when ``cls`` has ``components`` (i.e. a statically-defined
+           Structure subclass). Reads each field by its declared name and type,
+           matching the shape of the component definitions.
+
+        :param buf: Buffer containing SEQUENCE content.
+        :param length: Number of elements in the SEQUENCE (or number of components
+                       for a statically-defined Structure).
+        """
+        components_data: dict[str, Data] = {}
+        values: list[Data] = []
+        if not hasattr(cls, "components"):
+            for i in range(length):
+                if isinstance(value := Data.get(buf), Error):
+                    return value
+                components_data[chr(i + 97)] = value.value.__class__  # TODO: maybe simple - Data?
+                values.append(value)
+            return dataclass(type(
+                f"{cls.__name__}[{length}]",
+                (cls,),
+                {"__annotations__": components_data}
+            ))(*values)
         for n_t in cls.components:
             if isinstance(value := n_t.type_.get(buf), Error):
                 return value
-            components_data.append(value)
-        return cls(SequenceOfData(components_data))
+            components_data[n_t.identifier] = value
+        return cls(**components_data)
+
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """
+        Encode SEQUENCE OF to A-XDR (IEC 61334-6 §6.10)
+
+        Returns number of bytes written.
+        """
+        return put_chain(
+            axdr.put_length(buf, len(self.components)),  # Variable-length encoding (§6.10.2)
+            self.put_c(buf)
+        )
+
+    def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
+        return put_chain(*(getattr(self, comp.identifier).put(buf) for comp in self.components))
 
 
 class DigitalMixin[T: Unsigned8 | Unsigned16 | Unsigned32 | Unsigned64 | Integer8 | Integer16 | Integer32 | Integer64]:
@@ -828,27 +833,20 @@ class DiscriminatedUnion(Structure):
         }
         }
         """
-    components: ClassVar[tuple[NamedType[Enum], NamedType[ExternallyData[Any]]]]
-
     def __init_subclass__(cls) -> None:
         """create <components> from annotations"""
-        elements: list[NamedType[Type]] = []
-        for (identifier, type_), f in zip(cls.__annotations__.items(), (Structure.get_el0, Structure.get_el1)):
-            elements.append((NamedType(identifier, type_)))
-            setattr(cls, identifier, f)
-        cls.components = tuple(elements)
+        super().__init_subclass__()
+        if len(cls.components) != 2:
+            raise RuntimeError(f"got {len(cls.components)}, expected 2")
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if isinstance(length := get_length(buf), Error):
-            return length
+    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         if length != 2:
             return Error.from_e(ValueError(f"Invalid length for {cls.__name__}: expected 2, got {length}"))
-        selector_t, value_t = cls.components
-        if isinstance(selector := selector_t.type_.get(buf), Error):
+        if isinstance(selector := cls.components[0].type_.get(buf), Error):
             return selector
-        if (alt := value_t.type_.alternatives.get(int(selector))) is None:
-            return Error.from_e(ValueError(f"got {selector=}, expected {list(value_t.type_.alternatives.keys())}"))
+        if (alt := cls.components[1].type_.alternatives.get(int(selector))) is None:
+            return Error.from_e(ValueError(f"got {cls.components[0].identifier}={selector}, expected {list(cls.components[1].type_.alternatives.keys())}"))
         if isinstance(value := alt.type_.get(buf), Error):
             return value
-        return cls(SequenceOfData([selector, value_t.type_(value)]))
+        return cls(selector, cls.components[1].type_(value))

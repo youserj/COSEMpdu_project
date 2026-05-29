@@ -526,7 +526,7 @@ class SetRequestWithFirstDatablock(SequenceType):
     def __init__(self, invoke_id_and_priority: InvokeIdAndPriority,
                  cosem_attribute_descriptor: CosemAttributeDescriptor,
                  datablock: DataBlockSA,
-                 access_selection: Optional[SelectiveAccessDescriptor] = None):
+                 access_selection: Optional[SelectiveAccessDescriptor] = None) -> None:
         self.invoke_id_and_priority = invoke_id_and_priority
         self.cosem_attribute_descriptor = cosem_attribute_descriptor
         self.datablock = datablock
