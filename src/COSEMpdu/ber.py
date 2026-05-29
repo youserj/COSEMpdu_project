@@ -880,7 +880,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         class_number=x680.UniversalClassTagAssignments.SequenceOf,
         constructed=True
     )
-    component_type: ClassVar[type[Type]]
+    _T: ClassVar[type[Type]]
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -900,7 +900,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         bytes_read = 0
         while bytes_read < length.value:
             # Decode next component using component type's get() method
-            if isinstance(component := cast("T", cls.component_type.get(buf)), Error):
+            if isinstance(component := cast("T", cls._T.get(buf)), Error):
                 return component
             components.append(component)
             # Track bytes consumed
@@ -943,7 +943,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         return len(self.value) == 0
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(component={self.component_type.__name__}, count={len(self.value)})"
+        return f"{self.__class__.__name__}(component={self._T.__name__}, count={len(self.value)})"
 
 
 class GeneralizedTime(Type, x680.GeneralizedTime):

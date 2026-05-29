@@ -17,7 +17,7 @@ Standards:
 - X.680: ASN.1 notation
 - X.690: BER encoding (reference for comparison)
 """
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override, runtime_checkable
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override, runtime_checkable, Iterator
 from StructResult.result import ValueOrError, Error
 from . import x690
 from .x680.tagged_type import TaggingMode
@@ -718,7 +718,7 @@ class NullType(Type, x680.NullType):
 
     def __eq__(self, other: object) -> bool:
         """All NULL values are equal"""
-        return isinstance(other, NullType)
+        return isinstance(other, self.__class__)
 
 
 class NullType0(ImplicitTaggedType[NullType]):
@@ -772,7 +772,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
         components: list[T] = []
         for _ in range(length):
-            if isinstance(component := cast("T", cls.component_type.get(buf)), Error):
+            if isinstance(component := cast("T", cls._T.get(buf)), Error):
                 return component
             components.append(component)
         return cls(components)
@@ -792,13 +792,14 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         return put_chain(*(comp.put(buf) for comp in self.value))
 
+    def __iter__(self) -> Iterator[T]:
+        for val in self.value:
+            yield val
+
     @property
     def is_empty(self) -> bool:
         """Check if sequence contains no components"""
         return len(self.value) == 0
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}[{len(self.value)}].{self.component_type.__name__}"
 
 
 class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
@@ -958,6 +959,9 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
             )
             return buf.write(content_bytes)
         return self.value.put_lc(buf)
+
+    def __int__(self) -> int:
+        return self.value.value
 
     @override
     def normalize(self) -> INTEGER:

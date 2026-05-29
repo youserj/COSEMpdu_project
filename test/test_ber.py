@@ -1734,8 +1734,8 @@ class TestSequenceOfType(unittest.TestCase):
 
     def test_component_type_validation(self) -> None:
         """Test that component_type is properly set"""
-        self.assertEqual(IntegerSequence.component_type, IntegerType)
-        self.assertEqual(BooleanSequence.component_type, BooleanType)
+        self.assertEqual(IntegerSequence._T, IntegerType)
+        self.assertEqual(BooleanSequence._T, BooleanType)
 
 
 class TestTaggedType(unittest.TestCase):

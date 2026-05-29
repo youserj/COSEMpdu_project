@@ -28,7 +28,8 @@ from src.COSEMpdu.types_used import (
     # Access Response Types
     AccessResponseGet, AccessResponseBody,
 )
-from src.COSEMpdu.data import Data, Integer, Unsigned
+from src.COSEMpdu.axdr import IntegerType
+from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
 from COSEMpdu.useful_types import (
@@ -319,7 +320,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
     def test_parameterized_access(self) -> None:
         """Test parameterized-access [4] alternative"""
-        param = Data.integer(100)
+        param = Data(Integer(IntegerType(100)))
         spec = VariableAccessSpecification.parameterized_access(
             variable_name=0x0010,
             selector=1,
@@ -383,7 +384,7 @@ class TestGetDataResult(unittest.TestCase):
 
     def test_data_alternative(self) -> None:
         """Test data [0] alternative"""
-        data = Data.integer(42)
+        data = Data(Integer(IntegerType((42))))
         result = GetDataResult.data(data)
 
         buf = ByteBuffer.allocate(10)
@@ -470,7 +471,7 @@ class TestActionResponseWithOptionalData(unittest.TestCase):
 
     def test_with_return_parameters(self) -> None:
         """Test with return-parameters present"""
-        data = Data.integer(100)
+        data = Data(Integer(IntegerType((100))))
         get_result = GetDataResult.data(data)
         response = ActionResponseWithOptionalData((
             ActionResult(ActionResultList().members[0]),  # success
@@ -503,13 +504,13 @@ class TestNotificationBody(unittest.TestCase):
 
     def test_notification_body(self) -> None:
         """Test Notification-Body with data value"""
-        data = Data.visible_string("test")
+        data = Data(VisibleString("test"))
         body = NotificationBody((data,))
         buf = ByteBuffer.allocate(50)
         body.put(buf)
         buf.set_pos(0)
         decoded = NotificationBody.get(buf)
-        self.assertEqual(decoded.value[0].value.value.value, "test")
+        self.assertEqual(decoded.value[0].value.value, "test")
 
 
 class TestAccessRequestTypes(unittest.TestCase):

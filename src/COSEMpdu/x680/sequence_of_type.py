@@ -17,7 +17,7 @@ from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE
 
 class SequenceOfType[T: Type](BuiltinType):
     """ASN.1 SEQUENCE OF type."""
-    component_type: type[T]
+    _T: type[T]
     value: SEQUENCE_OF[T]
 
     def __init__(self, value: SEQUENCE_OF[T] = []) -> None:
@@ -25,16 +25,16 @@ class SequenceOfType[T: Type](BuiltinType):
 
     @classmethod
     def parse[U: TYPE_VALUE](cls, value: tuple[U]) -> Self:
-        return cls([cls.component_type.parse(val) for val in value])
+        return cls([cls._T.parse(val) for val in value])
 
     def normalize(self) -> tuple[TYPE_VALUE]:
         return [val.normalize() for val in self.value]
 
     def __class_getitem__(cls, item: type[T]) -> type["SequenceOfType[T]"]:
         """Поддерживает SequenceOfType[int] на уровне класса."""
-        name = f"{cls.__name__}[{item.__name__}]"
+        name = f"{cls.__name__}Of{item.__name__}"
         return type(name, (cls,), {
-            "component_type": item,
+            "_T": item,
         })
 
     @classmethod
@@ -68,7 +68,7 @@ class SequenceOfType[T: Type](BuiltinType):
         Returns:
             String showing component count
         """
-        return f"{self.__class__.__name__}(count={len(self.value)})"
+        return f"{self.__class__.__name__}[{len(self.value)}]"
 
     def __len__(self) -> int:
         """Return number of components"""
@@ -97,6 +97,6 @@ class SequenceOfType[T: Type](BuiltinType):
         if not isinstance(other, SequenceOfType):
             return False
         return (
-            self.component_type == other.component_type
+            self._T == other._T
             and self.normalize() == other.normalize()
         )
