@@ -2,10 +2,13 @@
 Unit tests for types_used.py - DLMS/COSEM xDLMS Data Transfer Services Types
 """
 import unittest
+from StructResult.result import Error
 from src.COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.types_used import (
+    VariableName, ParameterizedAccess, ReadDataBlockAccess, WriteDataBlockAccess,
+    TaggedData, dataAccessResult,
     # ENUMERATED Types
-    DataAccessResult, DataAccessResult1, DataAccessResultList,
+    DataAccessResult, DataAccessResultList,
     ActionResult, ActionResultList,
     # Basic Types
     CosemClassId, CosemObjectInstanceId, CosemObjectAttributeId, CosemObjectMethodId,
@@ -16,7 +19,7 @@ from src.COSEMpdu.types_used import (
     # Invoke-Id-And-Priority Types
     InvokeIdAndPriority, LongInvokeIdAndPriority,
     # Data Block Types
-    DataBlockResult, DataBlockG, DataBlockSA,
+    DataBlockResult, DataBlockG, DataBlockSA, BlockNumberAccess,
     # Action Response Types
     ActionResponseWithOptionalData,
     # Notification Types
@@ -24,17 +27,14 @@ from src.COSEMpdu.types_used import (
     # List Types
     ListOfData, ListOfAccessRequestSpecification, ListOfAccessResponseSpecification,
     # Access Request Types
-    AccessRequestGet, AccessRequestGet1, AccessRequestGetWithSelection, AccessRequestBody, ListOfAccessRequestSpecification0,
+    AccessRequestGet, AccessRequestGetWithSelection, AccessRequestBody, ListOfAccessRequestSpecification0,
     # Access Response Types
     AccessResponseGet, AccessResponseBody,
 )
-from src.COSEMpdu.axdr import IntegerType
-from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString
+from src.COSEMpdu.axdr import IntegerType, BooleanType, OctetStringType
+from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString, Integer8, Unsigned16, Unsigned32, ObjectName, Unsigned8
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
-from src.COSEMpdu.useful_types import (
-    Integer8, Unsigned16, Unsigned32, Unsigned8
-)
 
 
 class TestDataAccessResult(unittest.TestCase):
@@ -79,14 +79,14 @@ class TestDataAccessResult(unittest.TestCase):
 
     def test_tagged_data_access_result(self) -> None:
         """Test [1] IMPLICIT Data-Access-Result tagged type"""
-        result = DataAccessResult1(DataAccessResult(DataAccessResultList().members[0]))
+        result = dataAccessResult(DataAccessResultList().members[0])
         buf = ByteBuffer.allocate(10)
         result.put(buf)
 
         self.assertEqual(bytes(buf)[:1], b"\x00")
 
         buf.set_pos(0)
-        decoded = DataAccessResult1.get(buf)
+        decoded = dataAccessResult.get(buf)
         self.assertEqual(decoded.value.value.value, 0)
 
 
@@ -168,26 +168,14 @@ class TestCosemAttributeDescriptor(unittest.TestCase):
 
     def test_from_components(self) -> None:
         """Test from_components constructor"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
-
-        self.assertEqual(descriptor.value[0].value, 1)
-        self.assertEqual(bytes(descriptor.value[1].value), b"\x00\x00\x01\x00\x00\xff")
-        self.assertEqual(descriptor.value[2].value, 2)
+        self.assertEqual(attr_desc.value[0].value, 1)
+        self.assertEqual(bytes(attr_desc.value[1].value), b"\x00\x00\x01\x00\x00\xff")
+        self.assertEqual(attr_desc.value[2].value, 2)
 
     def test_encode_decode(self) -> None:
         """Test encoding and decoding"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
-
         buf = ByteBuffer.allocate(50)
-        descriptor.put(buf)
+        attr_desc.put(buf)
 
         buf.set_pos(0)
         decoded = CosemAttributeDescriptor.get(buf)
@@ -306,7 +294,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
     def test_variable_name(self) -> None:
         """Test variable-name [2] alternative"""
-        spec = VariableAccessSpecification.variable_name(object_name=0x0010)
+        spec = VariableAccessSpecification(VariableName(0x0010))
 
         buf = ByteBuffer.allocate(10)
         spec.put(buf)
@@ -320,63 +308,64 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
     def test_parameterized_access(self) -> None:
         """Test parameterized-access [4] alternative"""
-        param = Data(Integer(IntegerType(100)))
-        spec = VariableAccessSpecification.parameterized_access(
-            variable_name=0x0010,
-            selector=1,
-            parameter=param
-        )
+        spec = VariableAccessSpecification(ParameterizedAccess(
+            variable_name=ObjectName(0x0010),
+            selector=Unsigned8(1),
+            parameter=Data(Integer(100))
+        ))
 
         buf = ByteBuffer.allocate(50)
         spec.put(buf)
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertEqual(decoded.value.value.value[0].value, 0x0010)
-        self.assertEqual(decoded.value.value.value[1].value, 1)
+        self.assertEqual(decoded.value[0].value, 0x0010)
+        self.assertEqual(decoded.value[1].value, 1)
 
     def test_block_number_access(self) -> None:
         """Test block-number-access [5] alternative"""
-        spec = VariableAccessSpecification.block_number(block_number=100)
+        spec = VariableAccessSpecification(BlockNumberAccess(block_number=Unsigned16(100)))
 
         buf = ByteBuffer.allocate(10)
         spec.put(buf)
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertEqual(decoded.value.value.value[0].value, 100)
+        self.assertEqual(decoded.value[0].value, 100)
 
     def test_read_data_block_access(self) -> None:
         """Test read-data-block-access [6] alternative"""
-        spec = VariableAccessSpecification.read_data_block(
-            last_block=True,
-            block_number=1,
-            raw_data=b"\x01\x02\x03\x04"
-        )
+        spec = VariableAccessSpecification(ReadDataBlockAccess(
+            last_block=BooleanType(True),
+            block_number=Unsigned16(1),
+            raw_data=OctetStringType(b"\x01\x02\x03\x04")
+        ))
 
         buf = ByteBuffer.allocate(50)
         spec.put(buf)
 
         buf.set_pos(0)
-        decoded = VariableAccessSpecification.get(buf)
-        self.assertTrue(decoded.value.value.last_block.value)
-        self.assertEqual(decoded.value.value.block_number.value.value, 1)
-        self.assertEqual(decoded.value.value.raw_data.normalize(), b"\x01\x02\x03\x04")
+        if isinstance(decoded := VariableAccessSpecification.get(buf), Error):
+            self.fail()
+        self.assertTrue(decoded.value.last_block.value)
+        self.assertEqual(decoded.value.block_number.value, 1)
+        self.assertEqual(decoded.value.raw_data.normalize(), b"\x01\x02\x03\x04")
 
     def test_write_data_block_access(self) -> None:
         """Test write-data-block-access [7] alternative"""
-        spec = VariableAccessSpecification.from_write_data_block(
-            last_block=False,
-            block_number=5
-        )
+        spec = VariableAccessSpecification(WriteDataBlockAccess(
+            last_block=BooleanType(False),
+            block_number=Unsigned16(5)
+        ))
 
         buf = ByteBuffer.allocate(10)
         spec.put(buf)
 
         buf.set_pos(0)
-        decoded = VariableAccessSpecification.get(buf)
-        self.assertFalse(decoded.value.value.last_block.value)
-        self.assertEqual(decoded.value.value.block_number.value.value, 5)
+        if isinstance(decoded := VariableAccessSpecification.get(buf), Error):
+            self.fail()
+        self.assertFalse(decoded.value.last_block.value)
+        self.assertEqual(decoded.value.block_number.value, 5)
 
 
 class TestGetDataResult(unittest.TestCase):
@@ -384,20 +373,19 @@ class TestGetDataResult(unittest.TestCase):
 
     def test_data_alternative(self) -> None:
         """Test data [0] alternative"""
-        data = Data(Integer(IntegerType((42))))
-        result = GetDataResult.data(data)
+        result = GetDataResult(TaggedData(Integer(IntegerType((42)))))
 
         buf = ByteBuffer.allocate(10)
         result.put(buf)
 
         buf.set_pos(0)
         decoded = GetDataResult.get(buf)
-        self.assertEqual(decoded.value.value.value.value.value, 42)
+        self.assertEqual(decoded.value.value.value.value, 42)
 
     def test_data_access_result_alternative(self) -> None:
         """Test data-access-result [1] alternative"""
-        error = DataAccessResult1(DataAccessResult(DataAccessResultList().members[1]))
-        result = GetDataResult.data_access_result(error)
+        error = dataAccessResult(DataAccessResult(DataAccessResultList().members[1]))
+        result = GetDataResult(dataAccessResult(error))
 
         buf = ByteBuffer.allocate(10)
         result.put(buf)
@@ -471,8 +459,7 @@ class TestActionResponseWithOptionalData(unittest.TestCase):
 
     def test_with_return_parameters(self) -> None:
         """Test with return-parameters present"""
-        data = Data(Integer(IntegerType((100))))
-        get_result = GetDataResult.data(data)
+        get_result = GetDataResult(TaggedData(100))
         response = ActionResponseWithOptionalData((
             ActionResult(ActionResultList().members[0]),  # success
             get_result
@@ -518,12 +505,7 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_get(self) -> None:
         """Test Access-Request-Get"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
-        request = AccessRequestGet((descriptor,))
+        request = AccessRequestGet(attr_desc)
 
         buf = ByteBuffer.allocate(50)
         request.put(buf)
@@ -534,16 +516,11 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_get_with_selection(self) -> None:
         """Test Access-Request-Get-With-Selection"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
         selection = SelectiveAccessDescriptor(
             access_selector=1,
             access_parameters=Data(Integer.parse(100))
         )
-        request = AccessRequestGetWithSelection(descriptor, selection)
+        request = AccessRequestGetWithSelection(attr_desc, selection)
 
         buf = ByteBuffer.allocate(50)
         request.put(buf)
@@ -554,13 +531,7 @@ class TestAccessRequestTypes(unittest.TestCase):
 
     def test_access_request_specification_choice(self) -> None:
         """Test Access-Request-Specification CHOICE"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
-        get_request = AccessRequestGet(descriptor)
-        tagged = AccessRequestGet1(get_request)
+        tagged = AccessRequestGet(attr_desc)
         spec = AccessRequestSpecification(tagged)
 
         buf = ByteBuffer.allocate(50)
@@ -571,13 +542,20 @@ class TestAccessRequestTypes(unittest.TestCase):
         self.assertEqual(decoded.value.value.value[0].value[0].value, 1)
 
 
+attr_desc = CosemAttributeDescriptor(
+    class_id=CosemClassId(1),
+    instance_id=CosemObjectInstanceId(b"\x00\x00\x01\x00\x00\xff"),
+    attribute_id=CosemObjectAttributeId(2)
+)
+
+
 class TestAccessResponseTypes(unittest.TestCase):
     """Test Access Response types"""
 
     def test_access_response_get(self) -> None:
         """Test Access-Response-Get"""
         response = AccessResponseGet(
-            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0]))
+            dataAccessResult(DataAccessResult(DataAccessResultList().members[0]))
         )
 
         buf = ByteBuffer.allocate(10)
@@ -590,7 +568,7 @@ class TestAccessResponseTypes(unittest.TestCase):
     def test_access_response_specification_choice(self) -> None:
         """Test Access-Response-Specification CHOICE"""
         response = AccessResponseGet(
-            DataAccessResult1(DataAccessResult(DataAccessResultList().members[0]))
+            dataAccessResult(DataAccessResult(DataAccessResultList().members[0]))
         )
         tagged = AccessResponseGet1(response)
         spec = AccessResponseSpecification(tagged)
@@ -608,13 +586,7 @@ class TestAccessRequestBody(unittest.TestCase):
 
     def test_access_request_body(self) -> None:
         """Test Access-Request-Body with all components"""
-        descriptor = CosemAttributeDescriptor(
-            class_id=1,
-            instance_id=b"\x00\x00\x01\x00\x00\xff",
-            attribute_id=2
-        )
-        get_request = AccessRequestGet(descriptor)
-        tagged = AccessRequestGet1(get_request)
+        tagged = AccessRequestGet(attr_desc)
         spec = AccessRequestSpecification(tagged)
 
         request_spec_list = ListOfAccessRequestSpecification([spec])
@@ -764,11 +736,11 @@ class TestRoundTrip(unittest.TestCase):
 
     def test_variable_access_specification_roundtrip(self) -> None:
         """Test full round-trip for VariableAccessSpecification"""
-        original = VariableAccessSpecification.read_data_block(
+        original = VariableAccessSpecification(ReadDataBlockAccess(
             last_block=True,
             block_number=10,
             raw_data=b"\x01\x02\x03\x04\x05"
-        )
+        ))
 
         buf = ByteBuffer.allocate(50)
         original.put(buf)

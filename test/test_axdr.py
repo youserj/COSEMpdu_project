@@ -8,26 +8,22 @@ from typing import Optional
 from src.COSEMpdu import x680
 from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
-    create_alternatives,
+    create_alternatives, ImplicitTaggedType, CHOICE,
     ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
-    BooleanType, IntegerType, BitStringType, OctetStringType, TaggedType, ObjectIdentifierType,
-    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType, ImplicitTaggedType,
+    BooleanType, IntegerType, BitStringType, OctetStringType, ObjectIdentifierType,
+    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
     _encode_variable_length_integer, get_length
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
-from src.COSEMpdu.x680 import NamedType, OptionalNamedType, DefaultNamedType
+from src.COSEMpdu.x680 import NamedType
 
 
-class Integer0(TaggedType[IntegerType]):
+class Integer0(ImplicitTaggedType, IntegerType):
     tag = 0
-    mode = x680.TaggingMode.IMPLICIT
-    value: IntegerType
 
 
-class OctetString1(TaggedType[OctetStringType]):
+class OctetString1(ImplicitTaggedType, OctetStringType):
     tag = 1
-    mode = x680.TaggingMode.IMPLICIT
-    value: OctetStringType
 
 
 class TestChoice(ChoiceType):
@@ -35,13 +31,13 @@ class TestChoice(ChoiceType):
         NamedType("first", Integer0),
         NamedType("second", OctetString1)
     )
+    value: Integer0 | OctetString1
 
-
-class OctetStringObjectIdentifierType(ImplicitTaggedType[ObjectIdentifierType]):
+class OctetStringObjectIdentifierType(ImplicitTaggedType, ObjectIdentifierType):
     tag = 9
 
 
-class My(ImplicitTaggedType[IntegerType]):
+class My(ImplicitTaggedType, IntegerType):
     tag = 5
 
 
@@ -138,9 +134,8 @@ class TestIntegerType(unittest.TestCase):
 
         class OneByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 255)
-            value: IntegerType
 
-        val = OneByte(IntegerType(value=42))
+        val = OneByte(42)
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
@@ -151,9 +146,8 @@ class TestIntegerType(unittest.TestCase):
 
         class TwoByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 20000)
-            value: IntegerType
 
-        val = TwoByte(IntegerType(12345))
+        val = TwoByte(12345)
         buf = ByteBuffer.allocate(2)
         written = val.put(buf)
         self.assertEqual(written, 2)
@@ -180,11 +174,10 @@ class TestIntegerType(unittest.TestCase):
 
         class TwoByte(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 65535)
-            value: IntegerType
 
         buf = ByteBuffer.wrap(b"\x30\x39")
         val = TwoByte.get(buf)
-        self.assertEqual(val.value.value, 12345)
+        self.assertEqual(val.value, 12345)
         self.assertEqual(val.fixed_length, 2)
 
     def test_decode_variable_short(self) -> None:
@@ -205,7 +198,7 @@ class TestIntegerType(unittest.TestCase):
         class Empty(ConstrainedIntegerType):
             constraint_spec = ValueRange(0, 0)
 
-        val = Empty(IntegerType(0))
+        val = Empty(0)
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
@@ -219,9 +212,8 @@ class TestBitStringType(unittest.TestCase):
 
         class OctetBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(8)
-            value: BitStringType
 
-        val = OctetBit(BitStringType((1, 0, 1, 1, 0, 0, 1, 1)))
+        val = OctetBit((1, 0, 1, 1, 0, 0, 1, 1))
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
@@ -232,9 +224,8 @@ class TestBitStringType(unittest.TestCase):
 
         class FourBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(4)
-            value: BitStringType
 
-        val = FourBit(BitStringType((1, 0, 1, 1)))
+        val = FourBit((1, 0, 1, 1))
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
@@ -254,11 +245,10 @@ class TestBitStringType(unittest.TestCase):
 
         class OctetBit(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(8)
-            value: BitStringType
 
         buf = ByteBuffer.wrap(b"\xB3")
         val = OctetBit.get(buf)
-        self.assertEqual(val.value.value, (1, 0, 1, 1, 0, 0, 1, 1))
+        self.assertEqual(val.value, (1, 0, 1, 1, 0, 0, 1, 1))
 
     def test_decode_variable_length(self) -> None:
         """Decode variable-length BIT STRING"""
@@ -271,9 +261,8 @@ class TestBitStringType(unittest.TestCase):
 
         class Empty(ConstrainedBitStringType):
             constraint_spec = SizeConstraint(0)
-            value: BitStringType
 
-        val = Empty(BitStringType(()))
+        val = Empty(())
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 0)
@@ -289,7 +278,6 @@ class TestBitStringType(unittest.TestCase):
 
 class Octet(ConstrainedOctetStringType):
     constraint_spec = SizeConstraint(4)
-    value: OctetStringType
 
 
 class TestOctetStringType(unittest.TestCase):
@@ -297,7 +285,7 @@ class TestOctetStringType(unittest.TestCase):
 
     def test_encode_fixed_length(self) -> None:
         """Fixed-length OCTET STRING encodes content only (§6.5.1)"""
-        val = Octet(OctetStringType(b"ABCD"))
+        val = Octet(b"ABCD")
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         self.assertEqual(written, 4)
@@ -315,7 +303,7 @@ class TestOctetStringType(unittest.TestCase):
         """Decode fixed-length OCTET STRING"""
         buf = ByteBuffer.wrap(b"ABCD")
         val = Octet.get(buf)
-        self.assertEqual(val.value.value, b"ABCD")
+        self.assertEqual(val.value, b"ABCD")
 
     def test_decode_variable_length(self) -> None:
         """Decode variable-length OCTET STRING"""
@@ -329,7 +317,7 @@ class TestOctetStringType(unittest.TestCase):
         class Octet(ConstrainedOctetStringType):
             constraint_spec = SizeConstraint(0)
 
-        val = Octet(OctetStringType(b""))
+        val = Octet(b"")
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 0)
@@ -407,7 +395,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_encode_integer_alternative(self) -> None:
         """CHOICE with INTEGER alternative encodes tag + content (§6.6)"""
-        val = TestChoice.from_id("first", IntegerType(value=42))
+        val = TestChoice(Integer0(42))
         buf = ByteBuffer.allocate(3)
         written = val.put(buf)
         # Tag=0, Length=1 (for value 42), Content=0x2A
@@ -416,7 +404,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_encode_octetstring_alternative(self) -> None:
         """CHOICE with OCTET STRING alternative"""
-        val = TestChoice.from_id("second", OctetStringType(value=b"AB"))
+        val = TestChoice(OctetString1(b"AB"))
         buf = ByteBuffer.allocate(5)
         written = val.put(buf)
         # Tag=1, Length=2, Content='AB'
@@ -428,7 +416,7 @@ class TestChoiceType(unittest.TestCase):
         buf = ByteBuffer.wrap(b"\x00\x2A")
         val = TestChoice.get(buf)
         self.assertEqual(val.selected, "first")
-        self.assertEqual(val.value.value.value, 42)
+        self.assertEqual(val.value.value, 42)
 
     def test_decode_invalid_tag(self) -> None:
         """Invalid tag raises ValueError"""
@@ -438,7 +426,7 @@ class TestChoiceType(unittest.TestCase):
     def test_init_invalid_tag(self) -> None:
         """Initialize with invalid tag raises ValueError"""
         with self.assertRaises(ValueError):
-            TestChoice.from_id("5", IntegerType(0))
+            TestChoice.parse(CHOICE(5, 0))
 
 
 @dataclass
@@ -535,12 +523,10 @@ class TestSequenceOfType(unittest.TestCase):
     def test_encode_fixed_length(self) -> None:
         """Fixed-length SEQUENCE OF encodes components only (§6.10.1)"""
         class TestSeqOf(ConstrainedSequenceOfType[IntegerType]):
-            component_type = IntegerType
+            # component_type = IntegerType
             constraint_spec = SizeConstraint(2)
 
-        val = TestSeqOf(SequenceOfType(
-            value=[IntegerType(value=1), IntegerType(value=2)]
-        ))
+        val = TestSeqOf([IntegerType(value=1), IntegerType(value=2)])
         buf = ByteBuffer.allocate(2)
         written = val.put(buf)
         self.assertEqual(written, 2)
@@ -549,11 +535,10 @@ class TestSequenceOfType(unittest.TestCase):
     def test_encode_variable_length(self) -> None:
         """Variable-length SEQUENCE OF encodes count + components (§6.10.2)"""
 
-        class TestSeqOf(SequenceOfType[IntegerType]):
-            component_type = IntegerType
+        TestSeqOf = SequenceOfType[IntegerType]
 
         val = TestSeqOf(
-            value=(IntegerType(value=1), IntegerType(value=2)),
+            [IntegerType(value=1), IntegerType(value=2)]
         )
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
@@ -564,12 +549,8 @@ class TestSequenceOfType(unittest.TestCase):
     def test_decode_fixed_length(self) -> None:
         """Decode fixed-length SEQUENCE OF"""
 
-        class SequenceOfIntegerType(SequenceOfType[IntegerType]):
-            component_type = IntegerType
-
-        class TestSeqOf(ConstrainedSequenceOfType[SequenceOfIntegerType]):
+        class TestSeqOf(ConstrainedSequenceOfType[IntegerType]):
             constraint_spec = SizeConstraint(2)
-            value: SequenceOfIntegerType
 
         buf = ByteBuffer.wrap(b"\x01\x02")
         val = TestSeqOf.get(buf)
@@ -594,7 +575,7 @@ class TestSequenceOfType(unittest.TestCase):
             component_type = IntegerType
             constraint_spec = SizeConstraint(0)
 
-        val = TestSeqOf(SequenceOfType([]))
+        val = TestSeqOf([])
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 0)
@@ -605,7 +586,7 @@ class TestSequenceOfType(unittest.TestCase):
         class TestSeqOf(SequenceOfType):
             component_type = IntegerType
 
-        val = TestSeqOf(value=())
+        val = TestSeqOf([])
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
@@ -630,21 +611,18 @@ class TestIntegration(unittest.TestCase):
     def test_nested_choice_in_sequence(self) -> None:
         """Test CHOICE inside SEQUENCE (common DLMS pattern)"""
 
-        class Integer0(TaggedType[IntegerType]):
+        class Integer0(ImplicitTaggedType, IntegerType):
             tag = 0
-            mode = x680.TaggingMode.IMPLICIT
-            value: IntegerType
 
-        class Boolean1(TaggedType[BooleanType]):
+        class Boolean1(ImplicitTaggedType, BooleanType):
             tag = 1
-            mode = x680.TaggingMode.IMPLICIT
-            value: BooleanType
 
         class InnerChoice(ChoiceType):
             alternatives = create_alternatives(
                 NamedType("first", Integer0),
                 NamedType("second", Boolean1)
             )
+            value: Integer0 | Boolean1
 
         @dataclass
         class OuterSeq(SequenceType):
@@ -653,7 +631,7 @@ class TestIntegration(unittest.TestCase):
 
         val = OuterSeq(
             BooleanType(value=True),
-            InnerChoice.from_id("first", value=IntegerType(value=42))
+            InnerChoice(Integer0(42))
         )
         buf = ByteBuffer.allocate(10)
         written = val.put(buf)
@@ -664,27 +642,24 @@ class TestIntegration(unittest.TestCase):
     def test_sequence_of_choice(self) -> None:
         """Test SEQUENCE OF CHOICE (DLMS service list pattern)"""
 
-        class Enumerated0(TaggedType[EnumeratedType]):
+        class Enumerated0(ImplicitTaggedType, EnumeratedType):
             tag = 0
-            mode = x680.TaggingMode.IMPLICIT
-            value: EnumeratedType
 
-        class Integer1(TaggedType[IntegerType]):
+        class Integer1(ImplicitTaggedType, IntegerType):
             tag = 1
-            mode = x680.TaggingMode.IMPLICIT
-            value: IntegerType
 
         class ServiceChoice(ChoiceType):
             alternatives = create_alternatives(
                 NamedType("first", Enumerated0),
                 NamedType("second", Integer1)
             )
+            value: Enumerated0 | Integer1
 
         ServiceList = SequenceOfType[ServiceChoice]
 
         val = ServiceList([
-            ServiceChoice.from_id("first", value=EnumeratedType(value=1)),
-            ServiceChoice.from_id("second", value=IntegerType(value=100)),
+            ServiceChoice(Enumerated0(1)),
+            ServiceChoice(Integer1(100)),
         ])
         buf = ByteBuffer.allocate(10)
         written = val.put(buf)
@@ -707,9 +682,9 @@ class TestIntegration(unittest.TestCase):
 
         # Encode
         original = TestSeq(
-            IntegerType(value=123),
-            TestChoice.from_id("first", value=IntegerType(value=456)),
-            OctetStringType(value=b"TEST"),
+            IntegerType(123),
+            TestChoice(Integer0(456)),
+            OctetStringType(b"TEST"),
         )
         buf = ByteBuffer.allocate(20)
         original.put(buf)
@@ -722,7 +697,7 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(decoded.id.value, 123)
         self.assertEqual(decoded.data.value, b"TEST")
         self.assertEqual(decoded.choice.selected, "first")
-        self.assertEqual(decoded.choice.value.value.value, 456)
+        self.assertEqual(decoded.choice.value.value, 456)
 
 
 class TestObjectIdentifierType(unittest.TestCase):
@@ -802,10 +777,10 @@ class TestObjectIdentifierType(unittest.TestCase):
         self.assertTrue(result.has(exception_type=(ValueError, BufferError)))
 
     def test_octet(self) -> None:
-        class OctetStringObjectIdentifierType(ImplicitTaggedType[ObjectIdentifierType]):
+        class OctetStringObjectIdentifierType(ImplicitTaggedType, ObjectIdentifierType):
             tag = 9
 
-        original = OctetStringObjectIdentifierType(ObjectIdentifierType((2, 16, 0x2f4, 5, 8, 1, 1)))
+        original = OctetStringObjectIdentifierType((2, 16, 0x2f4, 5, 8, 1, 1))
         buf = ByteBuffer.allocate(20)
         original.put(buf)
         print(buf)

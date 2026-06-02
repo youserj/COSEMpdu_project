@@ -40,49 +40,51 @@ from typing import Any
 
 from test._utils import check_encode_decode as _shared_check_encode_decode
 from src.COSEMpdu import apdu
-from src.COSEMpdu.axdr import IntegerType, SequenceOfType, Type, OctetStringType, BooleanType
+from src.COSEMpdu.axdr import OctetStringType, BooleanType
 from src.COSEMpdu.apdu import (
     # XDLMS-APDU Choice Type
-    initialRequest, initialResponse,
-    readRequest, readResponse,
-    writeRequest, writeResponse,
+    InitialRequest, InitialResponse,
+    ReadRequest, ReadResponse,
+    WriteRequest, WriteResponse,
     confirmedServiceError,
-    dataNotification, dataNotificationConfirm,
-    unconfirmedWriteRequest,
+    DataNotification, DataNotificationConfirm,
+    UnconfirmedWriteRequest,
     informationReportRequest,
     # LN Referencing PDUs
-    getRequest, getResponse,
-    setRequest, setResponse,
-    actionRequest, actionResponse,
-    eventNotificationRequest,
-    # Exception and Access
-    exceptionResponse,
-    accessRequest, accessResponse,
-    # General APDUs
-    generalGloCiphering, generalDedCiphering,
-    generalCiphering, generalSigning,
-    generalBlockTransfer, BlockControl,
-    # XDLMS-APDU Choice alternatives
     GetRequest, GetResponse,
     SetRequest, SetResponse,
     ActionRequest, ActionResponse,
+    EventNotificationRequest,
+    # Exception and Access
+    ExceptionResponse,
+    AccessRequest, AccessResponse,
+    # General APDUs
+    GeneralGloCiphering, GeneralDedCiphering,
+    GeneralCiphering, GeneralSigning,
+    GeneralBlockTransfer, BlockControl,
     # Concrete choice subtypes
-    GetRequestNormal1,
-    GetResponseNormal1,
+    GetRequestNormal, GetResponseNormal,
+    SetRequestNormal, SetResponseNormal,
+    ActionRequestNormal, ActionResponseNormal,
+    # Service error components
+    StateError,
+    serviceError, OperationNotPossible,
+    # key_info
+    KeyInfo, KeyId, IdentifiedKey,
+    Conformance
 )
-from src.COSEMpdu.data import Data, Unsigned, SequenceOfData
-from src.COSEMpdu.useful_types import Unsigned8, Unsigned16, ObjectName
+from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName
 from src.COSEMpdu.types_used import (
-    InvokeIdAndPriority, LongInvokeIdAndPriority, ListOfData, ListOfAccessResponseSpecification, ListOfAccessRequestSpecification,
+    InvokeIdAndPriority, LongInvokeIdAndPriority, ListOfData,
+    ListOfAccessResponseSpecification, ListOfAccessRequestSpecification,
     CosemAttributeDescriptor, CosemMethodDescriptor,
-    GetDataResult, CosemClassId, CosemObjectInstanceId, CosemObjectAttributeId,
-    DataAccessResult, CosemObjectMethodId,
+    GetDataResult,
+    CosemClassId, CosemObjectInstanceId, CosemObjectAttributeId,
+    CosemObjectMethodId,
     ActionResponseWithOptionalData, ActionResult,
     AccessRequestBody, AccessResponseBody,
 )
-from src.COSEMpdu.service_error import ConfirmedServiceError, ServiceError, Access, AccessEnum, InitiateError, Initiate
-from src.COSEMpdu.user_information import InitiateRequest, InitiateResponse, Conformance, Conformance_
-from src.COSEMpdu.key_info import KeyInfo, IdentifiedKey, KeyId, identifiedKey
+from src.COSEMpdu.service_error import InitiateError, Initiate
 
 
 class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
@@ -100,7 +102,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
             instance_id=CosemObjectInstanceId.parse(bytes(6)),
             method_id=CosemObjectMethodId.parse(2))
 
-    def _check_encode_decode(self, value: Type, type_cls: type[Any], buffer_size: int = 1024) -> Any:
+    def _check_encode_decode(self, value: Any, type_cls: type[Any], buffer_size: int = 1024) -> Any:
         """Helper: encode value to buffer, decode back, assert not None, return decoded."""
         value.normalize()
         return _shared_check_encode_decode(value, type_cls, buffer_size)
@@ -111,143 +113,107 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_initiate_request_tag_1(self) -> None:
         """Test InitialRequest1 encode/decode (tag 1)"""
-        value = InitiateRequest(
+        apdu_obj = InitialRequest(
             dedicated_key=None,
             response_allowed=BooleanType.parse(True),
             proposed_quality_of_service=None,
-            proposed_dlms_version_number=Unsigned8.from_int(1),
-            proposed_conformance=Conformance(Conformance_.default()),
-            client_max_receive_pdu_size=Unsigned16.from_int(134)
+            proposed_dlms_version_number=Unsigned8(1),
+            proposed_conformance=Conformance.default(),
+            client_max_receive_pdu_size=Unsigned16(134)
         )
-        apdu_obj = initialRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, initialRequest)
-        self.assertEqual(apdu_obj.tag, 1)
-        self.assertEqual(decoded.tag, 1)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, InitialRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_initiate_response_tag_8(self) -> None:
         """Test InitialResponse8 encode/decode (tag 8)"""
-        value = InitiateResponse(
+        apdu_obj = InitialResponse(
             negotiated_quality_of_service=None,
-            negotiated_dlms_version_number=Unsigned8.from_int(1),
-            negotiated_conformance=Conformance(Conformance_.default()),
-            server_max_receive_pdu_size=Unsigned16.from_int(134),
-            vaa_name=ObjectName.from_int(7)
+            negotiated_dlms_version_number=Unsigned8(1),
+            negotiated_conformance=Conformance.default(),
+            server_max_receive_pdu_size=Unsigned16(134),
+            vaa_name=ObjectName(7)
         )
-        apdu_obj = initialResponse(value)
-        decoded = self._check_encode_decode(apdu_obj, initialResponse)
-        self.assertEqual(apdu_obj.tag, 8)
-        self.assertEqual(decoded.tag, 8)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, InitialResponse)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_read_request_tag_5(self) -> None:
         """Test ReadRequest5 encode/decode (tag 5)"""
-        from src.COSEMpdu.apdu import ReadRequest
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName2
-        value = ReadRequest([VariableAccessSpecification(VariableName2(ObjectName.from_int(16)))])
-        apdu_obj = readRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, readRequest)
-        self.assertEqual(apdu_obj.tag, 5)
-        self.assertEqual(decoded.tag, 5)
-        self.assertEqual(decoded.value, value)
+        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
+        apdu_obj = ReadRequest([VariableAccessSpecification(VariableName(16))])
+        decoded = self._check_encode_decode(apdu_obj, ReadRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_read_response_tag_12(self) -> None:
         """Test ReadResponse12 encode/decode (tag 12)"""
-        from src.COSEMpdu.apdu import ReadResponseChoice, Data0, ReadResponse
-        value = ReadResponse([ReadResponseChoice(Data0(Data(Unsigned.parse(100))))])
-        apdu_obj = readResponse(value)
-        decoded = self._check_encode_decode(apdu_obj, readResponse)
-        self.assertEqual(apdu_obj.tag, 12)
-        self.assertEqual(decoded.tag, 12)
-        self.assertEqual(decoded.value, value)
+        from src.COSEMpdu.apdu import ReadResponseChoice, TaggedData
+        apdu_obj = ReadResponse([ReadResponseChoice(TaggedData(Unsigned(100)))])
+        decoded = self._check_encode_decode(apdu_obj, ReadResponse)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_write_request_tag_6(self) -> None:
         """Test WriteRequest6 encode/decode (tag 6)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName2
-        from src.COSEMpdu.apdu import WriteRequest, SequenceOfVariableAccessSpecification
-        value = WriteRequest(
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName2(ObjectName.from_int(16)))]),
-            list_of_data=SequenceOfData([Data(Unsigned.parse(50))])
+        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
+        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
+        apdu_obj = WriteRequest(
+            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            list_of_data=SequenceOfData([Data(Unsigned(50))])
         )
-        apdu_obj = writeRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, writeRequest)
-        self.assertEqual(apdu_obj.tag, 6)
-        self.assertEqual(decoded.tag, 6)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, WriteRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_write_response_tag_13(self) -> None:
         """Test WriteResponse13 encode/decode (tag 13)"""
-        value = apdu.WriteResponse([apdu.WriteResponseChoice.SUCCESS])
-        apdu_obj = writeResponse(value)
-        decoded = self._check_encode_decode(apdu_obj, writeResponse)
-        self.assertEqual(apdu_obj.tag, 13)
-        self.assertEqual(decoded.tag, 13)
-        self.assertEqual(decoded.value, value)
+        apdu_obj = WriteResponse([apdu.WriteResponseChoice.SUCCESS])
+        decoded = self._check_encode_decode(apdu_obj, WriteResponse)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_confirmed_service_error_tag_14(self) -> None:
         """Test ConfirmedServiceError14 encode/decode (tag 14)"""
-        value = ConfirmedServiceError(InitiateError(ServiceError(Initiate.parse(2))))  # incompatible-conformance
-        apdu_obj = confirmedServiceError(value)
+        apdu_obj = confirmedServiceError(InitiateError(Initiate.parse(2)))  # incompatible-conformance
         decoded = self._check_encode_decode(apdu_obj, confirmedServiceError)
-        self.assertEqual(apdu_obj.tag, 14)
-        self.assertEqual(decoded.tag, 14)
-        self.assertEqual(decoded.value, value)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_data_notification_tag_15(self) -> None:
         """Test DataNotification15 encode/decode (tag 15)"""
-        from src.COSEMpdu.apdu import NotificationBody, DataNotification
-        value = DataNotification(
+        apdu_obj = DataNotification(
             long_invoke_id_and_priority=LongInvokeIdAndPriority.from_bits(1),
             date_time=OctetStringType(bytes(12)),
-            notification_body=NotificationBody(data_value=Data(Unsigned.parse(1)))
+            data_value=Data(Unsigned.parse(1))
         )
-        apdu_obj = dataNotification(value)
-        decoded = self._check_encode_decode(apdu_obj, dataNotification)
-        self.assertEqual(apdu_obj.tag, 15)
-        self.assertEqual(decoded.tag, 15)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, DataNotification)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_data_notification_confirm_tag_16(self) -> None:
         """Test DataNotificationConfirm16 encode/decode (tag 16)"""
-        from src.COSEMpdu.apdu import DataNotificationConfirm
-        value = DataNotificationConfirm(
-            long_invoke_id_and_priority=LongInvokeIdAndPriority.from_int(1),
+        apdu_obj = DataNotificationConfirm(
+            long_invoke_id_and_priority=LongInvokeIdAndPriority(1),
             date_time=OctetStringType(bytes(12))
         )
-        apdu_obj = dataNotificationConfirm(value)
-        decoded = self._check_encode_decode(apdu_obj, dataNotificationConfirm)
-        self.assertEqual(apdu_obj.tag, 16)
-        self.assertEqual(decoded.tag, 16)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, DataNotificationConfirm)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_unconfirmed_write_request_tag_22(self) -> None:
         """Test UnconfirmedWriteRequest22 encode/decode (tag 22)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName2
-        from src.COSEMpdu.apdu import UnconfirmedWriteRequest, SequenceOfVariableAccessSpecification
-        value = UnconfirmedWriteRequest(
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName2(ObjectName.from_int(16)))]),
-            list_of_data=SequenceOfData([Data(Unsigned.parse(50))])
+        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
+        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
+        apdu_obj = UnconfirmedWriteRequest(
+            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            list_of_data=SequenceOfData([Data(Unsigned(50))])
         )
-        apdu_obj = unconfirmedWriteRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, unconfirmedWriteRequest)
-        self.assertEqual(apdu_obj.tag, 22)
-        self.assertEqual(decoded.tag, 22)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, UnconfirmedWriteRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_information_report_request_tag_24(self) -> None:
         """Test InformationReportRequest24 encode/decode (tag 24)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName2
-        from src.COSEMpdu.apdu import InformationReportRequest, SequenceOfVariableAccessSpecification
-        value = InformationReportRequest(
-            current_time=None,
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName2(ObjectName.from_int(16)))]),
-            list_of_data=SequenceOfData([Data(Unsigned.parse(50))])
+        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
+        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
+        apdu_obj = informationReportRequest(
+            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            list_of_data=SequenceOfData([Data(Unsigned(50))]),
+            current_time=None
         )
-        apdu_obj = informationReportRequest(value)
         decoded = self._check_encode_decode(apdu_obj, informationReportRequest)
-        self.assertEqual(apdu_obj.tag, 24)
-        self.assertEqual(decoded.tag, 24)
-        self.assertEqual(decoded.value, value)
+        self.assertEqual(decoded, apdu_obj)
 
     # =========================================================================
     # LN Referencing PDUs - Tags 192-199
@@ -255,106 +221,80 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_get_request_normal_tag_192(self) -> None:
         """Test GetRequest (get-request-normal) encode/decode (tag 192)"""
-        from src.COSEMpdu.apdu import GetRequestNormal
-        value = GetRequestNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
+        get_request_obj = GetRequest(GetRequestNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
             cosem_attribute_descriptor=self.cosem_attribute_descriptor,
             access_selection=None
-        )
-        get_request_obj = getRequest(GetRequest(GetResponseNormal1(value)))
-        decoded = self._check_encode_decode(get_request_obj, getRequest)
-        self.assertEqual(get_request_obj.tag, 192)
-        self.assertEqual(decoded.tag, 192)
-        self.assertEqual(decoded.value, get_request_obj.value)
+        ))
+        decoded = self._check_encode_decode(get_request_obj, GetRequest)
+        self.assertEqual(decoded, get_request_obj)
 
     def test_get_response_normal_tag_196(self) -> None:
         """Test GetResponse (get-response-normal) encode/decode (tag 196)"""
-        from src.COSEMpdu.apdu import GetResponseNormal, Data0
-        value = GetResponseNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
-            result=GetDataResult(Data0(Data(Unsigned.parse(100))))
-        )
-        get_response_obj = getResponse(GetResponse(GetResponseNormal1(value)))
-        decoded = self._check_encode_decode(get_response_obj, getResponse)
-        self.assertEqual(get_response_obj.tag, 196)
-        self.assertEqual(decoded.tag, 196)
+        from src.COSEMpdu.apdu import TaggedData
+        get_response_obj = GetResponse(GetResponseNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
+            result=GetDataResult(TaggedData(Unsigned(100)))
+        ))
+        decoded = self._check_encode_decode(get_response_obj, GetResponse)
         self.assertEqual(decoded.value, get_response_obj.value)
 
     def test_set_request_normal_tag_193(self) -> None:
         """Test SetRequest (set-request-normal) encode/decode (tag 193)"""
-        from src.COSEMpdu.apdu import SetRequestNormal, SetRequestNormal1
-        value = SetRequestNormal1(SetRequestNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
+        set_request_obj = SetRequest(SetRequestNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
             cosem_attribute_descriptor=CosemAttributeDescriptor(
                 class_id=CosemClassId.parse(1),
                 instance_id=CosemObjectInstanceId.parse(b"\x00\x00\x00\x00\x00\x00"),
                 attribute_id=CosemObjectAttributeId.parse(1)
             ),
-            access_selection=None,
-            value=Data(Unsigned.parse(50))
+            value=Data(Unsigned.parse(50)),
+            access_selection=None
         ))
-        set_request_obj = setRequest(SetRequest(value))
-        decoded = self._check_encode_decode(set_request_obj, setRequest)
-        self.assertEqual(set_request_obj.tag, 193)
-        self.assertEqual(decoded.tag, 193)
+        decoded = self._check_encode_decode(set_request_obj, SetRequest)
         self.assertEqual(decoded.value, set_request_obj.value)
 
     def test_set_response_normal_tag_197(self) -> None:
         """Test SetResponse (set-response-normal) encode/decode (tag 197)"""
-        from src.COSEMpdu.apdu import SetResponseNormal, SetResponseNormal1, GetDataResult, DataAccessResult1
-        value = SetResponseNormal1(SetResponseNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
-            result=GetDataResult(DataAccessResult1(DataAccessResult(0)))
+        from src.COSEMpdu.apdu import dataAccessResult
+        set_response_obj = SetResponse(SetResponseNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
+            result=GetDataResult(dataAccessResult(0))
         ))
-        set_response_obj = setResponse(SetResponse(value))
-        decoded = self._check_encode_decode(set_response_obj, setResponse)
-        self.assertEqual(set_response_obj.tag, 197)
-        self.assertEqual(decoded.tag, 197)
-        self.assertEqual(decoded.value, set_response_obj.value)
+        decoded = self._check_encode_decode(set_response_obj, SetResponse)
+        self.assertEqual(decoded, set_response_obj)
 
     def test_action_request_normal_tag_195(self) -> None:
         """Test ActionRequest (action-request-normal) encode/decode (tag 195)"""
-        from src.COSEMpdu.apdu import ActionRequestNormal, actionRequestNormal
-        value = ActionRequestNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
+        action_request_obj = ActionRequest(ActionRequestNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
             cosem_method_descriptor=self.cosem_method_descriptor,
             method_invocation_parameters=None
-        )
-        action_request_obj = actionRequest(ActionRequest(actionRequestNormal(value)))
-        decoded = self._check_encode_decode(action_request_obj, actionRequest)
-        self.assertEqual(action_request_obj.tag, 195)
-        self.assertEqual(decoded.tag, 195)
-        self.assertEqual(decoded.value, action_request_obj.value)
+        ))
+        decoded = self._check_encode_decode(action_request_obj, ActionRequest)
+        self.assertEqual(decoded, action_request_obj)
 
     def test_action_response_normal_tag_199(self) -> None:
         """Test ActionResponse (action-response-normal) encode/decode (tag 199)"""
-        from src.COSEMpdu.apdu import ActionResponseNormal, actionResponseNormal
-        value = ActionResponseNormal(
-            invoke_id_and_priority=InvokeIdAndPriority.from_int(1),
+        action_response_obj = ActionResponse(ActionResponseNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
             single_response=ActionResponseWithOptionalData(
-                result=ActionResult.parse(0),
+                result=ActionResult(0),
                 return_parameters=None
             )
-        )
-        action_response_obj = actionResponse(ActionResponse(actionResponseNormal(value)))
-        decoded = self._check_encode_decode(action_response_obj, actionResponse)
-        self.assertEqual(action_response_obj.tag, 199)
-        self.assertEqual(decoded.tag, 199)
-        self.assertEqual(decoded.value, action_response_obj.value)
+        ))
+        decoded = self._check_encode_decode(action_response_obj, ActionResponse)
+        self.assertEqual(decoded, action_response_obj)
 
     def test_event_notification_request_tag_194(self) -> None:
         """Test EventNotificationRequest encode/decode (tag 194)"""
-        from src.COSEMpdu.apdu import EventNotificationRequest
-        value = EventNotificationRequest(
+        apdu_obj = EventNotificationRequest(
             cosem_attribute_descriptor=self.cosem_attribute_descriptor,
-            attribute_value=Data(Unsigned.parse(1)),
+            attribute_value=Data(Unsigned(1)),
             time=None
         )
-        apdu_obj = eventNotificationRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, eventNotificationRequest)
-        self.assertEqual(apdu_obj.tag, 194)
-        self.assertEqual(decoded.tag, 194)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, EventNotificationRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     # =========================================================================
     # Exception and Access PDUs - Tags 216-218
@@ -362,41 +302,30 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_exception_response_tag_216(self) -> None:
         """Test ExceptionResponse encode/decode (tag 216)"""
-        from src.COSEMpdu.apdu import ExceptionResponse, StateError, StateErrorEnum, serviceError, ServiceErrorChoice, OperationNotPossible
-        value = ExceptionResponse(
-            state_error=StateError(StateErrorEnum(1)),  # service-not-allowed
-            service_error=serviceError(ServiceErrorChoice(OperationNotPossible.default()))
+        apdu_obj = ExceptionResponse(
+            state_error=StateError(1),  # service-not-allowed
+            service_error=serviceError(OperationNotPossible.default())
         )
-        apdu_obj = exceptionResponse(value)
-        decoded = self._check_encode_decode(apdu_obj, exceptionResponse)
-        self.assertEqual(apdu_obj.tag, 216)
-        self.assertEqual(decoded.tag, 216)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, ExceptionResponse)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_access_request_tag_217(self) -> None:
         """Test AccessRequest encode/decode (tag 217)"""
-        from src.COSEMpdu.apdu import AccessRequest
-        from src.COSEMpdu.axdr import OctetStringType
-        value = AccessRequest(
-            long_invoke_id_and_priority=LongInvokeIdAndPriority(IntegerType(1)),
+        apdu_obj = AccessRequest(
+            long_invoke_id_and_priority=LongInvokeIdAndPriority(1),
             date_time=OctetStringType(bytes(12)),
             access_request_body=AccessRequestBody(
                 access_request_specification=ListOfAccessRequestSpecification(),
                 access_request_list_of_data=ListOfData()
             )
         )
-        apdu_obj = accessRequest(value)
-        decoded = self._check_encode_decode(apdu_obj, accessRequest)
-        self.assertEqual(apdu_obj.tag, 217)
-        self.assertEqual(decoded.tag, 217)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, AccessRequest)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_access_response_tag_218(self) -> None:
         """Test AccessResponse encode/decode (tag 218)"""
-        from src.COSEMpdu.apdu import AccessResponse
-        from src.COSEMpdu.axdr import OctetStringType
-        value = AccessResponse(
-            long_invoke_id_and_priority=LongInvokeIdAndPriority.from_int(1),
+        apdu_obj = AccessResponse(
+            long_invoke_id_and_priority=LongInvokeIdAndPriority(1),
             date_time=OctetStringType(bytes(12)),
             access_response_body=AccessResponseBody(
                 access_request_specification=None,
@@ -404,11 +333,8 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
                 access_response_specification=ListOfAccessResponseSpecification([])
             )
         )
-        apdu_obj = accessResponse(value)
-        decoded = self._check_encode_decode(apdu_obj, accessResponse)
-        self.assertEqual(apdu_obj.tag, 218)
-        self.assertEqual(decoded.tag, 218)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, AccessResponse)
+        self.assertEqual(decoded, apdu_obj)
 
     # =========================================================================
     # General APDUs - Tags 219-224
@@ -416,56 +342,39 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_general_glo_ciphering_tag_219(self) -> None:
         """Test GeneralGloCiphering encode/decode (tag 219)"""
-        from src.COSEMpdu.apdu import GeneralGloCiphering
-        from src.COSEMpdu.axdr import OctetStringType
-        value = GeneralGloCiphering(
+        apdu_obj = GeneralGloCiphering(
             system_title=OctetStringType(bytes(8)),
             ciphered_content=OctetStringType(bytes(16))
         )
-        apdu_obj = generalGloCiphering(value)
-        decoded = self._check_encode_decode(apdu_obj, generalGloCiphering)
-        self.assertEqual(apdu_obj.tag, 219)
-        self.assertEqual(decoded.tag, 219)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, GeneralGloCiphering)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_general_ded_ciphering_tag_220(self) -> None:
         """Test GeneralDedCiphering encode/decode (tag 220)"""
-        from src.COSEMpdu.apdu import GeneralDedCiphering
-        from src.COSEMpdu.axdr import OctetStringType
-        value = GeneralDedCiphering(
+        apdu_obj = GeneralDedCiphering(
             system_title=OctetStringType(bytes(8)),
             ciphered_content=OctetStringType(bytes(16))
         )
-        apdu_obj = generalDedCiphering(value)
-        decoded = self._check_encode_decode(apdu_obj, generalDedCiphering)
-        self.assertEqual(apdu_obj.tag, 220)
-        self.assertEqual(decoded.tag, 220)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, GeneralDedCiphering)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_general_ciphering_tag_221(self) -> None:
         """Test GeneralCiphering encode/decode (tag 221)"""
-        from src.COSEMpdu.apdu import GeneralCiphering
-        from src.COSEMpdu.axdr import OctetStringType
-        value = GeneralCiphering(
+        apdu_obj = GeneralCiphering(
             transaction_id=OctetStringType(bytes(4)),
             originator_system_title=OctetStringType(bytes(8)),
             recipient_system_title=OctetStringType(bytes(8)),
             date_time=OctetStringType(bytes(12)),
             other_information=OctetStringType(bytes(0)),
-            key_info=KeyInfo(identifiedKey(IdentifiedKey(KeyId(0)))),
+            key_info=KeyInfo(IdentifiedKey(KeyId(0))),
             ciphered_content=OctetStringType(bytes(16))
         )
-        apdu_obj = generalCiphering(value)
-        decoded = self._check_encode_decode(apdu_obj, generalCiphering)
-        self.assertEqual(apdu_obj.tag, 221)
-        self.assertEqual(decoded.tag, 221)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, GeneralCiphering)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_general_signing_tag_223(self) -> None:
         """Test GeneralSigning encode/decode (tag 223)"""
-        from src.COSEMpdu.apdu import GeneralSigning
-        from src.COSEMpdu.axdr import OctetStringType
-        value = GeneralSigning(
+        apdu_obj = GeneralSigning(
             transaction_id=OctetStringType(bytes(4)),
             originator_system_title=OctetStringType(bytes(8)),
             recipient_system_title=OctetStringType(bytes(8)),
@@ -474,27 +383,19 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
             content=OctetStringType(bytes(32)),
             signature=OctetStringType(bytes(64))
         )
-        apdu_obj = generalSigning(value)
-        decoded = self._check_encode_decode(apdu_obj, generalSigning)
-        self.assertEqual(apdu_obj.tag, 223)
-        self.assertEqual(decoded.tag, 223)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, GeneralSigning)
+        self.assertEqual(decoded, apdu_obj)
 
     def test_general_block_transfer_tag_224(self) -> None:
         """Test GeneralBlockTransfer encode/decode (tag 224)"""
-        from src.COSEMpdu.apdu import GeneralBlockTransfer
-        from src.COSEMpdu.axdr import OctetStringType
-        value = GeneralBlockTransfer(
-            block_control=BlockControl.from_int(0x80),  # last-block bit set
-            block_number=Unsigned16.from_int(1),
-            block_number_ack=Unsigned16.from_int(1),
+        apdu_obj = GeneralBlockTransfer(
+            block_control=BlockControl(0x80),  # last-block bit set
+            block_number=Unsigned16(1),
+            block_number_ack=Unsigned16(1),
             block_data=OctetStringType(bytes(16))
         )
-        apdu_obj = generalBlockTransfer(value)
-        decoded = self._check_encode_decode(apdu_obj, generalBlockTransfer)
-        self.assertEqual(apdu_obj.tag, 224)
-        self.assertEqual(decoded.tag, 224)
-        self.assertEqual(decoded.value, value)
+        decoded = self._check_encode_decode(apdu_obj, GeneralBlockTransfer)
+        self.assertEqual(decoded, apdu_obj)
 
 
 if __name__ == "__main__":

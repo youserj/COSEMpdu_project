@@ -1,20 +1,14 @@
-from typing import Optional, Self, Literal, ClassVar, Any, TypeAlias
+from typing import Optional, Self, Literal, ClassVar, TypeAlias
 from dataclasses import dataclass
 from StructResult.result import ValueOrError, Error
-from .x680.type import (
-    TYPE_VALUE, NamedType, INTEGER, OCTET_STRING, BOOLEAN
-)
+from .x680.type import TYPE_VALUE, NamedType, INTEGER
 from .byte_buffer import ByteBuffer
 from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.constrained_type import SizeConstraint
-from .x680.tagged_type import TaggingMode
-from .data import Data
-from .useful_types import (
-    Integer8, Unsigned8, Unsigned16, Unsigned32, ObjectName
-)
+from .data import Data, Integer8, Unsigned8, Unsigned16, Unsigned32, ObjectName
 from .axdr import (
-    ConstrainedOctetStringType, TaggedType, IntegerType, OctetStringType, SequenceOfType, ImplicitTaggedType, EnumeratedType, SequenceType,
-    BooleanType, ChoiceType, create_alternatives
+    ConstrainedOctetStringType, OctetStringType, SequenceOfType, EnumeratedType, SequenceType,
+    BooleanType, ChoiceType, create_alternatives, ImplicitTaggedType
 )
 
 
@@ -58,11 +52,9 @@ class DataAccessResult(EnumeratedType):
 DataAccessResult.SUCCESS = DataAccessResult(0)
 
 
-class DataAccessResult1(TaggedType[DataAccessResult]):
-    """[1] IMPLICIT Data-Access-Result"""
+class dataAccessResult(ImplicitTaggedType, DataAccessResult):
+    """data-access-result [1] IMPLICIT Data-Access-Result"""
     tag = 1
-    mode = TaggingMode.IMPLICIT
-    value: DataAccessResult
 
 
 class ActionResultList(EnumerationList):
@@ -137,11 +129,11 @@ class SelectiveAccessDescriptor(SequenceType):
     """Selective-Access-Descriptor"""
     access_selector: Unsigned8
     access_parameters: Data
-    selector_parameters: ClassVar[Optional[dict[int, type[ImplicitTaggedType[Any]]]]] = None
+    selector_parameters: ClassVar[Optional[dict[int, type[ImplicitTaggedType]]]] = None
 
     def __post_init__(self) -> None:
         if self.selector_parameters is not None:
-            if (expected_type := self.selector_parameters.get(self.selector.normalize())) is None:
+            if (expected_type := self.selector_parameters.get(self.access_selector.normalize())) is None:
                 raise InitError(f"Unknown access-selector value: {self.access_selector.value}")
             if not isinstance(self.access_parameters, expected_type):
                 raise InitError(f"Expected access-parameters type {expected_type.__name__} for selector {self.access_selector.value}, got {type(self.access_parameters).__name__}")
@@ -153,7 +145,7 @@ class SelectiveAccessDescriptor(SequenceType):
         selector, parameter = value
         if (expected_type := cls.selector_parameters.get(selector)) is None:
             raise InitError(f"Unknown access-selector value: {selector}")
-        return cls((Unsigned8.parse(selector), expected_type.parse(parameter)))
+        return cls(Unsigned8.parse(selector), expected_type.parse(parameter))
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -175,123 +167,54 @@ class CosemAttributeDescriptorWithSelection(SequenceType):
 # =============================================================================
 
 
-class VariableName2(TaggedType[ObjectName]):
+class VariableName(ImplicitTaggedType, ObjectName):
     """variable-name [2] IMPLICIT ObjectName"""
     tag = 2
-    mode = TaggingMode.IMPLICIT
-    value: ObjectName
 
 
 @dataclass
-class ParameterizedAccess(SequenceType):
-    """Parameterized-Access"""
+class ParameterizedAccess(ImplicitTaggedType, SequenceType):
+    """parameterized-access [4] IMPLICIT Parameterized-Access"""
+    tag: ClassVar[int] = 4
     variable_name: ObjectName
     selector: Unsigned8
     parameter: Data
 
 
-class ParameterizedAccess4(TaggedType[ParameterizedAccess]):
-    """[4] IMPLICIT Parameterized-Access"""
-    tag = 4
-    mode = TaggingMode.IMPLICIT
-    value: ParameterizedAccess
-
-
 @dataclass
-class BlockNumberAccess(SequenceType):
-    """Block-Number-Access"""
+class BlockNumberAccess(ImplicitTaggedType, SequenceType):
+    """block-number-access [5] IMPLICIT Block-Number-Access"""
+    tag: ClassVar[int] = 5
     block_number: Unsigned16
 
 
-class BlockNumberAccess5(TaggedType[BlockNumberAccess]):
-    """[5] IMPLICIT Block-Number-Access"""
-    tag = 5
-    mode = TaggingMode.IMPLICIT
-    value: BlockNumberAccess
-
-
 @dataclass
-class ReadDataBlockAccess(SequenceType):
-    """Read-Data-Block-Access"""
+class ReadDataBlockAccess(ImplicitTaggedType, SequenceType):
+    """read-data-block-access [6] IMPLICIT Read-Data-Block-Access"""
+    tag: ClassVar[int] = 6
     last_block: BooleanType
     block_number: Unsigned16
     raw_data: OctetStringType
 
 
-class ReadDataBlockAccess6(TaggedType[ReadDataBlockAccess]):
-    """[6] IMPLICIT Read-Data-Block-Access"""
-    tag = 6
-    mode = TaggingMode.IMPLICIT
-    value: ReadDataBlockAccess
-
-
 @dataclass
-class WriteDataBlockAccess(SequenceType):
-    """Write-Data-Block-Access"""
+class WriteDataBlockAccess(ImplicitTaggedType, SequenceType):
+    """write-data-block-access [7] IMPLICIT Write-Data-Block-Access"""
+    tag: ClassVar[int] = 7
     last_block: BooleanType
     block_number: Unsigned16
-
-
-class WriteDataBlockAccess7(TaggedType[WriteDataBlockAccess]):
-    """[7] IMPLICIT Write-Data-Block-Access"""
-    tag = 7
-    mode = TaggingMode.IMPLICIT
-    value: WriteDataBlockAccess
 
 
 class VariableAccessSpecification(ChoiceType):
     """Variable-Access-Specification"""
     alternatives = {
-        2: NamedType("variable-name", VariableName2),
-        4: NamedType("parameterized-access", ParameterizedAccess4),
-        5: NamedType("block-number-access", BlockNumberAccess5),
-        6: NamedType("read-data-block-access", ReadDataBlockAccess6),
-        7: NamedType("write-data-block-access", WriteDataBlockAccess7),
+        2: NamedType("variable-name", VariableName),
+        4: NamedType("parameterized-access", ParameterizedAccess),
+        5: NamedType("block-number-access", BlockNumberAccess),
+        6: NamedType("read-data-block-access", ReadDataBlockAccess),
+        7: NamedType("write-data-block-access", WriteDataBlockAccess),
     }
-
-    # Convenience constructors
-    @classmethod
-    def variable_name(cls, object_name: INTEGER) -> Self:
-        return cls(VariableName2(ObjectName(IntegerType(object_name))))
-
-    @classmethod
-    def parameterized_access(
-        cls,
-        variable_name: Unsigned16,
-        selector: Unsigned8,
-        parameter: Data
-    ) -> Self:
-        return cls(ParameterizedAccess4(ParameterizedAccess(
-            variable_name, selector, parameter
-        )))
-
-    @classmethod
-    def block_number(cls, block_number: Unsigned16) -> Self:
-        return cls(BlockNumberAccess5(BlockNumberAccess((block_number,))))
-
-    @classmethod
-    def read_data_block(
-        cls,
-        last_block: BOOLEAN,
-        block_number: INTEGER,
-        raw_data: OCTET_STRING
-    ) -> Self:
-        return cls(ReadDataBlockAccess6(ReadDataBlockAccess(
-            BooleanType(last_block),
-            Unsigned16(IntegerType(block_number)),
-            OctetStringType(raw_data)
-        )))
-
-    @classmethod
-    def from_write_data_block(
-        cls,
-        last_block: BOOLEAN,
-        block_number: INTEGER
-    ) -> Self:
-        return cls(WriteDataBlockAccess7(WriteDataBlockAccess(
-            BooleanType(last_block),
-            Unsigned16(IntegerType(block_number))
-        )))
+    value: VariableName | ParameterizedAccess | BlockNumberAccess | ReadDataBlockAccess | WriteDataBlockAccess
 
 
 # =============================================================================
@@ -313,20 +236,20 @@ class InvokeIdAndPriority(Unsigned8):
         if not (0 <= invoke_id <= 15):
             raise ValueError(f"invoke_id must be 0-15, got {invoke_id}")
         value = (invoke_id << 4) | (1 if service_class == "confirmed" else 0) << 1 | (1 if priority == "high" else 0)
-        return cls(IntegerType(value & 0xFF))
+        return cls(value & 0xFF)
 
     @property
     def invoke_id(self) -> int:
         """Extract invoke-id (bits 0-3)"""
-        return (self.value.value >> 4) & 0x0F
+        return (self.value >> 4) & 0x0F
 
     def is_confirmed(self) -> bool:
         """Check service-class bit (bit 6)"""
-        return bool((self.value.value >> 1) & 0x01)
+        return bool((self.value >> 1) & 0x01)
 
     def is_high_priority(self) -> bool:
         """Check priority bit (bit 7)"""
-        return bool(self.value.value & 0x01)
+        return bool(self.value & 0x01)
 
 
 class LongInvokeIdAndPriority(Unsigned32):
@@ -351,28 +274,28 @@ class LongInvokeIdAndPriority(Unsigned32):
             (1 if service_class == "confirmed" else 0) << 1 |
             (1 if priority == "high" else 0)
         )
-        return cls(IntegerType(value & 0xFFFFFFFF))
+        return cls(value & 0xFFFFFFFF)
 
     @property
     def long_invoke_id(self) -> int:
         """Extract long-invoke-id (bits 0-23)"""
-        return (self.value.value >> 8) & 0xFFFFFF
+        return (self.value >> 8) & 0xFFFFFF
 
     def is_self_descriptive(self) -> bool:
         """Check self-descriptive bit (bit 28)"""
-        return bool((self.value.value >> 3) & 0x01)
+        return bool((self.value >> 3) & 0x01)
 
     def is_break_on_error(self) -> bool:
         """Check processing-option bit (bit 29)"""
-        return bool((self.value.value >> 2) & 0x01)
+        return bool((self.value >> 2) & 0x01)
 
     def is_confirmed(self) -> bool:
         """Check service-class bit (bit 30)"""
-        return bool((self.value.value >> 1) & 0x01)
+        return bool((self.value >> 1) & 0x01)
 
     def is_high_priority(self) -> bool:
         """Check priority bit (bit 31)"""
-        return bool(self.value.value & 0x01)
+        return bool(self.value & 0x01)
 
 
 # =============================================================================
@@ -380,27 +303,17 @@ class LongInvokeIdAndPriority(Unsigned32):
 # =============================================================================
 
 
-class Data0(TaggedType[Data]):
-    """[0] Data"""
+class TaggedData(ImplicitTaggedType, Data):
+    """data [0] Data"""
     tag = 0
-    mode = TaggingMode.DEFAULT
-    value: Data
 
 
 class GetDataResult(ChoiceType):
     """Get-Data-Result"""
     alternatives = {
-        0: NamedType("data", Data0),
-        1: NamedType("data-access-result", DataAccessResult1)
+        0: NamedType("data", TaggedData),
+        1: NamedType("data-access-result", dataAccessResult)
     }
-
-    @classmethod
-    def data(cls, data: Data) -> Self:
-        return cls(Data0(data))
-
-    @classmethod
-    def data_access_result(cls, result: DataAccessResult1) -> Self:
-        return cls(DataAccessResult1(result))
 
 
 # =============================================================================
@@ -416,11 +329,9 @@ class DataBlockResult(SequenceType):
     raw_data: OctetStringType
 
 
-class RawData(TaggedType[OctetStringType]):
-    """[0] IMPLICIT OCTET STRING"""
+class RawData(ImplicitTaggedType, OctetStringType):
+    """raw-data [0] IMPLICIT OCTET STRING"""
     tag = 0
-    mode = TaggingMode.IMPLICIT
-    value: OctetStringType
 
 
 class DataBlockGResult(ChoiceType):
@@ -433,7 +344,7 @@ class DataBlockGResult(ChoiceType):
     """
     alternatives = create_alternatives(
         NamedType("raw-data", RawData),
-        NamedType("data-access-result", DataAccessResult1),
+        NamedType("data-access-result", dataAccessResult),
     )
 
 
@@ -489,94 +400,60 @@ ListOfData: TypeAlias = SequenceOfType[Data]
 # Access Request Types
 # =============================================================================
 
-
 @dataclass
-class AccessRequestGet(SequenceType):
-    """Access-Request-Get"""
+class AccessRequestGet(ImplicitTaggedType, SequenceType):
+    """access-request-get"""
+    tag: ClassVar[int] = 1
     cosem_attribute_descriptor: CosemAttributeDescriptor
 
 
-class AccessRequestGet1(TaggedType[AccessRequestGet]):
-    """[1] Access-Request-Get"""
-    tag = 1
-    mode = TaggingMode.DEFAULT
-    value: AccessRequestGet
-
-
 @dataclass
-class AccessRequestGetWithSelection(SequenceType):
-    """Access-Request-Get-With-Selection"""
-    cosem_attribute_descriptor: CosemAttributeDescriptor
-    access_selection: SelectiveAccessDescriptor
-
-
-class AccessRequestGetWithSelection4(TaggedType[AccessRequestGetWithSelection]):
-    """[4] Access-Request-Get-With-Selection"""
-    tag = 4
-    mode = TaggingMode.DEFAULT
-    value: AccessRequestGetWithSelection
-
-
-@dataclass
-class AccessRequestSet(SequenceType):
-    """Access-Request-Set"""
+class AccessRequestSet(ImplicitTaggedType, SequenceType):
+    """access-request-set"""
+    tag: ClassVar[int] = 2
     cosem_attribute_descriptor: CosemAttributeDescriptor
 
 
-class AccessRequestSet2(TaggedType[AccessRequestSet]):
-    """[2] Access-Request-Set"""
-    tag = 2
-    mode = TaggingMode.DEFAULT
-    value: AccessRequestSet
-
-
 @dataclass
-class AccessRequestSetWithSelection(SequenceType):
-    """Access-Request-Set-With-Selection"""
-    cosem_attribute_descriptor: CosemAttributeDescriptor
-    access_selection: SelectiveAccessDescriptor
-
-
-class AccessRequestSetWithSelection5(TaggedType[AccessRequestSetWithSelection]):
-    """[5] Access-Request-Set-With-Selection"""
-    tag = 5
-    mode = TaggingMode.DEFAULT
-    value: AccessRequestSetWithSelection
-
-
-@dataclass
-class AccessRequestAction(SequenceType):
-    """Access-Request-Action"""
+class AccessRequestAction(ImplicitTaggedType, SequenceType):
+    """access-request-action"""
+    tag: ClassVar[int] = 3
     cosem_method_descriptor: CosemMethodDescriptor
 
 
-class AccessRequestAction3(TaggedType[AccessRequestAction]):
-    """[3] Access-Request-Action"""
-    tag = 3
-    mode = TaggingMode.DEFAULT
-    value: AccessRequestAction
+@dataclass
+class AccessRequestGetWithSelection(ImplicitTaggedType, SequenceType):
+    """access-request-get-with-selection"""
+    tag: ClassVar[int] = 4
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
+
+
+@dataclass
+class AccessRequestSetWithSelection(ImplicitTaggedType, SequenceType):
+    """access-request-set-with-selection"""
+    tag: ClassVar[int] = 5
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
 
 
 class AccessRequestSpecification(ChoiceType):
     """Access-Request-Specification"""
     alternatives = {
-        1: NamedType("access-request-get", AccessRequestGet1),
-        2: NamedType("access-request-set", AccessRequestSet2),
-        3: NamedType("access-request-action", AccessRequestAction3),
-        4: NamedType("access-request-get-with-selection", AccessRequestGetWithSelection4),
-        5: NamedType("access-request-set-with-selection", AccessRequestSetWithSelection5),
+        1: NamedType("access-request-get", AccessRequestGet),
+        2: NamedType("access-request-set", AccessRequestSet),
+        3: NamedType("access-request-action", AccessRequestAction),
+        4: NamedType("access-request-get-with-selection", AccessRequestGetWithSelection),
+        5: NamedType("access-request-set-with-selection", AccessRequestSetWithSelection),
     }
 
 
-class ListOfAccessRequestSpecification(SequenceOfType[AccessRequestSpecification]):
-    """List-Of-Access-Request-Specification"""
-    component_type = AccessRequestSpecification
+ListOfAccessRequestSpecification = SequenceOfType[AccessRequestSpecification]
+"""List-Of-Access-Request-Specification"""
 
 
-class ListOfAccessRequestSpecification0(TaggedType[ListOfAccessRequestSpecification]):
-    tag = 0
-    mode = TaggingMode.DEFAULT
-    value: ListOfAccessRequestSpecification
+class ListOfAccessRequestSpecification0(ImplicitTaggedType, ListOfAccessRequestSpecification):
+    tag: ClassVar[int] = 0
 
 
 @dataclass
@@ -592,56 +469,37 @@ class AccessRequestBody(SequenceType):
 
 
 @dataclass
-class AccessResponseGet(SequenceType):
-    """Access-Response-Get"""
-    result: DataAccessResult1
-
-
-class AccessResponseGet1(TaggedType[AccessResponseGet]):
-    """[1] Access-Response-Get"""
-    tag = 1
-    mode = TaggingMode.DEFAULT
-    value: AccessResponseGet
+class AccessResponseGet(ImplicitTaggedType, SequenceType):
+    """access-response-get"""
+    tag: ClassVar[int] = 1
+    result: dataAccessResult
 
 
 @dataclass
-class AccessResponseSet(SequenceType):
-    """Access-Response-Set"""
-    result: DataAccessResult1
-
-
-class AccessResponseSet2(TaggedType[AccessResponseSet]):
-    """[2] Access-Response-Set"""
-    tag = 2
-    mode = TaggingMode.IMPLICIT
-    value: AccessResponseSet
+class AccessResponseSet(ImplicitTaggedType, SequenceType):
+    """access-response-set"""
+    tag: ClassVar[int] = 2
+    result: dataAccessResult
 
 
 @dataclass
-class AccessResponseAction(SequenceType):
-    """Access-Response-Action"""
+class AccessResponseAction(ImplicitTaggedType, SequenceType):
+    """access-response-action"""
+    tag: ClassVar[int] = 3
     result: ActionResult
-
-
-class AccessResponseAction3(TaggedType[AccessResponseAction]):
-    """[3] Access-Response-Action"""
-    tag = 3
-    mode = TaggingMode.IMPLICIT
-    value: AccessResponseAction
 
 
 class AccessResponseSpecification(ChoiceType):
     """Access-Response-Specification"""
     alternatives = {
-        1: NamedType("access-response-get", AccessResponseGet1),
-        2: NamedType("access-response-set", AccessResponseSet2),
-        3: NamedType("access-response-action", AccessResponseAction3),
+        1: NamedType("access-response-get", AccessResponseGet),
+        2: NamedType("access-response-set", AccessResponseSet),
+        3: NamedType("access-response-action", AccessResponseAction),
     }
 
 
-class ListOfAccessResponseSpecification(SequenceOfType[AccessResponseSpecification]):
-    """List-Of-Access-Response-Specification"""
-    component_type = AccessResponseSpecification
+ListOfAccessResponseSpecification = SequenceOfType[AccessResponseSpecification]
+"""List-Of-Access-Response-Specification"""
 
 
 class AccessResponseBody(SequenceType):

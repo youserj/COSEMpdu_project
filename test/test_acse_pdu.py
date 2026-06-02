@@ -38,34 +38,24 @@ from COSEMpdu.acse import (
     AEQualifier,
     APInvocationIdentifier,
     AEInvocationIdentifier,
-    ACSERequirements,
-    MechanismName,
     Charstring,
     AuthenticationValue,
-    ImplementationData,
-    ImplementationData29,
+    ImplementationInformation,
     AssociationResult,
     AssociationInformation,
-    AssociationInformation30,
+    UserInformation,
     AssociateSourceDiagnostic,
     Result,
     ResultSourceDiagnostic,
     ServiceUser,
-    ReleaseRequestReason,
     RequestReason,
-    ReleaseResponseReason,
     ResponseReason,
-    AARQApdu,
-    AARQ,
-    AAREApdu,
-    AARE,
-    RLRQApdu,
-    RLRQ,
-    RLREApdu,
-    RLRE,
+    AARQapdu,
+    AAREapdu,
+    RLRQapdu,
+    RLREapdu,
     ACSEApdu,
     ProtocolVersion,
-    ProtocolVersion0,
     CalledAPTitle,
     CalledAEQualifier,
     CalledAPInvocationIdentifier,
@@ -75,14 +65,14 @@ from COSEMpdu.acse import (
     CallingAPInvocationIdentifier,
     CallingAEInvocationIdentifier,
     SenderACSERequirements,
-    MechanismName11,
+    RequestMechanismName,
     CallingAuthenticationValue,
     RespondingAPTitle,
     RespondingAEQualifier,
     RespondingAPInvocationIdentifier,
     RespondingAEInvocationIdentifier,
     ResponderACSERequirements,
-    MechanismName9,
+    ResponseMechanismName,
     RespondingAuthenticationValue,
 )
 from COSEMpdu.ber import GraphicString
@@ -93,18 +83,17 @@ class TestACSEApdu(unittest.TestCase):
 
     def test_acse_apdu_aarq(self) -> None:
         """Test ACSEApdu with AARQ alternative"""
-        aarq = AARQApdu(
+        aarq = AARQapdu(
             application_context_name=ApplicationContextName1(
                 ApplicationContextName((1, 2, 840, 10008, 1, 1))
             )
         )
-        aarq_tagged = AARQ(aarq)
-        acse = ACSEApdu(aarq_tagged)
+        acse = ACSEApdu(aarq)
         self.assertIsNotNone(acse)
 
     def test_acse_apdu_aare(self) -> None:
         """Test ACSEApdu with AARE alternative"""
-        aare = AAREApdu(
+        aare = AAREapdu(
             application_context_name=ApplicationContextName1(
                 ApplicationContextName((1, 2, 840, 10008, 1, 1))
             ),
@@ -113,22 +102,19 @@ class TestACSEApdu(unittest.TestCase):
                 AssociateSourceDiagnostic(ServiceUser.parse(5))
             ),
         )
-        aare_tagged = AARE(aare)
-        acse = ACSEApdu(aare_tagged)
+        acse = ACSEApdu(aare)
         self.assertIsNotNone(acse)
 
     def test_acse_apdu_rlrq(self) -> None:
         """Test ACSEApdu with RLRQ alternative"""
-        rlrq = RLRQApdu()
-        rlrq_tagged = RLRQ(rlrq)
-        acse = ACSEApdu(rlrq_tagged)
+        rlrq = RLRQapdu()
+        acse = ACSEApdu(rlrq)
         self.assertIsNotNone(acse)
 
     def test_acse_apdu_rlre(self) -> None:
         """Test ACSEApdu with RLRE alternative"""
-        rlre = RLREApdu()
-        rlre_tagged = RLRE(rlre)
-        acse = ACSEApdu(rlre_tagged)
+        rlre = RLREapdu()
+        acse = ACSEApdu(rlre)
         self.assertIsNotNone(acse)
 
 
@@ -137,8 +123,8 @@ class TestEncodingDecoding(unittest.TestCase):
 
     def test_aarq_encode_decode(self) -> None:
         """Test AARQApdu encoding and decoding with all optional fields"""
-        aarq = AARQApdu(
-            protocol_version=ProtocolVersion0(ProtocolVersion((0,))),
+        aarq = AARQapdu(
+            protocol_version=ProtocolVersion((0,)),
             application_context_name=ApplicationContextName1(
                 ApplicationContextName((1, 2, 840, 10008, 1, 1))
             ),
@@ -150,21 +136,20 @@ class TestEncodingDecoding(unittest.TestCase):
             calling_ae_qualifier=CallingAEQualifier(AEQualifier(b"calling_ae")),
             calling_ap_invocation_id=CallingAPInvocationIdentifier(APInvocationIdentifier(3)),
             calling_ae_invocation_id=CallingAEInvocationIdentifier(AEInvocationIdentifier(4)),
-            sender_acse_requirements=SenderACSERequirements(ACSERequirements((0,))),
-            mechanism_name=MechanismName11(MechanismName((1, 2, 840, 10008, 1, 2))),
+            sender_acse_requirements=SenderACSERequirements((0,)),
+            mechanism_name=RequestMechanismName((1, 2, 840, 10008, 1, 2)),
             calling_authentication_value=CallingAuthenticationValue(
-                AuthenticationValue(Charstring(GraphicString("test_auth")))
+                AuthenticationValue(Charstring("test_auth"))
             ),
-            implementation_information=ImplementationData29(ImplementationData("DLMS/COSEM")),
-            user_information=AssociationInformation30(AssociationInformation(b"\x01\x02\x03")),
+            implementation_information=ImplementationInformation("DLMS/COSEM"),
+            user_information=UserInformation(AssociationInformation(b"\x01\x02\x03")),
         )
-
-        check_encode_decode(aarq, AARQApdu, 1024)
+        check_encode_decode(aarq, AARQapdu, 1024)
 
     def test_aare_encode_decode(self) -> None:
         """Test AAREApdu encoding and decoding with all optional fields"""
-        aare = AAREApdu(
-            protocol_version=ProtocolVersion0(ProtocolVersion((0,))),
+        aare = AAREapdu(
+            protocol_version=ProtocolVersion((0,)),
             application_context_name=ApplicationContextName1(
                 ApplicationContextName((1, 2, 840, 10008, 1, 1))
             ),
@@ -176,34 +161,34 @@ class TestEncodingDecoding(unittest.TestCase):
             responding_ae_qualifier=RespondingAEQualifier(AEQualifier(b"resp_ae")),
             responding_ap_invocation_id=RespondingAPInvocationIdentifier(APInvocationIdentifier(10)),
             responding_ae_invocation_id=RespondingAEInvocationIdentifier(AEInvocationIdentifier(20)),
-            responder_acse_requirements=ResponderACSERequirements(ACSERequirements((0,))),
-            mechanism_name=MechanismName9(MechanismName((1, 2, 840, 10008, 1, 2))),
+            responder_acse_requirements=ResponderACSERequirements((0,)),
+            mechanism_name=ResponseMechanismName((1, 2, 840, 10008, 1, 2)),
             responding_authentication_value=RespondingAuthenticationValue(
-                AuthenticationValue(Charstring(GraphicString("resp_auth")))
+                AuthenticationValue(Charstring("resp_auth"))
             ),
-            implementation_information=ImplementationData29(ImplementationData("DLMS/COSEM")),
-            user_information=AssociationInformation30(AssociationInformation(b"\x01\x02\x03")),
+            implementation_information=ImplementationInformation("DLMS/COSEM"),
+            user_information=UserInformation(AssociationInformation(b"\x01\x02\x03")),
         )
 
-        check_encode_decode(aare, AAREApdu, 1024)
+        check_encode_decode(aare, AAREapdu, 1024)
 
     def test_rlrq_encode_decode(self) -> None:
         """Test RLRQApdu encoding and decoding with all optional fields"""
-        rlrq = RLRQApdu(
-            reason=RequestReason(ReleaseRequestReason(0)),
-            user_information=AssociationInformation30(AssociationInformation(b"\x04\x05\x06")),
+        rlrq = RLRQapdu(
+            reason=RequestReason(0),
+            user_information=UserInformation(AssociationInformation(b"\x04\x05\x06")),
         )
 
-        check_encode_decode(rlrq, RLRQApdu, 512)
+        check_encode_decode(rlrq, RLRQapdu, 512)
 
     def test_rlre_encode_decode(self) -> None:
         """Test RLREApdu encoding and decoding with all optional fields"""
-        rlre = RLREApdu(
-            reason=ResponseReason(ReleaseResponseReason(0)),
-            user_information=AssociationInformation30(AssociationInformation(b"\x07\x08\x09")),
+        rlre = RLREapdu(
+            reason=ResponseReason(0),
+            user_information=UserInformation(AssociationInformation(b"\x07\x08\x09")),
         )
 
-        check_encode_decode(rlre, RLREApdu, 512)
+        check_encode_decode(rlre, RLREapdu, 512)
 
 
 if __name__ == "__main__":

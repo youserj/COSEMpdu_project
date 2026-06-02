@@ -10,18 +10,12 @@ Standards:
 import unittest
 from src.COSEMpdu.service_error import (
     # Error types
-    ConfirmedServiceError, ApplicationReference, ApplicationReferenceEnum,
-    HardwareResource, HardwareResourceEnum,
-    VDEStateError, VDEStateErrorEnum,
-    Service, ServiceEnum,
-    Read,
-    Definition, DefinitionEnum,
-    Access, AccessEnum,
-    Initiate, InitiateEnum,
-    LoadDataSet, LoadDataSetEnum,
-    Task, TaskEnum,
-    ServiceError,
-    InitiateError,
+    ConfirmedServiceError, ApplicationReference,
+    HardwareResource, VDEStateError,
+    Service, Read, Write,
+    Definition, Access,
+    Initiate, LoadDataSet,
+    Task, ServiceError, InitiateError,
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
 
@@ -29,38 +23,38 @@ from src.COSEMpdu.byte_buffer import ByteBuffer
 class TestApplicationReference(unittest.TestCase):
     """Test application-reference [0] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_other(self):
+    def test_encode_decode_other(self) -> None:
         """Test other (0)"""
-        original = ApplicationReference(ApplicationReferenceEnum(0))
+        original = ApplicationReference(0)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ApplicationReference.get(buf)
-        self.assertEqual(decoded.value.value, 0)
+        self.assertEqual(decoded.value, 0)
 
-    def test_encode_decode_time_elapsed(self):
+    def test_encode_decode_time_elapsed(self) -> None:
         """Test time-elapsed (1)"""
-        original = ApplicationReference(ApplicationReferenceEnum(1))
+        original = ApplicationReference(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ApplicationReference.get(buf)
-        self.assertEqual(decoded.value.value, 1)
+        self.assertEqual(decoded.value, 1)
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-6"""
         for code in range(7):
             with self.subTest(code=code):
-                original = ApplicationReference(ApplicationReferenceEnum(code))
+                original = ApplicationReference(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = ApplicationReference.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
-    def test_invalid_code(self):
+    def test_invalid_code(self) -> None:
         """Test invalid error code (>6)"""
-        original = ApplicationReference(ApplicationReferenceEnum(7))
+        original = ApplicationReference(7)
         buf = ByteBuffer.allocate(10)
         # Should encode but may be invalid per spec
         original.put(buf)
@@ -69,200 +63,200 @@ class TestApplicationReference(unittest.TestCase):
 class TestHardwareResource(unittest.TestCase):
     """Test hardware-resource [1] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-4"""
         for code in range(5):
             with self.subTest(code=code):
-                original = HardwareResource(HardwareResourceEnum(code))
+                original = HardwareResource(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = HardwareResource.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
 
 class TestVDEStateError(unittest.TestCase):
     """Test vde-state-error [2] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_no_dlms_context(self):
+    def test_encode_decode_no_dlms_context(self) -> None:
         """Test no-dlms-context (1)"""
-        original = VDEStateError(VDEStateErrorEnum(1))
+        original = VDEStateError(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = VDEStateError.get(buf)
-        self.assertEqual(decoded.value.value, 1)
+        self.assertEqual(decoded.value, 1)
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-4"""
         for code in range(5):
             with self.subTest(code=code):
-                original = VDEStateError(VDEStateErrorEnum(code))
+                original = VDEStateError(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = VDEStateError.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
 
 class TestService(unittest.TestCase):
     """Test service [3] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_service_unsupported(self):
+    def test_encode_decode_service_unsupported(self) -> None:
         """Test service-unsupported (2)"""
-        original = Service(ServiceEnum(2))
+        original = Service(2)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Service.get(buf)
-        self.assertEqual(decoded.value.value, 2)
+        self.assertEqual(decoded.value, 2)
 
 
 class TestDefinition(unittest.TestCase):
     """Test definition [4] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_object_undefined(self):
+    def test_encode_decode_object_undefined(self) -> None:
         """Test object-undefined (1)"""
-        original = Definition(DefinitionEnum(1))
+        original = Definition(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Definition.get(buf)
-        self.assertEqual(decoded.value.value, 1)
+        self.assertEqual(decoded.value, 1)
 
 
 class TestAccess(unittest.TestCase):
     """Test access [5] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_scope_violated(self):
+    def test_encode_decode_scope_violated(self) -> None:
         """Test scope-of-access-violated (1)"""
-        original = Access(AccessEnum(1))
+        original = Access(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Access.get(buf)
-        self.assertEqual(decoded.value.value, 1)
+        self.assertEqual(decoded.value, 1)
 
 
 class TestInitiate(unittest.TestCase):
     """Test initiate [6] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_incompatible_conformance(self):
+    def test_encode_decode_incompatible_conformance(self) -> None:
         """Test incompatible-conformance (2) - most common"""
-        original = Initiate(InitiateEnum(2))
+        original = Initiate(2)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Initiate.get(buf)
-        self.assertEqual(decoded.value.value, 2)
+        self.assertEqual(decoded.value, 2)
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-4"""
         for code in range(5):
             with self.subTest(code=code):
-                original = Initiate(InitiateEnum(code))
+                original = Initiate(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = Initiate.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
 
 class TestLoadDataSet(unittest.TestCase):
     """Test load-data-set [7] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-7"""
         for code in range(8):
             with self.subTest(code=code):
-                original = LoadDataSet(LoadDataSetEnum(code))
+                original = LoadDataSet(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = LoadDataSet.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
 
 class TestTask(unittest.TestCase):
     """Test task [9] IMPLICIT ENUMERATED"""
 
-    def test_encode_decode_all_codes(self):
+    def test_encode_decode_all_codes(self) -> None:
         """Test all error codes 0-4"""
         for code in range(5):
             with self.subTest(code=code):
-                original = Task(TaskEnum(code))
+                original = Task(code)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = Task.get(buf)
-                self.assertEqual(decoded.value.value, code)
+                self.assertEqual(decoded.value, code)
 
 
 class TestServiceErrorChoice(unittest.TestCase):
     """Test ServiceError CHOICE encoding/decoding"""
 
-    def test_encode_decode_application_reference(self):
+    def test_encode_decode_application_reference(self) -> None:
         """Test application-reference alternative (tag 0)"""
-        original = ServiceError(ApplicationReference(ApplicationReferenceEnum(2)))
+        original = ServiceError(ApplicationReference(2))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
         self.assertEqual(decoded.selected, "application-reference")
-        self.assertEqual(decoded.value.value.value, 2)
+        self.assertEqual(decoded.value.value, 2)
 
-    def test_encode_decode_hardware_resource(self):
+    def test_encode_decode_hardware_resource(self) -> None:
         """Test hardware-resource alternative (tag 1)"""
-        original = ServiceError(HardwareResource(HardwareResourceEnum(3)))
+        original = ServiceError(HardwareResource(3))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
         self.assertEqual(decoded.selected, "hardware-resource")
-        self.assertEqual(decoded.value.value.value, 3)
+        self.assertEqual(decoded.value.value, 3)
 
-    def test_encode_decode_initiate_incompatible_conformance(self):
+    def test_encode_decode_initiate_incompatible_conformance(self) -> None:
         """Test initiate with incompatible-conformance (most common case)"""
-        original = ServiceError(Initiate(InitiateEnum(2)))
+        original = ServiceError(Initiate(2))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
         self.assertEqual(decoded.selected, "initiate")
-        self.assertEqual(decoded.value.value.value, 2)
+        self.assertEqual(decoded.value.value, 2)
 
-    def test_encode_decode_initiate_dlms_version_too_low(self):
+    def test_encode_decode_initiate_dlms_version_too_low(self) -> None:
         """Test initiate with dlms-version-too-low (1)"""
-        original = ServiceError(Initiate(InitiateEnum(1)))
+        original = ServiceError(Initiate(1))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
         self.assertEqual(decoded.selected, "initiate")
-        self.assertEqual(decoded.value.value.value, 1)
+        self.assertEqual(decoded.value.value, 1)
 
-    def test_encode_decode_read_error(self):
+    def test_encode_decode_read_error(self) -> None:
         """Test read alternative (tag 5)"""
-        original = ConfirmedServiceError(Read(ServiceError(Access(AccessEnum(1)))))
+        original = ConfirmedServiceError(Read(Access(1)))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ConfirmedServiceError.get(buf)
         self.assertEqual(decoded.selected, "read")
 
-    def test_encode_decode_write_error(self):
+    def test_encode_decode_write_error(self) -> None:
         """Test write alternative (tag 6)"""
-        original = ConfirmedServiceError.write(ServiceError.access(AccessEnum(2)))
+        original = ConfirmedServiceError(Write(Access(2)))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = ConfirmedServiceError.get(buf)
         self.assertEqual(decoded.selected, "write")
 
-    def test_encode_decode_all_alternatives(self):
+    def test_encode_decode_all_alternatives(self) -> None:
         """Test all ServiceError alternatives"""
         test_cases = [
-            ("application-reference", ApplicationReference, ApplicationReferenceEnum(0)),
+            ("application-reference", ApplicationReference, 0),
             ("hardware-resource", HardwareResource, HardwareResourceEnum(1)),
             ("vde-state-error", VDEStateError, VDEStateErrorEnum(2)),
             ("service", Service, ServiceEnum(0)),
@@ -282,14 +276,14 @@ class TestServiceErrorChoice(unittest.TestCase):
                 decoded = ServiceError.get(buf)
                 self.assertEqual(decoded.selected, selected)
 
-    def test_invalid_tag(self):
+    def test_invalid_tag(self) -> None:
         """Test invalid tag number"""
         buf = ByteBuffer.wrap(bytes([0xFF, 0x00]))  # Tag 255 (invalid)
         self.assertFalse(ServiceError.get(buf).has(None, ValueError))
 
-    def test_encoding_size(self):
+    def test_encoding_size(self) -> None:
         """Test that ServiceError encoding is 2 bytes (tag + enum)"""
-        original = ServiceError(Initiate(InitiateEnum(2)))
+        original = ServiceError(Initiate(2))
         buf = ByteBuffer.allocate(10)
         size = original.put(buf)
         self.assertEqual(size, 2)  # 1 byte tag + 1 byte enum
@@ -298,9 +292,9 @@ class TestServiceErrorChoice(unittest.TestCase):
 class TestInitiateError(unittest.TestCase):
     """Test InitiateError [1] ServiceError"""
 
-    def test_encode_decode_initiate_error(self):
+    def test_encode_decode_initiate_error(self) -> None:
         """Test InitiateError wrapper"""
-        service_error = ServiceError(Initiate(InitiateEnum(2)))
+        service_error = ServiceError(Initiate(2))
         original = InitiateError(service_error)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
@@ -311,9 +305,9 @@ class TestInitiateError(unittest.TestCase):
         # Decode ServiceError
         decoded_service_error = ServiceError.get(buf)
         self.assertEqual(decoded_service_error.selected, "initiate")
-        self.assertEqual(decoded_service_error.value.value.value, 2)
+        self.assertEqual(decoded_service_error.value.value, 2)
 
-    def test_initiate_error_tag(self):
+    def test_initiate_error_tag(self) -> None:
         """Test that InitiateError has tag 1"""
         self.assertEqual(InitiateError.tag, 1)
 
@@ -321,7 +315,7 @@ class TestInitiateError(unittest.TestCase):
 class TestConfirmedServiceErrorIntegration(unittest.TestCase):
     """Integration tests for ConfirmedServiceError PDU"""
 
-    def test_full_pdu_encoding_initiate_error(self):
+    def test_full_pdu_encoding_initiate_error(self) -> None:
         """
         Test full ConfirmedServiceError PDU encoding
 
@@ -355,7 +349,7 @@ class TestConfirmedServiceErrorIntegration(unittest.TestCase):
         self.assertEqual(buf.get_u8(), initiate_tag)
         self.assertEqual(buf.get_u8(), error_code)
 
-    def test_common_error_scenarios(self):
+    def test_common_error_scenarios(self) -> None:
         """Test common error scenarios from DLMS/COSEM"""
         scenarios = [
             # (error_type, error_code, description)
@@ -391,21 +385,21 @@ class TestConfirmedServiceErrorIntegration(unittest.TestCase):
 class TestEdgeCases(unittest.TestCase):
     """Test edge cases and error conditions"""
 
-    def test_buffer_overflow(self):
+    def test_buffer_overflow(self) -> None:
         """Test buffer overflow protection"""
-        original = ServiceError(Initiate(InitiateEnum(2)))
+        original = ServiceError(Initiate(2))
         buf = ByteBuffer.allocate(1)  # Too small
         self.assertTrue(original.put(buf).has(None, BufferError))
 
-    def test_empty_buffer(self):
+    def test_empty_buffer(self) -> None:
         """Test decoding from empty buffer"""
         buf = ByteBuffer.allocate(0)
         self.assertFalse(ServiceError.get(buf).has(None, BufferError))
 
-    def test_round_trip_all_error_types(self):
+    def test_round_trip_all_error_types(self) -> None:
         """Test round-trip encoding/decoding for all error types"""
         test_cases = [
-            (ApplicationReference, ApplicationReferenceEnum(0)),
+            (ApplicationReference, 0),
             (HardwareResource, HardwareResourceEnum(1)),
             (VDEStateError, VDEStateErrorEnum(2)),
             (Service, ServiceEnum(0)),

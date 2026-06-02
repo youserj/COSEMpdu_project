@@ -1,212 +1,193 @@
 import datetime
 from dataclasses import dataclass
 from types import UnionType
-from typing import Self, ClassVar, TypeAlias, Optional, Union, Protocol, get_args, Any, cast
+from typing import Self, ClassVar, TypeAlias, Optional, Union, get_args, cast
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
 from .byte_buffer import ByteBuffer, put_chain
-from .x680.constrained_type import SizeConstraint
+from .x680.constrained_type import SizeConstraint, ValueRange
 from .x680.type import NamedType, INTEGER
 from . import x680
-from .x680.tagged_type import TaggingMode
 from . import axdr
-from .useful_types import Integer8, Integer16, Integer32, Integer64, Unsigned8, Unsigned16, Unsigned32, Unsigned64
-from .axdr import ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, TaggedType
+from .axdr import ConstrainedIntegerType, ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, NullType0
 
 
-class TaggedNullType(ImplicitTaggedType[NullType]): ...
+class Integer8(ConstrainedIntegerType):
+    constraint_spec = ValueRange(-128, 127)
 
 
-TD: TypeAlias = """Union[
-    TypeDescriptionNullData, TypeDescriptionArray, TypeDescriptionStructure, TypeDescriptionBoolean,
-    TypeDescriptionOctetString, TypeDescriptionVisibleString, TypeDescriptionInteger,
-    TypeDescriptionUnsigned, TypeDescriptionLong, TypeDescriptionLongUnsigned, TypeDescriptionLong64,
-    TypeDescriptionLong64Unsigned, TypeDescriptionEnum, TypeDescriptionFloat32, TypeDescriptionFloat64,
-    TypeDescriptionDateTime, TypeDescriptionDate, TypeDescriptionTime, TypeDescriptionDontCare
-]"""
+class Integer16(ConstrainedIntegerType):
+    constraint_spec = ValueRange(-32768, 32767)
+
+
+class Integer32(ConstrainedIntegerType):
+    constraint_spec = ValueRange(-2147483648, 2147483647)
+
+
+class Integer64(ConstrainedIntegerType):
+    constraint_spec = ValueRange(-9223372036854775808, 9223372036854775807)
+
+
+class Unsigned8(ConstrainedIntegerType):
+    constraint_spec = ValueRange(0, 255)
+
+
+class Unsigned16(ConstrainedIntegerType):
+    constraint_spec = ValueRange(0, 65535)
+
+
+class Unsigned32(ConstrainedIntegerType):
+    constraint_spec = ValueRange(0, 4294967295)
+
+
+class Unsigned64(ConstrainedIntegerType):
+    constraint_spec = ValueRange(0, 18446744073709551615)
+
+
+class ObjectName(Integer16):
+    """ObjectName"""
+
+
+LN_REFERENCE = ObjectName(0x0007)
+SN_REFERENCE = ObjectName(-1536)  # 0xFA00
 
 
 class TypeDescription(axdr.ChoiceType):  # Forward declaration
     """TypeDescription"""
 
-    # Convenience constructors
-    @classmethod
-    def null_data(cls) -> Self:
-        return cls(TypeDescriptionNullData(NullType(None)))
 
-    @classmethod
-    def array(cls, number_of_elements: Unsigned16, type_description: "TypeDescription") -> Self:
-        return cls(TypeDescriptionArray(TypeDescriptionArrayContent((number_of_elements, type_description))))
-
-    @classmethod
-    def structure(cls, elements: list["TypeDescription"]) -> Self:
-        return cls(TypeDescriptionStructure(SequenceOfTypeDescription(elements)))
-
-    @classmethod
-    def boolean(cls) -> Self:
-        return cls(TypeDescriptionBoolean(NullType(None)))
-
-    @classmethod
-    def octet_string(cls) -> Self:
-        return cls(TypeDescriptionOctetString(NullType(None)))
-
-    @classmethod
-    def visible_string(cls) -> Self:
-        return cls(TypeDescriptionVisibleString(NullType(None)))
-
-    @classmethod
-    def integer(cls) -> Self:
-        return cls(TypeDescriptionInteger(NullType(None)))
-
-    @classmethod
-    def unsigned(cls) -> Self:
-        return cls(TypeDescriptionUnsigned(NullType(None)))
-
-    @classmethod
-    def long(cls) -> Self:
-        return cls(TypeDescriptionLong(NullType(None)))
-
-    @classmethod
-    def long_unsigned(cls) -> Self:
-        return cls(TypeDescriptionLongUnsigned(NullType(None)))
-
-    @classmethod
-    def dont_care(cls) -> Self:
-        return cls(TypeDescriptionDontCare(NullType(None)))
-
-
-class TypeDescriptionNullData(TaggedNullType):
-    """[0] IMPLICIT NULL"""
-    tag = 0
+NullData = NullType0
+"""null-data [0] IMPLICIT NULL"""
 
 
 @dataclass
-class TypeDescriptionArrayContent(axdr.SequenceType):
-    """array content: SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }"""
+class TypeDescriptionArray(ImplicitTaggedType, axdr.SequenceType):
+    """array [1] IMPLICIT SEQUENCE
+    {
+        number-of-elements Unsigned16,
+        type-description TypeDescription
+    }"""
+    tag: ClassVar[int] = 1
     number_of_elements: Unsigned16
     type_description: TypeDescription
 
 
-class TypeDescriptionArray(ImplicitTaggedType[TypeDescriptionArrayContent]):
-    """[1] IMPLICIT SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }"""
-    tag = 1
+SequenceOfTypeDescription: TypeAlias = axdr.SequenceOfType[TypeDescription]
+"""SEQUENCE OF TypeDescription"""
 
 
-class SequenceOfTypeDescription(axdr.SequenceOfType[TypeDescription]): ...  # Forward declaration
-
-
-class TypeDescriptionStructure(ImplicitTaggedType[SequenceOfTypeDescription]):
-    """[2] IMPLICIT SEQUENCE OF TypeDescription"""
+class TypeDescriptionStructure(ImplicitTaggedType, SequenceOfTypeDescription):
+    """structure [2] IMPLICIT SEQUENCE OF TypeDescription"""
     tag = 2
 
 
-class TypeDescriptionBoolean(TaggedNullType):
-    """[3] IMPLICIT NULL"""
+class TypeDescriptionBoolean(ImplicitTaggedType, NullType):
+    """boolean [3] IMPLICIT NULL"""
     tag = 3
 
 
-class TypeDescriptionBitString(TaggedNullType):
-    """[4] IMPLICIT NULL"""
+class TypeDescriptionBitString(ImplicitTaggedType, NullType):
+    """bit-string [4] IMPLICIT NULL"""
     tag = 4
 
 
-class TypeDescriptionDoubleLong(TaggedNullType):
-    """[5] IMPLICIT NULL"""
+class TypeDescriptionDoubleLong(ImplicitTaggedType, NullType):
+    """double-long [5] IMPLICIT NULL"""
     tag = 5
 
 
-class TypeDescriptionDoubleLongUnsigned(TaggedNullType):
-    """[6] IMPLICIT NULL"""
+class TypeDescriptionDoubleLongUnsigned(ImplicitTaggedType, NullType):
+    """double-long-unsigned [6] IMPLICIT NULL"""
     tag = 6
 
 
-class TypeDescriptionOctetString(TaggedNullType):
-    """[9] IMPLICIT NULL"""
+class TypeDescriptionOctetString(ImplicitTaggedType, NullType):
+    """octet-string [9] IMPLICIT NULL"""
     tag = 9
 
 
-class TypeDescriptionVisibleString(TaggedNullType):
-    """[10] IMPLICIT NULL"""
+class TypeDescriptionVisibleString(ImplicitTaggedType, NullType):
+    """visible-string [10] IMPLICIT NULL"""
     tag = 10
 
 
-class TypeDescriptionUtf8String(TaggedNullType):
-    """[12] IMPLICIT NULL"""
+class TypeDescriptionUtf8String(ImplicitTaggedType, NullType):
+    """utf8-string [12] IMPLICIT NULL"""
     tag = 12
 
 
-class TypeDescriptionBcd(TaggedNullType):
-    """[13] IMPLICIT NULL"""
+class TypeDescriptionBcd(ImplicitTaggedType, NullType):
+    """bcd [13] IMPLICIT NULL"""
     tag = 13
 
 
-class TypeDescriptionInteger(TaggedNullType):
-    """[15] IMPLICIT NULL"""
+class TypeDescriptionInteger(ImplicitTaggedType, NullType):
+    """integer [15] IMPLICIT NULL"""
     tag = 15
 
 
-class TypeDescriptionLong(TaggedNullType):
-    """[16] IMPLICIT NULL"""
+class TypeDescriptionLong(ImplicitTaggedType, NullType):
+    """long [16] IMPLICIT NULL"""
     tag = 16
 
 
-class TypeDescriptionUnsigned(TaggedNullType):
-    """[17] IMPLICIT NULL"""
+class TypeDescriptionUnsigned(ImplicitTaggedType, NullType):
+    """unsigned [17] IMPLICIT NULL"""
     tag = 17
 
 
-class TypeDescriptionLongUnsigned(TaggedNullType):
-    """[18] IMPLICIT NULL"""
+class TypeDescriptionLongUnsigned(ImplicitTaggedType, NullType):
+    """long-unsigned [18] IMPLICIT NULL"""
     tag = 18
 
 
-class TypeDescriptionLong64(TaggedNullType):
-    """[20] IMPLICIT NULL"""
+class TypeDescriptionLong64(ImplicitTaggedType, NullType):
+    """long64 [20] IMPLICIT NULL"""
     tag = 20
 
 
-class TypeDescriptionLong64Unsigned(TaggedNullType):
-    """[21] IMPLICIT NULL"""
+class TypeDescriptionLong64Unsigned(ImplicitTaggedType, NullType):
+    """long64-unsigned [21] IMPLICIT NULL"""
     tag = 21
 
 
-class TypeDescriptionEnum(TaggedNullType):
-    """[22] IMPLICIT NULL"""
+class TypeDescriptionEnum(ImplicitTaggedType, NullType):
+    """enum [22] IMPLICIT NULL"""
     tag = 22
 
 
-class TypeDescriptionFloat32(TaggedNullType):
-    """[23] IMPLICIT NULL"""
+class TypeDescriptionFloat32(ImplicitTaggedType, NullType):
+    """float32 [23] IMPLICIT NULL"""
     tag = 23
 
 
-class TypeDescriptionFloat64(TaggedNullType):
-    """[24] IMPLICIT NULL"""
+class TypeDescriptionFloat64(ImplicitTaggedType, NullType):
+    """float64 [24] IMPLICIT NULL"""
     tag = 24
 
 
-class TypeDescriptionDateTime(TaggedNullType):
-    """[25] IMPLICIT NULL"""
+class TypeDescriptionDateTime(ImplicitTaggedType, NullType):
+    """date-time [25] IMPLICIT NULL"""
     tag = 25
 
 
-class TypeDescriptionDate(TaggedNullType):
-    """[26] IMPLICIT NULL"""
+class TypeDescriptionDate(ImplicitTaggedType, NullType):
+    """date [26] IMPLICIT NULL"""
     tag = 26
 
 
-class TypeDescriptionTime(TaggedNullType):
-    """[27] IMPLICIT NULL"""
+class TypeDescriptionTime(ImplicitTaggedType, NullType):
+    """time [27] IMPLICIT NULL"""
     tag = 27
 
 
-class TypeDescriptionDontCare(TaggedNullType):
-    """[255] IMPLICIT NULL"""
+class TypeDescriptionDontCare(ImplicitTaggedType, NullType):
+    """dont-care [255] IMPLICIT NULL"""
     tag = 255
 
 
 setattr(TypeDescription, "alternatives", {
-    0: NamedType("null-data", TypeDescriptionNullData),
+    0: NamedType("null-data", NullData),
     1: NamedType("array", TypeDescriptionArray),
     2: NamedType("structure", TypeDescriptionStructure),
     3: NamedType("boolean", TypeDescriptionBoolean),
@@ -231,61 +212,17 @@ setattr(TypeDescription, "alternatives", {
     27: NamedType("time", TypeDescriptionTime),
     255: NamedType("dont-care", TypeDescriptionDontCare)
 })
-setattr(TypeDescriptionStructure, "type_", SequenceOfTypeDescription)
-setattr(SequenceOfTypeDescription, "_T", TypeDescription)
 
 
-class DataType(x680.Type, Protocol):
-    """
-    Mixin for COSEM Data types with tag-prefixed A-XDR encoding
-    (IEC 61334-6 §6.7).
-
-    Provides ``get`` / ``put`` methods that verify and encode a single
-    tag byte, then delegate to the concrete type's ``get_lc`` / ``put_lc``
-    for the actual A-XDR content.
-
-    Usage::
-        class NullData(DataType, NullType):
-            tag = 0
-
-        class Boolean(DataType, BooleanType):
-            tag = 3
-
-    In the MRO, ``DataType`` (first parent) handles the tag layer;
-    the second parent (e.g. ``BooleanType``, ``NullType``) provides
-    ``get_lc`` / ``put_lc`` for content encoding/decoding.
-    """
-    tag: int
-
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if isinstance(tag_number := buf.get_u8(), Error):
-            return tag_number
-        if tag_number != cls.tag:
-            return Error.from_e(ValueError(f"expected tag {cls.tag}, got {tag_number}"))
-        return cls.get_lc(buf)
-
-    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(
-            buf.put_u8(self.tag),
-            self.put_lc(buf)
-        )
+class SequenceOfData[T: ImplicitTaggedType | axdr.ChoiceType](axdr.SequenceOfType[T]): ...  # Forward declaration for recursive types
 
 
-class NullData(DataType, NullType):
-    """null-data [0] IMPLICIT NULL"""
-    tag = 0
-
-
-class SequenceOfData[T: ImplicitTaggedType[Any]](axdr.SequenceOfType[T]): ...  # Forward declaration for recursive types
-
-
-class Array[T: DataType](DataType, SequenceOfData[T]):
+class Array[T: ImplicitTaggedType | axdr.ChoiceType](ImplicitTaggedType, SequenceOfData[T]):
     """array [1] IMPLICIT SEQUENCE OF Data"""
     tag = 1
 
 
-class Structure(DataType, x680.SequenceType):
+class Structure(ImplicitTaggedType, x680.SequenceType):
     """[2] IMPLICIT SEQUENCE OF Data
 
     Although the specification defines this as a SEQUENCE OF, the implementation
@@ -299,7 +236,7 @@ class Structure(DataType, x680.SequenceType):
     tag: ClassVar[int] = 2
 
     @classmethod
-    def from_data(cls, *args: DataType) -> Self:
+    def from_data(cls, *args: ImplicitTaggedType) -> Self:
         """Dynamically create a Structure subclass from positional arguments.
 
         Generates single-letter field names (``a``, ``b``, ``c``, …) for each
@@ -395,79 +332,78 @@ class DigitalMixin[T: Unsigned8 | Unsigned16 | Unsigned32 | Unsigned64 | Integer
         return self.value.normalize()
 
 
-class Boolean(DataType, BooleanType):
+class Boolean(ImplicitTaggedType, BooleanType):
     """boolean [3] IMPLICIT BOOLEAN"""
     tag = 3
 
 
-class BitString(DataType, axdr.BitStringType):
+class BitString(ImplicitTaggedType, axdr.BitStringType):
     """bit-string [4] IMPLICIT BIT STRING"""
     tag = 4
 
 
-class DoubleLong(DataType, Integer32):
+class DoubleLong(ImplicitTaggedType, Integer32):
     """double-long [5] IMPLICIT Integer32"""
     tag = 5
 
 
-class DoubleLongUnsigned(DataType, Unsigned32):
+class DoubleLongUnsigned(ImplicitTaggedType, Unsigned32):
     """double-long-unsigned [6] IMPLICIT Unsigned32"""
     tag = 6
 
 
-class OctetString(DataType, OctetStringType):
+class OctetString(ImplicitTaggedType, OctetStringType):
     """octet-string [9] IMPLICIT OCTET STRING"""
     tag = 9
 
 
-class VisibleString(DataType, axdr.VisibleString):
+class VisibleString(ImplicitTaggedType, axdr.VisibleString):
     """visible-string [10] IMPLICIT VisibleString"""
     tag = 10
 
 
-class Utf8String(DataType, axdr.Utf8String):
+class Utf8String(ImplicitTaggedType, axdr.Utf8String):
     """utf8-string [12] IMPLICIT UTF8String"""
     tag = 12
 
 
-class Bcd(DataType, Integer8):
+class Bcd(ImplicitTaggedType, Integer8):
     """bcd [13] IMPLICIT Integer8"""
     tag = 13
 
 
-class Integer(DataType, Integer8):
+class Integer(ImplicitTaggedType, Integer8):
     """integer [15] IMPLICIT Integer8"""
     tag = 15
 
 
-class Long(DataType, Integer16):
+class Long(ImplicitTaggedType, Integer16):
     """long [16] IMPLICIT Integer16"""
     tag = 16
 
 
-class Unsigned(DataType, Unsigned8):
+class Unsigned(ImplicitTaggedType, Unsigned8):
     """unsigned [17] IMPLICIT Unsigned8"""
     tag = 17
 
 
-class LongUnsigned(DataType, Unsigned16):
+class LongUnsigned(ImplicitTaggedType, Unsigned16):
     """long-unsigned [18] IMPLICIT Unsigned16"""
     tag = 18
 
 
-class ContentsDescription(TaggedType[TypeDescription]):
+class ContentsDescription(ImplicitTaggedType, TypeDescription):
     """contents-description [0] TypeDescription"""
     tag = 0
-    mode = TaggingMode.DEFAULT
 
 
-class ArrayContents(ImplicitTaggedType[OctetStringType]):
+class ArrayContents(ImplicitTaggedType, OctetStringType):
     """array-contents [1] IMPLICIT   OCTET STRING"""
     tag = 1
 
 
 @dataclass
-class CompactArray(DataType, axdr.SequenceType):
+class CompactArray(ImplicitTaggedType, axdr.SequenceType):
     """compact-array [19] IMPLICIT SEQUENCE
     {
         contents-description TypeDescription,
@@ -477,7 +413,7 @@ class CompactArray(DataType, axdr.SequenceType):
     contents_description: ContentsDescription
     array_contents: ArrayContents
 
-    def get_array(self) -> list[DataType]:
+    def get_array(self) -> list[ImplicitTaggedType]:
         if (type_ := Data.alternatives.get(self.contents_description.value.tag)) is None:
             raise ValueError(f"Unknown TypeDescription tag: {self.contents_description}")
         data_class = type_.type_
@@ -496,11 +432,11 @@ class CompactArray(DataType, axdr.SequenceType):
         return result
 
     @classmethod
-    def from_array[T: "CommonDataType[CDT]"](cls, array: list[T], contents: Optional[ContentsDescription] = None, buf_size: int = 65535) -> Self:
+    def from_array[T: "Data"](cls, array: list[T], contents: Optional[ContentsDescription] = None, buf_size: int = 65535) -> Self:
         if contents is None:
             if len(array) == 0:
                 raise ValueError("expected <contents> for empty array")
-            contents = TypeDescription(TypeDescription.alternatives[array[0].tag].type_(axdr.null))
+            contents = TypeDescription(TypeDescription.alternatives[array[0].tag].type_(None))
         buf = ByteBuffer.allocate(buf_size)
         for el in array:
             el.put_lc(buf)
@@ -508,12 +444,12 @@ class CompactArray(DataType, axdr.SequenceType):
         return cls(contents, array_contents)
 
 
-class Long64(DataType, Integer64):
+class Long64(ImplicitTaggedType, Integer64):
     """long64 [20] IMPLICIT Integer64"""
     tag = 20
 
 
-class Long64Unsigned(DataType, Unsigned64):
+class Long64Unsigned(ImplicitTaggedType, Unsigned64):
     """long64-unsigned [21] IMPLICIT Unsigned64"""
     tag = 21
 
@@ -563,7 +499,7 @@ class BitMixin:
         return bool(item & self.normalize())
 
 
-class Enum(DataType, Unsigned8):
+class Enum(ImplicitTaggedType, Unsigned8):
     """enum [22] IMPLICIT Unsigned8"""
     tag = 22
 
@@ -589,13 +525,13 @@ class _Float(ConstrainedOctetStringType):
 
     @classmethod
     def from_float(cls, value: float) -> Self:
-        return cls(OctetStringType(pack(cls.fmt, value)))
+        return cls(pack(cls.fmt, value))
 
     def __float__(self) -> float:
-        return unpack(self.fmt, bytes(self.value.value))[0]
+        return unpack(self.fmt, bytes(self.value))[0]
 
 
-class Float32(DataType, OctetStringTypeSize4, _Float):
+class Float32(ImplicitTaggedType, OctetStringTypeSize4, _Float):
     """float32 [23] IMPLICIT OCTET STRING (SIZE(4))"""
     tag = 23
     fmt = ">f"
@@ -608,7 +544,7 @@ class Float32(DataType, OctetStringTypeSize4, _Float):
     #     return unpack(self.fmt, bytes(self.value.value))[0]
 
 
-class Float64(DataType, OctetStringTypeSize8, _Float):
+class Float64(ImplicitTaggedType, OctetStringTypeSize8, _Float):
     """float64 [24] IMPLICIT OCTET STRING (SIZE(8))"""
     tag = 24
     fmt = ">d"
@@ -621,17 +557,17 @@ class Float64(DataType, OctetStringTypeSize8, _Float):
     #     return unpack(self.fmt, bytes(self.value.value))[0]
 
 
-class DateTime(DataType, OctetStringTypeSize12):
+class DateTime(ImplicitTaggedType, OctetStringTypeSize12):
     """date-time [25] IMPLICIT OCTET STRING (SIZE(12))"""
     tag = 25
 
 
-class Date(DataType, OctetStringTypeSize5):
+class Date(ImplicitTaggedType, OctetStringTypeSize5):
     """date [26] IMPLICIT OCTET STRING (SIZE(5))"""
     tag = 26
 
 
-class Time(DataType, OctetStringTypeSize4):
+class Time(ImplicitTaggedType, OctetStringTypeSize4):
     """time [27] IMPLICIT OCTET STRING (SIZE(4))"""
     tag = 27
 
@@ -685,7 +621,7 @@ class DeltaDoubleLongUnsigned(DoubleLongUnsigned):
     tag = 33
 
 
-class DontCare(DataType, axdr.NullType):
+class DontCare(ImplicitTaggedType, axdr.NullType):
     """dont-care [255] IMPLICIT NULL"""
     tag = 255
 
@@ -694,97 +630,57 @@ SimpleDataType = Union[NullData | Boolean | BitString | DoubleLong | DoubleLongU
                 Utf8String | Bcd | Integer | Long | Unsigned | LongUnsigned | Long64 | Long64Unsigned | Enum | Float32 | \
                 Float64 | DateTime | Date | Time | DeltaInteger | DeltaLong | DeltaDoubleLong | DeltaUnsigned | DeltaLongUnsigned | \
                 DeltaDoubleLongUnsigned]
-ComplexDataType = Union[Array[DataType] | Structure | CompactArray]
+ComplexDataType = Union[Array[ImplicitTaggedType] | Structure | CompactArray]
 CDT = Union[SimpleDataType | ComplexDataType]
 
 
-Alternatives: TypeAlias = dict[int, NamedType[CDT | ImplicitTaggedType[Any]]]
+class Data(axdr.ChoiceType):
+    alternatives: axdr.Alternatives = {
+        0: NamedType("null-data", NullData),
+        1: NamedType("array", Array),
+        2: NamedType("structure", Structure),
+        3: NamedType("boolean", Boolean),
+        4: NamedType("bit-string", BitString),
+        5: NamedType("double-long", DoubleLong),
+        6: NamedType("double-long-unsigned", DoubleLongUnsigned),
+        9: NamedType("octet-string", OctetString),
+        10: NamedType("visible-string", VisibleString),
+        12: NamedType("utf8-string", Utf8String),
+        13: NamedType("bcd", Bcd),
+        15: NamedType("integer", Integer),
+        16: NamedType("long", Long),
+        17: NamedType("unsigned", Unsigned),
+        18: NamedType("long-unsigned", LongUnsigned),
+        19: NamedType("compact-array", CompactArray),
+        20: NamedType("long64", Long64),
+        21: NamedType("long64-unsigned", Long64Unsigned),
+        22: NamedType("enum", Enum),
+        23: NamedType("float32", Float32),
+        24: NamedType("float64", Float64),
+        25: NamedType("date-time", DateTime),
+        26: NamedType("date", Date),
+        27: NamedType("time", Time),
+        28: NamedType("delta-integer", DeltaInteger),
+        29: NamedType("delta-long", DeltaLong),
+        30: NamedType("delta-double-long", DeltaDoubleLong),
+        31: NamedType("delta-unsigned", DeltaUnsigned),
+        32: NamedType("delta-long-unsigned", DeltaLongUnsigned),
+        33: NamedType("delta-double-long-unsigned", DeltaDoubleLongUnsigned),
+        255: NamedType("dont-care", DontCare)
+    }
+    value: CDT
 
 
-data_alternatives: Alternatives = {
-    0: NamedType("null-data", NullData),
-    1: NamedType("array", Array),
-    2: NamedType("structure", Structure),
-    3: NamedType("boolean", Boolean),
-    4: NamedType("bit-string", BitString),
-    5: NamedType("double-long", DoubleLong),
-    6: NamedType("double-long-unsigned", DoubleLongUnsigned),
-    9: NamedType("octet-string", OctetString),
-    10: NamedType("visible-string", VisibleString),
-    12: NamedType("utf8-string", Utf8String),
-    13: NamedType("bcd", Bcd),
-    15: NamedType("integer", Integer),
-    16: NamedType("long", Long),
-    17: NamedType("unsigned", Unsigned),
-    18: NamedType("long-unsigned", LongUnsigned),
-    19: NamedType("compact-array", CompactArray),
-    20: NamedType("long64", Long64),
-    21: NamedType("long64-unsigned", Long64Unsigned),
-    22: NamedType("enum", Enum),
-    23: NamedType("float32", Float32),
-    24: NamedType("float64", Float64),
-    25: NamedType("date-time", DateTime),
-    26: NamedType("date", Date),
-    27: NamedType("time", Time),
-    28: NamedType("delta-integer", DeltaInteger),
-    29: NamedType("delta-long", DeltaLong),
-    30: NamedType("delta-double-long", DeltaDoubleLong),
-    31: NamedType("delta-unsigned", DeltaUnsigned),
-    32: NamedType("delta-long-unsigned", DeltaLongUnsigned),
-    33: NamedType("delta-double-long-unsigned", DeltaDoubleLongUnsigned),
-    255: NamedType("dont-care", DontCare)
-}
+Data.alternatives[1] = NamedType("array", Array[Data])
 
 
-class CommonDataType[T: ImplicitTaggedType[Any]](axdr.ChoiceType, Protocol):
-    """Data"""
-    alternatives: Alternatives
-    value: T
-
-    # def __class_getitem__(cls, item: UnionType | TypeVar) -> type["Data[T]"]:
-    #     if isinstance(item, UnionType):
-    #         name = f"{cls.__name__}"  #[{item.__name__}]"
-    #         new = {}
-    #         args = cast("tuple[ImplicitTaggedType[Any]]", get_args(item))
-    #         if not args:
-    #             args = item,
-    #         for type_ in args:
-    #             for id, n_t in Data.alternatives.items():
-    #                 if type_.tag == n_t.type_.tag:
-    #                     new[id] = NamedType(n_t.identifier, type_)
-    #                     break
-    #         return type(name, (cls,), {
-    #             "alternatives": new,
-    #         })
-
-    @classmethod
-    def structure(cls, elements: list["Data[CDT]"]) -> "Data[Structure]":
-        """Create structure [2] SEQUENCE OF Data"""
-        return cls(Structure(SequenceOfData(elements)))
-
-    # =========================================================================
-    # Helper methods
-    # =========================================================================
-
-    def __repr__(self) -> str:
-        """Human-readable representation"""
-        return f"Data.{self.value!r}"
-
-
-class Data(CommonDataType[CDT]):
-    alternatives = data_alternatives
-
-
-data_alternatives[1] = NamedType("array", Array[Data])
-
-
-def union2alternatives(item: UnionType) -> Alternatives:
+def union2alternatives(item: UnionType) -> axdr.Alternatives:
     new = {}
-    args = cast("tuple[ImplicitTaggedType[Any], ...]", get_args(item))
+    args: tuple[ImplicitTaggedType, ...] = cast("tuple[ImplicitTagged, ...]", get_args(item))
     if not args:
         args = item,
     for type_ in args:
-        for id, n_t in data_alternatives.items():
+        for id, n_t in Data.alternatives.items():
             if type_.tag == n_t.type_.tag:
                 new[id] = NamedType(n_t.identifier, type_)
                 break
@@ -803,7 +699,7 @@ def include_alternatives(type_alias: TypeAlias) -> dict[int, NamedType[CDT]]:
 setattr(SequenceOfData, "_T", Data)
 
 
-class ExternallyData[T: ImplicitTaggedType[Any]](CommonDataType[T]):
+class ExternallyData(axdr.ChoiceType):
 
     @property
     def selected(self) -> str:
@@ -833,6 +729,8 @@ class DiscriminatedUnion(Structure):
         }
         }
         """
+    components: ClassVar[tuple[NamedType[Enum], NamedType[axdr.ChoiceType]]]
+
     def __init_subclass__(cls) -> None:
         """create <components> from annotations"""
         super().__init_subclass__()

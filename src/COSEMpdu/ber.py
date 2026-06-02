@@ -127,6 +127,32 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         return self.value.put_lc(buf)
 
 
+class ImplicitTaggedType(Type, Protocol):
+    """
+    IMPLICIT — pure tag substitution for BER (X.690 §8.14.1).
+
+    In IMPLICIT tagging the outer tag replaces the inner type's tag
+    entirely.  Contents encoding/decoding is delegated straight to the
+    inner type with no wrapping, no inner Tag-Length frame, and no
+    conditional logic.
+
+    Because *all* behaviour is inherited:
+      - ``get()``  / ``put()``     → outer tag from ``ber.Type``
+      - ``get_lc()`` / ``put_lc()`` → contents from the ``_T`` protocol
+    this class requires **zero method overrides**.  Only ``tag`` must be
+    supplied by the subclass.
+
+    Usage::
+
+        class MyImplicitType(ImplicitTaggedType[IntegerType]):
+            tag = Tag(class_number=42, class_=Class.Context)
+
+    Contrast with ``TaggedType``, which handles **both** IMPLICIT and
+    EXPLICIT at the cost of runtime ``if``-checks in every method.
+    """
+    tag: ClassVar[Tag]
+
+
 class BitStringType(Type, x680.BitStringType):
     """
     BIT STRING with BER encoding/decoding (X.690 §8.6)
@@ -322,7 +348,7 @@ def create_alternatives(*values: NamedType) -> dict[int, NamedType]:
     return {hash(value.type_.tag): value for value in values}
 
 
-class ChoiceType(Type, x680.ChoiceType[Type]):
+class ChoiceType(x680.ChoiceType[Type]):
     """
     CHOICE with BER encoding/decoding (X.690 §8.13)
 
@@ -966,26 +992,4 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
         return put_lc(buf, len(data), data)
 
 
-class ConstrainedType[T: Type](Type, x680.ConstrainedType[T]):
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if isinstance(value := cls.get_type().get(buf), Error):
-            return value
-        return cls(value)
-
-    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return self.value.put(buf)
-
-    @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if isinstance(value := cls.get_type().get_lc(buf), Error):
-            return value
-        return cls(value)
-
-    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return self.value.put_lc(buf)
-
-
-class ConstrainedOctetStringType(x680.ConstrainedOctetStringType[OctetStringType], ConstrainedType[OctetStringType], Type):
-    fixed_length: ClassVar[Optional[int]] = None
-    value: OctetStringType
+class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType): ...

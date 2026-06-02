@@ -10,7 +10,10 @@ from .object_identifier_type import ObjectIdentifierType
 from .sequence_of_type import SequenceOfType
 from .generalized_time import GeneralizedTime
 from .type import Type, NamedType, DefaultNamedType, OptionalNamedType, BuiltinType, GraphicString, VisibleString, Utf8String
-from .constrained_type import ConstrainedType, ValueRange, Elements, ConstrainedOctetStringType
+from .constrained_type import (
+    ConstrainedType, ConstrainedOctetString, ConstrainedIntegerType, ConstrainedSequenceOfType, ConstrainedBitStringType,
+    ValueRange, Elements, SizeConstraint, SingleValue, ConstraintSpec, ExceptionSpec, SubtypeElements
+)
 from .null_type import NullType
 from .tagged_type import TaggedType, TaggingMode
 
@@ -48,6 +51,14 @@ __all__ = [
     "NamedType",
     "ValueRange",
     "ConstrainedType",
+    "ConstrainedOctetString",
+    "ConstrainedBitStringType",
+    "ConstrainedSequenceOfType",
+    "ConstrainedIntegerType",
     "GeneralizedTime",
-    "ConstrainedOctetStringType"
+    "SizeConstraint",
+    "SingleValue",
+    "ConstraintSpec",
+    "ExceptionSpec",
+    "SubtypeElements"
 ]

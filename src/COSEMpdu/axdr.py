@@ -17,11 +17,10 @@ Standards:
 - X.680: ASN.1 notation
 - X.690: BER encoding (reference for comparison)
 """
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, Any, override, runtime_checkable, Iterator
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, override, runtime_checkable, Iterator
 from StructResult.result import ValueOrError, Error
 from . import x690
 from .x680.tagged_type import TaggingMode
-from .x680.constrained_type import ValueRange, SizeConstraint
 from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
 from . import x680
 from .byte_buffer import ByteBuffer, put_chain
@@ -176,19 +175,45 @@ class TaggedType[T: Type](Type, x680.TaggedType[T]):
         return self.value.put(buf)  # put() includes tag/length if applicable
 
 
-class ImplicitTaggedType[T: Type](TaggedType[T]):
-    mode = TaggingMode.IMPLICIT
+class ImplicitTaggedType(Type, Protocol):
+    """
+    Mixin for COSEM Data types with tag-prefixed A-XDR encoding
+    (IEC 61334-6 §6.7).
 
-    @override
+    Provides ``get`` / ``put`` methods that verify and encode a single
+    tag byte, then delegate to the concrete type's ``get_lc`` / ``put_lc``
+    for the actual A-XDR content.
+
+    Usage::
+        class NullData(DataType, NullType):
+            tag = 0
+
+        class Boolean(DataType, BooleanType):
+            tag = 3
+
+    In the MRO, ``DataType`` (first parent) handles the tag layer;
+    the second parent (e.g. ``BooleanType``, ``NullType``) provides
+    ``get_lc`` / ``put_lc`` for content encoding/decoding.
+    """
+    tag: ClassVar[int]
+
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if isinstance(value := cls._T.get_lc(buf), Error):
-            return value
-        return cls(value)
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """IMPLICIT mode (§6.6):
+                [Tag(1)] [Contents without inner tag]
+        """
+        if isinstance(tag_number := buf.get_u8(), Error):
+            return tag_number
+        if tag_number != cls.tag:
+            return Error.from_e(ValueError(f"expected tag {cls.tag}, got {tag_number}"))
+        return cls.get_lc(buf)
 
-    @override
-    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return self.value.put_lc(buf)
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        return put_chain(
+            buf.put_u8(self.tag),
+            self.put_lc(buf)
+        )
+
 
 # =============================================================================
 # BOOLEAN Type (IEC 61334-6 §6.2)
@@ -478,6 +503,9 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # =============================================================================
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
+Alternatives: TypeAlias = dict[int, NamedType["ImplicitTaggedType | ChoiceType"]]
+
+
 @runtime_checkable
 class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
     """
@@ -500,8 +528,8 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
         - Contents encoded per alternative type rules
         - More compact than BER (1 byte tag vs 2-3 bytes)
     """
-    alternatives: ClassVar[dict[int, NamedType[TaggedType[Any]]]]
-    value: TaggedType[Type]
+    alternatives: Alternatives
+    value: ImplicitTaggedType
 
     @classmethod
     def parse(cls, value: CHOICE) -> Self:
@@ -721,10 +749,9 @@ class NullType(Type, x680.NullType):
         return isinstance(other, self.__class__)
 
 
-class NullType0(ImplicitTaggedType[NullType]):
+class NullType0(ImplicitTaggedType, NullType):
     """[0] IMPLICIT NULL"""
     tag = 0
-    value: NullType
 
 
 null = NullType(None)
@@ -904,21 +931,11 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
         )
 
 
-class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
-    fixed_length: ClassVar[Optional[int]] = None
-    signed: ClassVar[bool] = True
-    value: IntegerType
+class ConstrainedIntegerType(x680.ConstrainedIntegerType, IntegerType):
 
     @classmethod
     def __init_subclass__(cls) -> None:
-        if isinstance(v_r := cls.constraint_spec, ValueRange):
-            if v_r.lower_endpoint >= 0:
-                cls.signed = False
-            cls.fixed_length = max(1, ((v_r.upper_endpoint - v_r.lower_endpoint).bit_length() + 7) // 8)
-
-    @classmethod
-    def from_int(cls, value: INTEGER) -> Self:
-        return cls(IntegerType(value))
+        cls._init_subclass()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -932,16 +949,14 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         """
         if isinstance(cls.fixed_length, int):
             if cls.fixed_length == 0:
-                return cls(IntegerType(0))
+                return cls(0)
             if isinstance(content := buf.read(cls.fixed_length), Error):
                 return content
             # Decode as unsigned for non-negative, signed for negative ranges
             # DLMS typically uses unsigned for constrained types
             value = int.from_bytes(content, byteorder="big", signed=cls.signed)
-            return cls(IntegerType(value))
-        if isinstance(value := IntegerType.get_lc(buf), Error):
-            return value
-        return cls(value)
+            return cls(value)
+        return super().get_lc(buf)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -952,100 +967,66 @@ class ConstrainedIntegerType(Type, x680.ConstrainedType[IntegerType]):
         if isinstance(self.fixed_length, int):
             if self.fixed_length == 0:
                 return 0
-            content_bytes = self.value.value.to_bytes(
+            content_bytes = self.value.to_bytes(
                 self.fixed_length,
                 byteorder="big",
                 signed=self.signed
             )
             return buf.write(content_bytes)
-        return self.value.put_lc(buf)
-
-    def __int__(self) -> int:
-        return self.value.value
-
-    @override
-    def normalize(self) -> INTEGER:
-        return self.value.normalize()
+        return super().put_lc(buf)
 
 
-class ConstrainedOctetStringType(x680.ConstrainedOctetStringType[OctetStringType], Type):
-    fixed_length: ClassVar[Optional[int]] = None
-    value: OctetStringType
+class ConstrainedOctetStringType(x680.ConstrainedOctetString, OctetStringType):
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        cls._init_subclass()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        type_ = cls.get_type()
         if isinstance(cls.fixed_length, int):
-            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
-                return value
-            return cls(value)
-        if isinstance(value := type_.get_lc(buf), Error):
-            return value
-        return cls(value)
+            return cls.get_c(buf, cls.fixed_length)
+        return cls.get_lc(buf)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if isinstance(self.fixed_length, int):
-            return self.value.put_c(buf)
-        return self.value.put_lc(buf)
+            return self.put_c(buf)
+        return self.put_lc(buf)
 
 
-class ConstrainedBitStringType(Type, x680.ConstrainedType[BitStringType]):
-    fixed_length: ClassVar[Optional[int]] = None
-    value: BitStringType
-
+class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
     @classmethod
     def __init_subclass__(cls) -> None:
-        if (  # Fixed-length encoding (§6.4.1)
-            isinstance(cls.constraint_spec, SizeConstraint)
-            and cls.constraint_spec.min_size is None
-        ):
-            cls.fixed_length = cls.constraint_spec.max_size
+        cls._init_subclass()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:  # copypast from other
-        type_ = cls.get_type()
         if isinstance(cls.fixed_length, int):
-            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
-                return value
-            return cls(value)
-        if isinstance(value := type_.get_lc(buf), Error):
-            return value
-        return cls(value)
+            return cls.get_c(buf, cls.fixed_length)
+        return cls.get_lc(buf)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if isinstance(self.fixed_length, int):
-            return self.value.put_c(buf)
-        return self.value.put_lc(buf)
+            return self.put_c(buf)
+        return self.put_lc(buf)
 
 
-class ConstrainedSequenceOfType[T: SequenceOfType[Any]](Type, x680.ConstrainedType[T]):
-    fixed_length: ClassVar[Optional[int]] = None
-    value: T
-
+class ConstrainedSequenceOfType[T: SequenceOfType[Type]](x680.ConstrainedSequenceOfType[T], SequenceOfType[T]):
     @classmethod
     def __init_subclass__(cls) -> None:
-        if (  # Fixed-length encoding (§6.4.1)
-            isinstance(cls.constraint_spec, SizeConstraint)
-            and cls.constraint_spec.min_size is None
-        ):
-            cls.fixed_length = cls.constraint_spec.max_size
+        cls._init_subclass()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:  # copypast from other
-        type_ = cls.get_type()
         if isinstance(cls.fixed_length, int):
-            if isinstance(value := type_.get_c(buf, cls.fixed_length), Error):
-                return value
-            return cls(value)
-        if isinstance(value := type_.get_lc(buf), Error):
-            return value
-        return cls(value)
+            return cls.get_c(buf, cls.fixed_length)
+        return cls.get_lc(buf)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         if isinstance(self.fixed_length, int):
-            return self.value.put_c(buf)
-        return self.value.put_lc(buf)
+            return self.put_c(buf)
+        return self.put_lc(buf)
 
 
-def create_alternatives[U: Type](*values: NamedType[TaggedType[U]]) -> dict[int, NamedType[TaggedType[U]]]:
+def create_alternatives(*values: NamedType[ImplicitTaggedType | ChoiceType]) -> dict[int, NamedType[ImplicitTaggedType | ChoiceType]]:
     return {value.type_.tag: value for value in values}

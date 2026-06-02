@@ -10,6 +10,7 @@ from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length, TagError
 from src.COSEMpdu.x680 import NamedType, TaggingMode, OptionalNamedType, DefaultNamedType, NamedBit, NamedBitList
 from src.COSEMpdu.ber import (
+    ImplicitTaggedType,
     create_alternatives,
     TaggedType,
     BitStringType,
@@ -821,14 +822,12 @@ class TestEnumeratedType(unittest.TestCase):
         self.assertEqual(bytes(buf)[1], 2)  # Length = 2 (needs sign bit)
 
 
-class Integer0(TaggedType[IntegerType]):
+class Integer0(ImplicitTaggedType, IntegerType):
     tag = Tag(0, class_=Class.CONTEXT_SPECIFIC)
-    mode = TaggingMode.IMPLICIT
 
 
-class OctetString1(TaggedType[OctetStringType]):
+class OctetString1(ImplicitTaggedType, OctetStringType):
     tag = Tag(1, class_=Class.CONTEXT_SPECIFIC)
-    mode = TaggingMode.IMPLICIT
 
 
 class TestChoice(ChoiceType):
@@ -843,7 +842,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_encode_integer_alternative(self) -> None:
         """Encode CHOICE with INTEGER alternative"""
-        choice = TestChoice(Integer0(IntegerType(42)),
+        choice = TestChoice(Integer0(42),
         )
         buf = ByteBuffer.allocate(10)
         if isinstance(_ := choice.put(buf), Error):
@@ -852,7 +851,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_encode_octetstring_alternative(self) -> None:
         """Encode CHOICE with OCTET STRING alternative"""
-        choice = TestChoice(OctetString1(OctetStringType(b"AB")))
+        choice = TestChoice(OctetString1(b"AB"))
         buf = ByteBuffer.allocate(10)
         if isinstance(_ := choice.put(buf), Error):
             _.unwrap()
@@ -864,7 +863,7 @@ class TestChoiceType(unittest.TestCase):
         if isinstance(choice := TestChoice.get(buf), Error):
             choice.unwrap()
         self.assertEqual(choice.selected, "first")
-        self.assertEqual(choice.value.value.value, 42)
+        self.assertEqual(choice.value.value, 42)
 
     def test_decode_octetstring_alternative(self) -> None:
         """Decode CHOICE with OCTET STRING alternative"""
@@ -872,7 +871,7 @@ class TestChoiceType(unittest.TestCase):
         if isinstance(choice := TestChoice.get(buf), Error):
             choice.unwrap()
         self.assertEqual(choice.selected, "second")
-        self.assertEqual(choice.value.value.value, b"AB")
+        self.assertEqual(choice.value.value, b"AB")
 
     def test_invalid_tag(self) -> None:
         """Invalid tag should raise"""
@@ -890,7 +889,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_length_calculation(self) -> None:
         """__len__ should match alternative length"""
-        choice = TestChoice(Integer0(IntegerType(42)))
+        choice = TestChoice(Integer0(42))
         buf = ByteBuffer.allocate(100)
         if isinstance(_ := choice.put(buf), Error):
             _.unwrap()
@@ -1744,12 +1743,11 @@ class TestTaggedType(unittest.TestCase):
     def test_implicit_tagged_integer_encode(self) -> None:
         """IMPLICIT tagged INTEGER [2] INTEGER - tag replaces base type's tag"""
         # Define concrete TaggedType subclass (configuration at class level)
-        class ImplicitInteger(TaggedType[IntegerType]):
-            mode = TaggingMode.IMPLICIT
+        class ImplicitInteger(ImplicitTaggedType, IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
 
         # Create instance with value
-        tagged = ImplicitInteger(value=IntegerType(42))
+        tagged = ImplicitInteger(42)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
@@ -1760,15 +1758,14 @@ class TestTaggedType(unittest.TestCase):
 
     def test_implicit_tagged_integer_decode(self) -> None:
         """Decode IMPLICIT tagged INTEGER"""
-        class ImplicitInteger(TaggedType[IntegerType]):
+        class ImplicitInteger(ImplicitTaggedType, IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
-            mode = TaggingMode.IMPLICIT
 
         buf = ByteBuffer.wrap(b"\x82\x01\x2a")
         if isinstance(decoded := ImplicitInteger.get(buf), Error):
             decoded.unwrap()
 
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
     def test_explicit_tagged_integer_encode(self) -> None:
         """EXPLICIT tagged INTEGER [3] EXPLICIT INTEGER - tag wraps base TLV"""
@@ -1800,11 +1797,10 @@ class TestTaggedType(unittest.TestCase):
     def test_implicit_tagged_boolean_encode(self) -> None:
         """IMPLICIT tagged BOOLEAN [0] BOOLEAN"""
 
-        class ImplicitBoolean(TaggedType[BooleanType]):
+        class ImplicitBoolean(ImplicitTaggedType, BooleanType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
-            mode = TaggingMode.IMPLICIT
 
-        tagged = ImplicitBoolean(value=BooleanType(True))
+        tagged = ImplicitBoolean(True)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
@@ -1846,12 +1842,10 @@ class TestTaggedType(unittest.TestCase):
 
         for class_, number, constructed, expected_tag in test_cases:
             with self.subTest(class_=class_, number=number):
-                class TestTagged(TaggedType[IntegerType]):
+                class TestTagged(ImplicitTaggedType, IntegerType):
                     tag = Tag(number, class_, constructed=constructed)
-                    mode = TaggingMode.IMPLICIT
-                    # value: IntegerType
 
-                tagged = TestTagged(IntegerType(0))
+                tagged = TestTagged(0)
                 buf = ByteBuffer.allocate(10)
                 if isinstance(put_res := tagged.put(buf), Error):
                     put_res.unwrap()
@@ -1859,11 +1853,10 @@ class TestTaggedType(unittest.TestCase):
 
     def test_high_tag_number_encode(self) -> None:
         """Test tagged type with high tag number (>= 31)"""
-        class HighTag(TaggedType[IntegerType]):
+        class HighTag(ImplicitTaggedType, IntegerType):
             tag = Tag(100, Class.CONTEXT_SPECIFIC)
-            mode = TaggingMode.IMPLICIT
 
-        tagged = HighTag(value=IntegerType(42))
+        tagged = HighTag(42)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
@@ -1878,11 +1871,10 @@ class TestTaggedType(unittest.TestCase):
 
         for val in test_values:
             with self.subTest(value=val):
-                class ImplicitInt(TaggedType[IntegerType]):
+                class ImplicitInt(ImplicitTaggedType, IntegerType):
                     tag = Tag(5, Class.CONTEXT_SPECIFIC)
-                    mode = TaggingMode.IMPLICIT
 
-                original = ImplicitInt(IntegerType(val))
+                original = ImplicitInt(val)
 
                 buf = ByteBuffer.allocate(50)
                 if isinstance(put_res := original.put(buf), Error):
@@ -1891,7 +1883,7 @@ class TestTaggedType(unittest.TestCase):
 
                 if isinstance(decoded := ImplicitInt.get(buf), Error):
                     decoded.unwrap()
-                self.assertEqual(decoded.value.value, val)
+                self.assertEqual(decoded.value, val)
 
     def test_round_trip_explicit(self) -> None:
         """Round-trip test for EXPLICIT tagged types"""
@@ -1916,23 +1908,19 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_number(self) -> None:
         """Test tag validation raises on tag number mismatch"""
-        class TaggedInt(TaggedType[IntegerType]):
+        class TaggedInt(ImplicitTaggedType, IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
-            mode = TaggingMode.IMPLICIT
 
         # Encode with tag 5
-        tagged = TaggedInt(value=IntegerType(42))
+        tagged = TaggedInt(42)
         buf = ByteBuffer.allocate(10)
         if isinstance(put_res := tagged.put(buf), Error):
             put_res.unwrap()
         buf.set_pos(0)
 
         # Decode with wrong tag number (6 instead of 5)
-        class WrongTag(TaggedType[IntegerType]):
+        class WrongTag(ImplicitTaggedType, IntegerType):
             tag = Tag(6, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
-            mode = TaggingMode.IMPLICIT
 
         if isinstance(decoded := WrongTag.get(buf), Error):
             self.assertTrue(decoded.has(exception_type=TagError))
@@ -1941,22 +1929,19 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_class(self) -> None:
         """Test tag validation raises on tag class mismatch"""
-        class TaggedInt(TaggedType[IntegerType]):
+        class TaggedInt(ImplicitTaggedType, IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
-            mode = TaggingMode.IMPLICIT
 
         # Encode with CONTEXT_SPECIFIC
-        tagged = TaggedInt(IntegerType(42))
+        tagged = TaggedInt(42)
         buf = ByteBuffer.allocate(10)
         if isinstance(put_res := tagged.put(buf), Error):
             put_res.unwrap()
         buf.set_pos(0)
 
         # Decode with APPLICATION class
-        class WrongClass(TaggedType[IntegerType]):
+        class WrongClass(ImplicitTaggedType, IntegerType):
             tag = Tag(5, Class.APPLICATION)
-            mode = TaggingMode.IMPLICIT
 
         if isinstance(decoded := WrongClass.get(buf), Error):
             self.assertTrue(decoded.has(exception_type=TagError))
@@ -1965,9 +1950,8 @@ class TestTaggedType(unittest.TestCase):
 
     def test_get_contents_implicit(self) -> None:
         """Test get_contents for IMPLICIT tagged type (CHOICE alternative)"""
-        class ImplicitInt(TaggedType[IntegerType]):
+        class ImplicitInt(ImplicitTaggedType, IntegerType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
-            mode = TaggingMode.IMPLICIT
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\x80\x01\x2a")
@@ -1978,7 +1962,7 @@ class TestTaggedType(unittest.TestCase):
         # Then decode contents only (no tag validation)
         if isinstance(decoded := ImplicitInt.get_lc(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
     def test_get_contents_explicit(self) -> None:
         """Test get_contents for EXPLICIT tagged type"""
@@ -1999,12 +1983,10 @@ class TestTaggedType(unittest.TestCase):
 
     def test_put_contents_implicit(self) -> None:
         """Test put_contents for IMPLICIT tagged type"""
-        class ImplicitInt(TaggedType[IntegerType]):
+        class ImplicitInt(ImplicitTaggedType, IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
-            mode = TaggingMode.IMPLICIT
 
-        tagged = ImplicitInt(value=IntegerType(42))
+        tagged = ImplicitInt(42)
 
         buf = ByteBuffer.allocate(10)
         # Encode tag separately
@@ -2037,12 +2019,10 @@ class TestTaggedType(unittest.TestCase):
 
     def test_length_calculation(self) -> None:
         """Test __len__ for tagged types"""
-        class ImplicitInt(TaggedType[IntegerType]):
+        class ImplicitInt(ImplicitTaggedType, IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
-            type_ = IntegerType
-            mode = TaggingMode.IMPLICIT
 
-        tagged = ImplicitInt(IntegerType(42))
+        tagged = ImplicitInt(42)
         # Tag (1) + Length (1) + Value (1) = 3
         self.assertEqual(tagged.put(ByteBuffer.allocate(10)), 3)
 
@@ -2058,31 +2038,29 @@ class TestTaggedType(unittest.TestCase):
 
     def test_ber_explicit_application_tag(self) -> None:
         """Test ASN.1 explicit tag [APPLICATION 5] - always BER format"""
-        class ApplicationTagged(TaggedType[IntegerType]):
+        class ApplicationTagged(ImplicitTaggedType, IntegerType):
             tag = Tag(5, Class.APPLICATION, constructed=True)
-            mode = TaggingMode.IMPLICIT  # IMPLICIT but APPLICATION = BER
 
-        tagged = ApplicationTagged(value=IntegerType(42))
+        tagged = ApplicationTagged(42)
         buf = ByteBuffer.allocate(20)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
         buf.set_pos(0)
         if isinstance(decoded := ApplicationTagged.get(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
     def test_nested_tagged_types(self) -> None:
         """Test nested tagged types"""
         # Inner: [0] INTEGER
-        class InnerTagged(TaggedType[IntegerType]):
+        class InnerTagged(ImplicitTaggedType, IntegerType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
-            mode = TaggingMode.IMPLICIT
 
         # Outer: [1] EXPLICIT [0] INTEGER
         class OuterTagged(TaggedType[InnerTagged]):
             tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
             mode = TaggingMode.EXPLICIT
-        inner = InnerTagged(IntegerType(42))
+        inner = InnerTagged(42)
         outer = OuterTagged(value=inner)
         buf = ByteBuffer.allocate(50)
         if isinstance(_ := outer.put(buf), Error):
@@ -2091,7 +2069,7 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
         if isinstance(decoded := OuterTagged.get(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value.value, 42)
+        self.assertEqual(decoded.value.value, 42)
 
 
 class TestObjectIdentifierType(unittest.TestCase):

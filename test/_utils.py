@@ -26,10 +26,10 @@ def check_encode_decode(value: Any, type_cls: Type[Any], buffer_size: int = 1024
     Returns:
         The decoded object of type `type_cls`.
     """
-    buffer = ByteBuffer.allocate(buffer_size)
-    encoded = value.put(buffer)
+    buf = ByteBuffer.allocate(buffer_size)
+    encoded = value.put(buf)
     assert encoded > 0, f"Encoding produced {encoded} bytes, expected > 0"
-    decoded_buffer = buffer.extract()
+    decoded_buffer = buf.extract()
     decoded = type_cls.get(decoded_buffer)
     assert decoded is not None, "Decoding returned None"
     return decoded

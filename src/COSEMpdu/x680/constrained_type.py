@@ -1,11 +1,21 @@
+"""
+Constraint specifications (X.680 §45-47) and validation mixins.
+
+Standards:
+    - X.680 §45: Constrained types
+    - X.680 §46: Elements
+    - X.680 §47: Subtype elements
+"""
+
 from dataclasses import dataclass
-from typing import ClassVar, Optional, Protocol, Any, Self, get_type_hints, override
-from .type import Type, TYPE_VALUE, OCTET_STRING
+from typing import ClassVar, Optional, Protocol, Any, Self, cast
+from StructResult.result import Error, ValueOrError
+from ..byte_buffer import ByteBuffer
+from .type import Type, OCTET_STRING, INTEGER, BIT_STRING
 from .integer_type import IntegerType
 from .bit_string import BitStringType
 from .octet_string_type import OctetStringType
 from .sequence_of_type import SequenceOfType
-from .enumerated_type import EnumeratedType
 
 
 class ConstraintSpec(Protocol):
@@ -100,11 +110,11 @@ class SizeConstraint(SubtypeElements):
     def contains(self, value: int) -> bool:
         if self.min_size is None:
             if value != self.max_size:
-                raise ValueError(f"Size must be {self.max_size}, got {value}")
+                raise ConstraintError(f"Size must be {self.max_size}, got {value}")
         elif value < self.min_size:
-            raise ValueError(f"Size must be at least {self.min_size}, got {value}")
+            raise ConstraintError(f"Size must be at least {self.min_size}, got {value}")
         elif value > self.max_size:
-            raise ValueError(f"Size must be < {self.max_size}, got {value}")
+            raise ConstraintError(f"Size must be < {self.max_size}, got {value}")
         return True
 
     def __str__(self) -> str:
@@ -117,81 +127,176 @@ class SizeConstraint(SubtypeElements):
         return f"SIZE({inner})"
 
 
-class ConstrainedType[T: Type](Type, Protocol):
+class ConstraintError(Exception):
+    """Raised when a constrained-type value fails its constraint check.
+
+    Caught by :meth:`ConstrainedType.get_lc` and converted to a safe
+    :class:`~StructResult.result.Error` result instead of propagating
+    as an unhandled exception during decoding.
+    """
+
+
+class ConstrainedType(Type, Protocol):
+    """Mixin providing constraint validation for ASN.1 constrained types.
+
+    Inherits from :class:`Type` and :class:`~typing.Protocol` so it can
+    be combined with any concrete encoding type (A-XDR, BER, …) via
+    multiple inheritance without diamond‑protocol conflicts.
+
+    .. rubric:: Class Variables
+
+    ``constraint_spec``
+        A :class:`ConstraintSpec` instance (e.g. :class:`ValueRange`,
+        :class:`SizeConstraint`) that describes the permitted values.
+
+    ``exception_spec``
+        Optional :class:`ExceptionSpec` (currently unused — reserved
+        for exception‑spec handling per X.680 §48).
+
+    .. rubric:: Decoding Safety
+
+    :meth:`get_lc` intercepts :class:`ConstraintError` raised during
+    decoding and converts it to a safe
+    :class:`~StructResult.result.Error`, allowing the caller to handle
+    constraint violations gracefully without a hard exception.
+    """
     constraint_spec: ClassVar[ConstraintSpec]
     exception_spec: ClassVar[Optional[ExceptionSpec]] = None
-    value: T
-
-    def __init__(self, value: T) -> None:
-        self.value = value
-        if isinstance(self.value, (IntegerType, EnumeratedType)):
-            if isinstance(v_r := self.constraint_spec, ValueRange):
-                if not v_r.contains(self.value.value):
-                    raise ValueError(f"Value {self.value!r} outside range [{v_r.lower_endpoint}..{v_r.upper_endpoint}]")
-                return
-        elif isinstance(self.value, BitStringType):
-            if (
-                isinstance(self.constraint_spec, SizeConstraint)
-                and not self.constraint_spec.contains(len(self.value.value))
-            ):
-                raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
-            return
-        elif isinstance(self.value, OctetStringType):
-            if (
-                isinstance(self.constraint_spec, SizeConstraint)
-                and not self.constraint_spec.contains(len(self.value.value))
-            ):
-                raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
-            return
-        elif isinstance(self.value, SequenceOfType):
-            if (
-                isinstance(self.constraint_spec, SizeConstraint)
-                and not self.constraint_spec.contains(len(self.value.value))
-            ):
-                raise ValueError(f"got {len(self.value.value)}, expected {self.constraint_spec}")
-            return
-        raise NotImplementedError(f"Validation {self.get_type().__name__} not implemented for {self.constraint_spec.__class__.__name__}")
 
     @classmethod
-    def parse(cls, value: Any) -> Self:
-        return cls(cls.get_type().parse(value))
-
-    def normalize(self) -> TYPE_VALUE:
-        return self.value.normalize()
-
-    @classmethod
-    def default(cls) -> Self:
-        return cls(cls.get_type().default())
-
-    @classmethod
-    def get_type(cls) -> type[T]:
-        return get_type_hints(cls)["value"]
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, self.__class__):
-            return False
-        return self.value == other.value
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        try:
+            return super().get_lc(buf)
+        except ConstraintError as e:
+            return Error.from_e(e, msg="ConstrainedError")
 
 
-class ConstrainedOctetStringType[T: OctetStringType](ConstrainedType[T], Type):
+class ConstrainedIntegerType(ConstrainedType, IntegerType, Protocol):
+    """Integer type bounded by a :class:`ValueRange` constraint.
+
+    Automatically derives ``signed`` and ``fixed_length`` from the
+    constraint at class‑creation time via :meth:`_init_subclass`.
+    """
     fixed_length: ClassVar[Optional[int]] = None
-    value: T
+    signed: ClassVar[bool] = True
 
-    @override
-    def normalize(self) -> OCTET_STRING:
-        return self.value.normalize()
+    @classmethod
+    def _init_subclass(cls) -> None:
+        """Called on subclass creation — derives ``signed`` and ``fixed_length``.
+
+        If the lower endpoint of the :class:`ValueRange` is >= 0 the
+        integer is treated as unsigned.  ``fixed_length`` is computed
+        as the minimum number of octets needed to hold the range width.
+        """
+        if isinstance(v_r := cls.constraint_spec, ValueRange):
+            if v_r.lower_endpoint >= 0:
+                cls.signed = False
+            cls.fixed_length = max(1, ((v_r.upper_endpoint - v_r.lower_endpoint).bit_length() + 7) // 8)
+
+    def __init__(self, value: INTEGER) -> None:
+        """Validate ``value`` against the :class:`ValueRange` constraint."""
+        if (
+            isinstance(v_r := self.constraint_spec, ValueRange)
+            and not v_r.contains(value)
+        ):
+            raise ConstraintError(f"{value=} outside range [{v_r.lower_endpoint}..{v_r.upper_endpoint}]")
+        super().__init__(value)
+
+
+class ConstrainedBitStringType(ConstrainedType, BitStringType):
+    """BIT STRING bounded by a :class:`SizeConstraint`.
+
+    .. rubric:: Fixed‑length encoding (IEC 61334‑6 §6.4.1)
+
+    When ``constraint_spec`` is a :class:`SizeConstraint` with only a
+    ``max_size`` (i.e. ``min_size is None``) the subclass is treated as
+    **fixed‑length** — ``fixed_length`` is set automatically and the
+    length field is omitted during encoding.
+    """
+    fixed_length: ClassVar[Optional[int]] = None
+
+    @classmethod
+    def _init_subclass(cls) -> None:
+        """Set ``fixed_length`` when the constraint specifies an exact size."""
+        if (
+            isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size is None
+        ):
+            cls.fixed_length = cls.constraint_spec.max_size
+
+    def __init__(self, value: BIT_STRING) -> None:
+        """Validate ``value`` length against the :class:`SizeConstraint`."""
+        if (
+            isinstance(self.constraint_spec, SizeConstraint)
+            and not self.constraint_spec.contains(len(value))
+        ):
+            raise ConstraintError(f"got {len(value)}, expected {self.constraint_spec}")
+        super().__init__(value)
+
+
+class ConstrainedSequenceOfType[T: Type](ConstrainedType, SequenceOfType[T]):
+    """SEQUENCE OF bounded by a :class:`SizeConstraint`.
+
+    .. rubric:: Fixed‑length encoding (IEC 61334‑6 §6.4.1)
+
+    When ``constraint_spec`` is a :class:`SizeConstraint` with only a
+    ``max_size`` (i.e. ``min_size is None``) the sequence is treated as
+    **fixed‑length** — ``fixed_length`` is set automatically.
+    """
+    fixed_length: ClassVar[Optional[int]] = None
+    constraint_spec: ClassVar[ConstraintSpec] = None
+
+    @classmethod
+    def _init_subclass(cls) -> None:
+        """Set ``fixed_length`` when the constraint specifies an exact size."""
+        if (
+            isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size is None
+        ):
+            cls.fixed_length = cls.constraint_spec.max_size
+
+    def __init__(self, value: list[T] = []) -> None:
+        """Validate the number of elements against ``fixed_length``."""
+        if (
+            isinstance(length := self.fixed_length, int)
+            and length != len(value)
+        ):
+            raise ConstraintError(f"got {len(value)}, expected {self.constraint_spec}")
+        super().__init__(value)
+
+
+class ConstrainedOctetString(ConstrainedType, OctetStringType):
+    """OCTET STRING bounded by a :class:`SizeConstraint`.
+
+    .. rubric:: Fixed‑length encoding (IEC 61334‑6 §6.4.1)
+
+    When ``constraint_spec`` is a :class:`SizeConstraint` with only a
+    ``max_size`` (i.e. ``min_size is None``) the octet string is treated
+    as **fixed‑length** — ``fixed_length`` is set automatically.
+    """
+    fixed_length: ClassVar[Optional[int]] = None
+
+    @classmethod
+    def _init_subclass(cls) -> None:
+        """Set ``fixed_length`` when the constraint specifies an exact size."""
+        if (
+            isinstance(getattr(cls, "constraint_spec", None), SizeConstraint)
+            and cast("SizeConstraint", cls.constraint_spec).min_size is None
+        ):
+            cls.fixed_length = cast("SizeConstraint", cls.constraint_spec).max_size
+
+    def __init__(self, value: OCTET_STRING) -> None:
+        """Validate the octet‑string length against ``fixed_length``."""
+        if (
+            isinstance(length := self.fixed_length, int)
+            and length != len(value)
+        ):
+            raise ConstraintError(f"got {len(value)}, expected {self.constraint_spec}")
+        super().__init__(value)
 
     @classmethod
     def default(cls) -> Self:
+        """Return a default value — all‑zeroes for fixed‑length strings."""
         if cls.fixed_length is not None:
-            return cls.parse(b"\x00" * cls.fixed_length)
+            return cls(b"\x00" * cls.fixed_length)
         return super().default()
-
-    @classmethod
-    def __init_subclass__(cls) -> None:
-        if hasattr(cls, "constraint_spec"):
-            if (  # Fixed-length encoding (§6.5.1)
-                isinstance(cls.constraint_spec, SizeConstraint)
-                and cls.constraint_spec.min_size is None
-            ):
-                cls.fixed_length = cls.constraint_spec.max_size

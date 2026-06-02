@@ -1,14 +1,9 @@
-from typing import Self
+from typing import ClassVar
 from .x680.enumerated_type import EnumerationList, EnumerationMember
-from .x680.tagged_type import TaggingMode
 from .x680.type import NamedType
-from .axdr import create_alternatives, TaggedType
+from .axdr import create_alternatives, ImplicitTaggedType, EnumeratedType
 from . import axdr
 
-
-# =============================================================================
-# application-reference [0] IMPLICIT ENUMERATED
-# =============================================================================
 
 class ApplicationReferenceList(EnumerationList):
     members = (
@@ -22,21 +17,11 @@ class ApplicationReferenceList(EnumerationList):
     )
 
 
-class ApplicationReferenceEnum(axdr.EnumeratedType):
-    """application-reference"""
+class ApplicationReference(ImplicitTaggedType, EnumeratedType):
+    """application-reference [0] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 0
     named_members = ApplicationReferenceList()
 
-
-class ApplicationReference(TaggedType[ApplicationReferenceEnum]):
-    """application-reference"""
-    tag = 0
-    mode = TaggingMode.IMPLICIT
-    value: ApplicationReferenceEnum
-
-
-# =============================================================================
-# hardware-resource [1] IMPLICIT ENUMERATED
-# =============================================================================
 
 class HardwareResourceList(EnumerationList):
     members = (
@@ -48,21 +33,11 @@ class HardwareResourceList(EnumerationList):
     )
 
 
-class HardwareResourceEnum(axdr.EnumeratedType):
-    """hardware-resource"""
+class HardwareResource(ImplicitTaggedType, EnumeratedType):
+    """hardware-resource [1] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 1
     named_members = HardwareResourceList()
 
-
-class HardwareResource(TaggedType[HardwareResourceEnum]):
-    """hardware-resource"""
-    tag = 1
-    mode = TaggingMode.IMPLICIT
-    value: HardwareResourceEnum
-
-
-# =============================================================================
-# vde-state-error [2] IMPLICIT ENUMERATED
-# =============================================================================
 
 class VDEStateErrorList(EnumerationList):
     members = (
@@ -74,21 +49,11 @@ class VDEStateErrorList(EnumerationList):
     )
 
 
-class VDEStateErrorEnum(axdr.EnumeratedType):
-    """vde-state-error"""
+class VDEStateError(ImplicitTaggedType, EnumeratedType):
+    """vde-state-error [2] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 2
     named_members = VDEStateErrorList()
 
-
-class VDEStateError(TaggedType[VDEStateErrorEnum]):
-    """vde-state-error"""
-    tag = 2
-    mode = TaggingMode.IMPLICIT
-    value: VDEStateErrorEnum
-
-
-# =============================================================================
-# service [3] IMPLICIT ENUMERATED
-# =============================================================================
 
 class ServiceList(EnumerationList):
     members = (
@@ -98,21 +63,10 @@ class ServiceList(EnumerationList):
     )
 
 
-class ServiceEnum(axdr.EnumeratedType):
-    """service"""
+class Service(ImplicitTaggedType, EnumeratedType):
+    """service [3] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 3
     named_members = ServiceList()
-
-
-class Service(TaggedType[ServiceEnum]):
-    """service"""
-    tag = 3
-    mode = TaggingMode.IMPLICIT
-    value: ServiceEnum
-
-
-# =============================================================================
-# definition [4] IMPLICIT ENUMERATED
-# =============================================================================
 
 
 class DefinitionList(EnumerationList):
@@ -124,21 +78,10 @@ class DefinitionList(EnumerationList):
     )
 
 
-class DefinitionEnum(axdr.EnumeratedType):
-    """definition"""
-    named_members = DefinitionList()
-
-
-class Definition(TaggedType[DefinitionEnum]):
-    """definition"""
+class Definition(ImplicitTaggedType, EnumeratedType):
+    """definition [4] IMPLICIT ENUMERATED"""
     tag = 4
-    mode = TaggingMode.IMPLICIT
-    value: DefinitionEnum
-
-
-# =============================================================================
-# access [5] IMPLICIT ENUMERATED
-# =============================================================================
+    named_members = DefinitionList()
 
 
 class AccessList(EnumerationList):
@@ -151,21 +94,10 @@ class AccessList(EnumerationList):
     )
 
 
-class AccessEnum(axdr.EnumeratedType):
-    """access"""
-    named_members = AccessList()
-
-
-class Access(TaggedType[AccessEnum]):
-    """access"""
+class Access(ImplicitTaggedType, EnumeratedType):
+    """access [5] IMPLICIT ENUMERATED"""
     tag = 5
-    mode = TaggingMode.IMPLICIT
-    value: AccessEnum
-
-
-# =============================================================================
-# initiate [6] IMPLICIT ENUMERATED
-# =============================================================================
+    named_members = AccessList()
 
 
 class InitiateList(EnumerationList):
@@ -178,21 +110,10 @@ class InitiateList(EnumerationList):
     )
 
 
-class InitiateEnum(axdr.EnumeratedType):
-    """initiate"""
-    named_members = InitiateList()
-
-
-class Initiate(TaggedType[InitiateEnum]):
-    """initiate"""
+class Initiate(ImplicitTaggedType, EnumeratedType):
+    """initiate [6] IMPLICIT ENUMERATED"""
     tag = 6
-    mode = TaggingMode.IMPLICIT
-    value: InitiateEnum
-
-
-# =============================================================================
-# load-data-set [7] IMPLICIT ENUMERATED
-# =============================================================================
+    named_members = InitiateList()
 
 
 class LoadDataSetList(EnumerationList):
@@ -208,21 +129,10 @@ class LoadDataSetList(EnumerationList):
     )
 
 
-class LoadDataSetEnum(axdr.EnumeratedType):
-    """load-data-set"""
-    named_members = LoadDataSetList()
-
-
-class LoadDataSet(TaggedType[LoadDataSetEnum]):
-    """load-data-set"""
+class LoadDataSet(ImplicitTaggedType, EnumeratedType):
+    """load-data-set [7] IMPLICIT ENUMERATED"""
     tag = 7
-    mode = TaggingMode.IMPLICIT
-    value: LoadDataSetEnum
-
-
-# =============================================================================
-# task [9] IMPLICIT ENUMERATED
-# =============================================================================
+    named_members = LoadDataSetList()
 
 
 class TaskList(EnumerationList):
@@ -235,41 +145,20 @@ class TaskList(EnumerationList):
     )
 
 
-class TaskEnum(axdr.EnumeratedType):
-    """task"""
+class Task(ImplicitTaggedType, EnumeratedType):
+    """task [9] IMPLICIT ENUMERATED"""
+    tag = 9
     named_members = TaskList()
 
 
-class Task(TaggedType[TaskEnum]):
-    """task"""
-    tag = 9
-    mode = TaggingMode.IMPLICIT
-    value: TaskEnum
-
-
-class ChangeScopeEnum(axdr.EnumeratedType): ...
-
-
-class Changescope(TaggedType[ChangeScopeEnum]):
-    """change-scope"""
+class Changescope(ImplicitTaggedType, EnumeratedType):
+    """change-scope [8] IMPLICIT ENUMERATED"""
     tag = 8
-    mode = TaggingMode.IMPLICIT
-    value: ChangeScopeEnum
 
 
-class OtherEnum(axdr.EnumeratedType): ...
-
-
-class Other(TaggedType[OtherEnum]):
-    """Other"""
+class Other(ImplicitTaggedType, EnumeratedType):
+    """other [10] IMPLICIT ENUMERATED"""
     tag = 10
-    mode = TaggingMode.IMPLICIT
-    value: OtherEnum
-
-
-# =============================================================================
-# ServiceError CHOICE
-# =============================================================================
 
 
 class ServiceError(axdr.ChoiceType):
@@ -288,142 +177,100 @@ class ServiceError(axdr.ChoiceType):
         NamedType("other", Other),
     )
 
-    @classmethod
-    def access(cls, value: AccessEnum) -> Self:
-        return cls(Access(value))
 
-
-class InitiateError(TaggedType[ServiceError]):
+class InitiateError(ImplicitTaggedType, ServiceError):
     """[1] ServiceError"""
     tag = 1
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class GetStatus(TaggedType[ServiceError]):
+class GetStatus(ImplicitTaggedType, ServiceError):
     """[2] ServiceError"""
     tag = 2
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class GetNameList(TaggedType[ServiceError]):
+class GetNameList(ImplicitTaggedType, ServiceError):
     """[3] ServiceError"""
     tag = 3
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class GetVariableAttribute(TaggedType[ServiceError]):
+class GetVariableAttribute(ImplicitTaggedType, ServiceError):
     """[4] ServiceError"""
     tag = 4
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class Read(TaggedType[ServiceError]):
+class Read(ImplicitTaggedType, ServiceError):
     """[5] ServiceError"""
     tag = 5
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class Write(TaggedType[ServiceError]):
+class Write(ImplicitTaggedType, ServiceError):
     """[6] ServiceError"""
     tag = 6
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class GetDataSetAttribute(TaggedType[ServiceError]):
+class GetDataSetAttribute(ImplicitTaggedType, ServiceError):
     """[7] ServiceError"""
     tag = 7
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class GetTIAttribute(TaggedType[ServiceError]):
+class GetTIAttribute(ImplicitTaggedType, ServiceError):
     """[8] ServiceError"""
     tag = 8
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class ChangeScope(TaggedType[ServiceError]):
+class ChangeScope(ImplicitTaggedType, ServiceError):
     """[9] ServiceError"""
     tag = 9
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class Start(TaggedType[ServiceError]):
+class Start(ImplicitTaggedType, ServiceError):
     """[10] ServiceError"""
     tag = 10
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class Stop(TaggedType[ServiceError]):
+class Stop(ImplicitTaggedType, ServiceError):
     """[11] ServiceError"""
     tag = 11
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class Resume(TaggedType[ServiceError]):
+class Resume(ImplicitTaggedType, ServiceError):
     """[12] ServiceError"""
     tag = 12
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class MakeUsable(TaggedType[ServiceError]):
+class MakeUsable(ImplicitTaggedType, ServiceError):
     """[13] ServiceError"""
     tag = 13
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class InitiateLoad(TaggedType[ServiceError]):
+class InitiateLoad(ImplicitTaggedType, ServiceError):
     """[14] ServiceError"""
     tag = 14
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class LoadSegment(TaggedType[ServiceError]):
+class LoadSegment(ImplicitTaggedType, ServiceError):
     """[15] ServiceError"""
     tag = 15
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class TerminateLoad(TaggedType[ServiceError]):
+class TerminateLoad(ImplicitTaggedType, ServiceError):
     """[16] ServiceError"""
     tag = 16
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class InitiateUpLoad(TaggedType[ServiceError]):
+class InitiateUpLoad(ImplicitTaggedType, ServiceError):
     """[17] ServiceError"""
     tag = 17
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class UpLoadSegment(TaggedType[ServiceError]):
+class UpLoadSegment(ImplicitTaggedType, ServiceError):
     """[18] ServiceError"""
     tag = 18
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
-class TerminateUpLoad(TaggedType[ServiceError]):
+class TerminateUpLoad(ImplicitTaggedType, ServiceError):
     """[19] ServiceError"""
     tag = 19
-    mode = TaggingMode.IMPLICIT
-    value: ServiceError
 
 
 class ConfirmedServiceError(axdr.ChoiceType):
@@ -449,15 +296,3 @@ class ConfirmedServiceError(axdr.ChoiceType):
         NamedType("upload-segment", UpLoadSegment),
         NamedType("terminate-upload", TerminateUpLoad),
     )
-
-    @classmethod
-    def initiate(cls, value: ServiceError) -> Self:
-        return cls(InitiateError(value))
-
-    @classmethod
-    def read(cls, value: ServiceError) -> Self:
-        return cls(Read(value))
-
-    @classmethod
-    def write(cls, value: ServiceError) -> Self:
-        return cls(Write(value))
