@@ -20,7 +20,6 @@ Standards:
 from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, override, runtime_checkable, Iterator
 from StructResult.result import ValueOrError, Error
 from . import x690
-from .x680.tagged_type import TaggingMode
 from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
 from . import x680
 from .byte_buffer import ByteBuffer, put_chain
@@ -91,88 +90,6 @@ class Type(x680.Type, Protocol):
 
 
 TagNumber: TypeAlias = Annotated[int, "0-255"]
-
-
-class TaggedType[T: Type](Type, x680.TaggedType[T]):
-    """
-    TaggedType for A-XDR encoding (IEC 61334-6 §6.6, §6.7)
-
-    Tagging modes:
-    - IMPLICIT: Tag replaces original type's tag (no nested tag)
-    - EXPLICIT: Tag wraps original type (may have nested tag for CHOICE)
-
-    For DLMS/COSEM:
-    - CHOICE alternatives: IMPLICIT (tag number only, 1 byte)
-    - SEQUENCE components: NO tag encoded (§6.9)
-    - APPLICATION tags: EXPLICIT (BER encoding per §6.7)
-    """
-    tag: ClassVar[TagNumber]
-    mode: ClassVar[TaggingMode] = TaggingMode.IMPLICIT
-    value: T
-
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        """
-        Decode tagged type from A-XDR
-
-        IMPLICIT mode (§6.6):
-            [Tag(1)] [Contents without inner tag]
-
-        EXPLICIT mode (§6.7):
-            [Tag(1)] [Contents with inner tag if CHOICE]
-        """
-        # Read tag number (1 byte for A-XDR)
-        if isinstance(tag_number := buf.get_u8(), Error):
-            return tag_number
-        if tag_number != cls.tag:
-            return Error.from_e(ValueError(f"expected tag {cls.tag}, got {tag_number}"))
-        return cls.get_lc(buf)
-
-    @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        """
-        Decode tagged type from A-XDR
-
-        IMPLICIT mode (§6.6):
-            [Tag(1)] [Contents without inner tag]
-
-        EXPLICIT mode (§6.7):
-            [Tag(1)] [Contents with inner tag if CHOICE]
-        """
-        # Decode contents based on tagging mode
-        if cls.mode == TaggingMode.IMPLICIT:
-            value = cls._T.get_lc(buf)  # IMPLICIT: contents without inner tag
-        else:
-            value = cls._T.get(buf)  # EXPLICIT: contents may have inner tag (e.g., nested CHOICE), get() includes tag/length if applicable
-        if isinstance(value, Error):
-            return value
-        return cls(value)
-
-    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        """Encode with Length + Contents"""
-        return put_chain(
-            buf.put_u8(self.tag),
-            self.put_lc(buf)
-        )
-
-    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        """
-        Encode tagged type to A-XDR
-
-        IMPLICIT mode (§6.6):
-            [Tag(1)] [Contents without inner tag]
-
-        EXPLICIT mode (§6.7):
-            [Tag(1)] [Contents with inner tag if CHOICE]
-
-        Returns number of bytes written.
-        """
-        # Encode contents based on tagging mode
-        if self.mode == TaggingMode.IMPLICIT:
-            # IMPLICIT: contents without inner tag
-            return self.value.put_lc(buf)
-        # EXPLICIT: contents may have inner tag (e.g., nested CHOICE)
-        return self.value.put(buf)  # put() includes tag/length if applicable
 
 
 class ImplicitTaggedType(Type, Protocol):

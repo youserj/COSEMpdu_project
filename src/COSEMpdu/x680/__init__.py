@@ -15,7 +15,6 @@ from .constrained_type import (
     ValueRange, Elements, SizeConstraint, SingleValue, ConstraintSpec, ExceptionSpec, SubtypeElements
 )
 from .null_type import NullType
-from .tagged_type import TaggedType, TaggingMode
 
 
 __all__ = [
@@ -42,8 +41,6 @@ __all__ = [
     "OctetStringType",
     "SequenceType",
     "SequenceOfType",
-    "TaggedType",
-    "TaggingMode",
     "Type",
     "Elements",
     "DefaultNamedType",

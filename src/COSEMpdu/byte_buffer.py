@@ -8,10 +8,10 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
     _pos: int
     __slots__ = ("buf", "_pos")
 
-    def __init__(self, buffer: T) -> None:
+    def __init__(self, buffer: T, pos: int = 0) -> None:
         self.buf = buffer
         """ the data buffer """
-        self._pos = 0
+        self._pos = pos
         """ current position """
 
     @classmethod
@@ -172,6 +172,10 @@ class ByteBuffer(_ByteBuffer[bytearray]):
     def frozen(self) -> ByteBufferFrozen:
         """Allocate a new ByteBuffer with a zero-initialized buffer of given size"""
         return ByteBufferFrozen(bytes(self))
+
+    def sub_buffer(self, pos: Optional[int] = None) -> "ByteBuffer":
+        """Return a new ByteBuffer sharing the same underlying buffer with independent _pos."""
+        return ByteBuffer(self.buf, self._pos if pos is None else pos)
 
     def shift_right(self, pos: int, length: int, step: int) -> ValueOrError[int]:
         """

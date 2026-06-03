@@ -85,6 +85,15 @@ class Type(Protocol):
     """
 
     @classmethod
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """Decode with Tag + Length + Contents"""
+        ...
+
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """Encode with Tag + Length + Contents"""
+        ...
+
+    @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode with Length + Contents ONLY (no Tag validation).

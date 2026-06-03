@@ -8,11 +8,11 @@ from typing import Optional, override, Self
 from StructResult.result import Error
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length, TagError
-from src.COSEMpdu.x680 import NamedType, TaggingMode, OptionalNamedType, DefaultNamedType, NamedBit, NamedBitList
+from src.COSEMpdu.x680 import NamedType, DefaultNamedType, NamedBit, NamedBitList
 from src.COSEMpdu.ber import (
     ImplicitTaggedType,
     create_alternatives,
-    TaggedType,
+    ExplicitTaggedType,
     BitStringType,
     BooleanType,
     ChoiceType,
@@ -1737,6 +1737,10 @@ class TestSequenceOfType(unittest.TestCase):
         self.assertEqual(BooleanSequence._T, BooleanType)
 
 
+class ExplicitInteger(ExplicitTaggedType, IntegerType):
+    tag2 = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
+
+
 class TestTaggedType(unittest.TestCase):
     """Test TaggedType encoding/decoding per X.690 §8.14"""
 
@@ -1769,11 +1773,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_explicit_tagged_integer_encode(self) -> None:
         """EXPLICIT tagged INTEGER [3] EXPLICIT INTEGER - tag wraps base TLV"""
-        class ExplicitInteger(TaggedType[IntegerType]):
-            tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
-            mode = TaggingMode.EXPLICIT
-
-        tagged = ExplicitInteger(value=IntegerType(42))
+        tagged = ExplicitInteger(42)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
@@ -1784,15 +1784,12 @@ class TestTaggedType(unittest.TestCase):
 
     def test_explicit_tagged_integer_decode(self) -> None:
         """Decode EXPLICIT tagged INTEGER"""
-        class ExplicitInteger(TaggedType[IntegerType]):
-            tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
-            mode = TaggingMode.EXPLICIT
 
         buf = ByteBuffer.wrap(b"\xa3\x03\x02\x01\x2a")
         if isinstance(decoded := ExplicitInteger.get(buf), Error):
             decoded.unwrap()
 
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
     def test_implicit_tagged_boolean_encode(self) -> None:
         """IMPLICIT tagged BOOLEAN [0] BOOLEAN"""
@@ -1812,11 +1809,10 @@ class TestTaggedType(unittest.TestCase):
     def test_explicit_tagged_octetstring_encode(self) -> None:
         """EXPLICIT tagged OCTET STRING [1] EXPLICIT OCTET STRING"""
 
-        class ExplicitOctetString(TaggedType[OctetStringType]):
-            tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
-            mode = TaggingMode.EXPLICIT
+        class ExplicitOctetString(ExplicitTaggedType, OctetStringType):
+            tag2 = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
 
-        tagged = ExplicitOctetString(value=OctetStringType(b"AB"))
+        tagged = ExplicitOctetString(b"AB")
         buf = ByteBuffer.allocate(20)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
@@ -1828,7 +1824,7 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
         if isinstance(decoded := ExplicitOctetString.get(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value, b"AB")
+        self.assertEqual(decoded.value, b"AB")
 
     def test_tag_class_encoding(self) -> None:
         """Test different tag classes in tagged types"""
@@ -1891,11 +1887,10 @@ class TestTaggedType(unittest.TestCase):
 
         for val in test_values:
             with self.subTest(value=val):
-                class ExplicitInt(TaggedType[IntegerType]):
-                    tag = Tag(6, Class.CONTEXT_SPECIFIC, constructed=True)
-                    mode = TaggingMode.EXPLICIT
+                class ExplicitInt(ExplicitTaggedType, IntegerType):
+                    tag2 = Tag(6, Class.CONTEXT_SPECIFIC, constructed=True)
 
-                original = ExplicitInt(value=IntegerType(val))
+                original = ExplicitInt(val)
 
                 buf = ByteBuffer.allocate(50)
                 if isinstance(put_res := original.put(buf), Error):
@@ -1904,7 +1899,7 @@ class TestTaggedType(unittest.TestCase):
 
                 if isinstance(decoded := ExplicitInt.get(buf), Error):
                     decoded.unwrap()
-                self.assertEqual(decoded.value.value, val)
+                self.assertEqual(decoded.value, val)
 
     def test_tag_validation_error_number(self) -> None:
         """Test tag validation raises on tag number mismatch"""
@@ -1966,9 +1961,8 @@ class TestTaggedType(unittest.TestCase):
 
     def test_get_contents_explicit(self) -> None:
         """Test get_contents for EXPLICIT tagged type"""
-        class ExplicitInt(TaggedType[IntegerType]):
-            tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
-            mode = TaggingMode.EXPLICIT
+        class ExplicitInt(ExplicitTaggedType, IntegerType):
+            tag2 = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
 
         # First validate and consume the outer tag
         buf = ByteBuffer.wrap(b"\xa1\x03\x02\x01\x2a")
@@ -1977,9 +1971,10 @@ class TestTaggedType(unittest.TestCase):
         self.assertEqual(outer_tag.class_number, 1)
         self.assertTrue(outer_tag.constructed)
         # Then decode contents (length + inner TLV)
-        if isinstance(decoded := ExplicitInt.get_lc(buf), Error):
+        buf.set_pos(0)
+        if isinstance(decoded := ExplicitInt.get(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
     def test_put_contents_implicit(self) -> None:
         """Test put_contents for IMPLICIT tagged type"""
@@ -2000,22 +1995,15 @@ class TestTaggedType(unittest.TestCase):
 
     def test_put_contents_explicit(self) -> None:
         """Test put_contents for EXPLICIT tagged type"""
-        class ExplicitInt(TaggedType[IntegerType]):
-            tag = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
-            type_ = IntegerType
-            mode = TaggingMode.EXPLICIT
+        class ExplicitInt(ExplicitTaggedType, IntegerType):
+            tag2 = Tag(3, Class.CONTEXT_SPECIFIC, constructed=True)
 
-        tagged = ExplicitInt(value=IntegerType(42))
+        tagged = ExplicitInt(42)
 
         buf = ByteBuffer.allocate(10)
-        # Encode tag separately
-        if isinstance(_ := tagged.tag.put(buf), Error):
-            _.unwrap()
-        # Encode contents only (Length + complete base TLV)
-        written = tagged.put_lc(buf)
-
-        self.assertEqual(written, 4)  # Outer Length (1) + Inner TLV (3)
-        self.assertEqual(bytes(buf.extract())[1:], b"\x03\x02\x01\x2a")
+        written = tagged.put(buf)
+        self.assertEqual(written, 5)  # Outer Length (1) + Inner TLV (3)
+        self.assertEqual(bytes(buf.extract()), b"\xa3\x03\x02\x01\x2a")
 
     def test_length_calculation(self) -> None:
         """Test __len__ for tagged types"""
@@ -2027,12 +2015,10 @@ class TestTaggedType(unittest.TestCase):
         self.assertEqual(tagged.put(ByteBuffer.allocate(10)), 3)
 
         # EXPLICIT should be longer (outer TLV + inner TLV)
-        class ExplicitInt(TaggedType[IntegerType]):
-            tag = Tag(5, Class.CONTEXT_SPECIFIC, constructed=True)
-            type_ = IntegerType
-            mode = TaggingMode.EXPLICIT
+        class ExplicitInt(ExplicitTaggedType, IntegerType):
+            tag2 = Tag(5, Class.CONTEXT_SPECIFIC, constructed=True)
 
-        tagged_explicit = ExplicitInt(value=IntegerType(42))
+        tagged_explicit = ExplicitInt(42)
         # Outer Tag (1) + Outer Length (1) + Inner TLV (3) = 5
         self.assertEqual(tagged_explicit.put(ByteBuffer.allocate(10)), 5)
 
@@ -2057,11 +2043,10 @@ class TestTaggedType(unittest.TestCase):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
 
         # Outer: [1] EXPLICIT [0] INTEGER
-        class OuterTagged(TaggedType[InnerTagged]):
-            tag = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
-            mode = TaggingMode.EXPLICIT
-        inner = InnerTagged(42)
-        outer = OuterTagged(value=inner)
+        class OuterTagged(ExplicitTaggedType, InnerTagged):
+            tag2 = Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
+
+        outer = OuterTagged(42)
         buf = ByteBuffer.allocate(50)
         if isinstance(_ := outer.put(buf), Error):
             _.unwrap()
@@ -2069,7 +2054,7 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
         if isinstance(decoded := OuterTagged.get(buf), Error):
             decoded.unwrap()
-        self.assertEqual(decoded.value.value, 42)
+        self.assertEqual(decoded.value, 42)
 
 
 class TestObjectIdentifierType(unittest.TestCase):

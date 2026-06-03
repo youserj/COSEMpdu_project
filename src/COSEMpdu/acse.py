@@ -8,40 +8,34 @@ from typing import ClassVar, Optional
 from . import x690
 from .x680 import (
     NamedType,
-    TaggingMode,
     NamedBitList,
     NamedBit,
     NamedNumberList,
     NamedNumber
 )
-from . import ber
 from .x680.tag import Class
-from .ber import create_alternatives, ImplicitTaggedType, GraphicString, BitStringType, IntegerType, SequenceType
+from .ber import create_alternatives, ImplicitTaggedType, GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, \
+    ChoiceType, ObjectIdentifierType
 
 
-class ApplicationContextName(ber.ObjectIdentifierType):
-    """Application-context-name"""
+class ApplicationContextName(ExplicitTaggedType, ObjectIdentifierType):
+    """application-context-name [1] Application-context-name"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC, True)
 
 
-class ApplicationContextName1(ber.TaggedType[ApplicationContextName]):
-    """[1] Application-context-name"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-
-
-class APTitle(ber.OctetStringType):
+class APTitle(OctetStringType):
     """AP-title"""
 
 
-class AEQualifier(ber.OctetStringType):
+class AEQualifier(OctetStringType):
     """AE-qualifier"""
 
 
-class APInvocationIdentifier(ber.IntegerType):
+class APInvocationIdentifier(IntegerType):
     """AP-invocation-identifier"""
 
 
-class AEInvocationIdentifier(ber.IntegerType):
+class AEInvocationIdentifier(IntegerType):
     """AE-invocation-identifier"""
 
 
@@ -50,23 +44,23 @@ class ACSERequirements(BitStringType):
     named_bits = NamedBitList((NamedBit("authentication", 0),))
 
 
-class MechanismName(ber.ObjectIdentifierType):
+class MechanismName(ObjectIdentifierType):
     """Mechanism-name"""
 
 
 class Charstring(ImplicitTaggedType, GraphicString):
     """charstring [0] IMPLICIT GraphicString"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
+    tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
 
 
 class BitString(ImplicitTaggedType, BitStringType):
     """bitstring [1] IMPLICIT BIT STRING"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
+    tag: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC)
 
 
-class AuthenticationValue(ber.ChoiceType):
+class AuthenticationValue(ChoiceType):
     """Authentication-value"""
-    alternatives = ber.create_alternatives(
+    alternatives = create_alternatives(
         NamedType("charstring", Charstring),
         NamedType("bitstring", BitString)
     )
@@ -75,21 +69,17 @@ class AuthenticationValue(ber.ChoiceType):
 
 class ImplementationInformation(ImplicitTaggedType, GraphicString):
     """implementation-information [29] IMPLICIT Implementation-data"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=29)
+    tag: ClassVar[x690.Tag] = x690.Tag(29, Class.CONTEXT_SPECIFIC)
 
 
-class AssociationInformation(ber.OctetStringType):
-    """Association-information"""
+class UserInformation(ExplicitTaggedType, OctetStringType):
+    """user-information [30] EXPLICIT Association-information"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(30, Class.CONTEXT_SPECIFIC, True)
 
 
-class UserInformation(ber.TaggedType[AssociationInformation]):
-    """[30] EXPLICIT Association-information"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=30)
-    mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
-
-
-class AssociationResult(ber.IntegerType):
-    """Association-result"""
+class Result(ExplicitTaggedType, IntegerType):
+    """result [2] Association-result"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(2, Class.CONTEXT_SPECIFIC, True)
     named_numbers = NamedNumberList((
         NamedNumber("accepted", 0),
         NamedNumber("rejected-permanent", 1),
@@ -97,14 +87,9 @@ class AssociationResult(ber.IntegerType):
     ))
 
 
-class Result(ber.TaggedType[AssociationResult]):
-    """[2] Association-result"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-
-
-class AcseServiceUser(ber.IntegerType):
-    """acse-service-user"""
+class ACSEServiceUser(ExplicitTaggedType, IntegerType):
+    """acse-service-user [1] INTEGER"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC, True)
     named_numbers = NamedNumberList((
         NamedNumber("null", 0),
         NamedNumber("no-reason-given", 1),
@@ -124,14 +109,9 @@ class AcseServiceUser(ber.IntegerType):
     ))
 
 
-class ServiceUser(ber.TaggedType[AcseServiceUser]):
-    """[1] acse-service-user"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=1)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-
-
-class AcseServiceProvider(ber.IntegerType):
-    """acse-service-provider"""
+class ACSEServiceProvider(ExplicitTaggedType, IntegerType):
+    """acse-service-provider [2] INTEGER"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(2, Class.CONTEXT_SPECIFIC, True)
     named_numbers = NamedNumberList((
         NamedNumber("null", 0),
         NamedNumber("no-reason-given", 1),
@@ -139,29 +119,18 @@ class AcseServiceProvider(ber.IntegerType):
     ))
 
 
-class Provider(ber.TaggedType[AcseServiceProvider]):
-    """[2] acse-service-provider"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
-
-
-class AssociateSourceDiagnostic(ber.ChoiceType):
-    """Associate-source-diagnostic"""
+class ResultSourceDiagnostic(ExplicitTaggedType, ChoiceType):
+    """result-source-diagnostic [3] Associate-source-diagnostic"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(3, Class.CONTEXT_SPECIFIC, True)
     alternatives = create_alternatives(
-        NamedType("acse-service-user", ServiceUser),
-        NamedType("acse-service-provider", Provider)
+        NamedType("acse-service-user", ACSEServiceUser),
+        NamedType("acse-service-provider", ACSEServiceProvider)
     )
-
-
-class ResultSourceDiagnostic(ber.TaggedType[AssociateSourceDiagnostic]):
-    """[3] Associate-source-diagnostic"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=3)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
 
 
 class RequestReason(ImplicitTaggedType, IntegerType):
     """reason [0] IMPLICIT Release-request-reason"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
+    tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
     named_numbers = NamedNumberList((
         NamedNumber("normal", 0),
         NamedNumber("urgent", 1),
@@ -171,7 +140,7 @@ class RequestReason(ImplicitTaggedType, IntegerType):
 
 class ResponseReason(ImplicitTaggedType, IntegerType):
     """reason [0] IMPLICIT Release-response-reason"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
+    tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
     named_numbers = NamedNumberList((
         NamedNumber("normal", 0),
         NamedNumber("not-finished", 1),
@@ -181,93 +150,81 @@ class ResponseReason(ImplicitTaggedType, IntegerType):
 
 class ProtocolVersion(ImplicitTaggedType, BitStringType):
     """protocol-version [0] IMPLICIT BIT STRING {version1 (0)}"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=0)
+    tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
     named_bits = NamedBitList((NamedBit("version1", 0),))
 
 
 DEFAULT_PROTOCOL_VERSION = ProtocolVersion((0,))
 
 
-class CalledAPTitle(ber.TaggedType[APTitle]):
-    """[2] AP-title"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=2)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CalledAPTitle(ExplicitTaggedType, APTitle):
+    """called-AP-title [2] AP-title"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(2, Class.CONTEXT_SPECIFIC, True)
 
 
-class CallingAPTitle(ber.TaggedType[APTitle]):
-    """[6] AP-title"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=6)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CallingAPTitle(ExplicitTaggedType, APTitle):
+    """calling-AP-title [6] AP-title"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(6, Class.CONTEXT_SPECIFIC, True)
 
 
-class CalledAEQualifier(ber.TaggedType[AEQualifier]):
-    """[3] AE-qualifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=3)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CalledAEQualifier(ExplicitTaggedType, AEQualifier):
+    """called-AE-qualifier [3] AE-qualifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(3, Class.CONTEXT_SPECIFIC, True)
 
 
-class CallingAEQualifier(ber.TaggedType[AEQualifier]):
-    """[7] AE-qualifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=7)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CallingAEQualifier(ExplicitTaggedType, AEQualifier):
+    """calling-AE-qualifier [7] AE-qualifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(7, Class.CONTEXT_SPECIFIC, True)
 
 
-class CalledAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
-    """[4] AP-invocation-identifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=4)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CalledAPInvocationId(ExplicitTaggedType, APInvocationIdentifier):
+    """called-AP-invocation-id [4] AP-invocation-identifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(4, Class.CONTEXT_SPECIFIC, True)
 
 
-class CallingAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
-    """[8] AP-invocation-identifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=8)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CallingAPInvocationId(ExplicitTaggedType, APInvocationIdentifier):
+    """calling-AP-invocation-id [8] AP-invocation-identifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(8, Class.CONTEXT_SPECIFIC, True)
 
 
-class CalledAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
-    """[5] AE-invocation-identifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=5)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CalledAEInvocationId(ExplicitTaggedType, AEInvocationIdentifier):
+    """called-AE-invocation-id [5] AE-invocation-identifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(5, Class.CONTEXT_SPECIFIC, True)
 
 
-class CallingAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
-    """[9] AE-invocation-identifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=9)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class CallingAEInvocationId(ExplicitTaggedType, AEInvocationIdentifier):
+    """calling-AE-invocation-id [9] AE-invocation-identifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(9, Class.CONTEXT_SPECIFIC, True)
 
 
 class SenderACSERequirements(ImplicitTaggedType, ACSERequirements):
     """sender-acse-requirements [10] IMPLICIT ACSE-requirements"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=10)
+    tag: ClassVar[x690.Tag] = x690.Tag(10, Class.CONTEXT_SPECIFIC)
 
 
 class RequestMechanismName(ImplicitTaggedType, MechanismName):
     """mechanism-name [11] IMPLICIT Mechanism-name"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=11)
+    tag: ClassVar[x690.Tag] = x690.Tag(11, Class.CONTEXT_SPECIFIC)
 
 
-class CallingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
-    """[12] EXPLICIT Authentication-value"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=12)
-    mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
+class CallingAuthenticationValue(ExplicitTaggedType, AuthenticationValue):
+    """calling-authentication-value [12] EXPLICIT Authentication-value"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(12, Class.CONTEXT_SPECIFIC, True)
 
 
 class AARQapdu(ImplicitTaggedType, SequenceType):
     """AARQ-apdu ::= [APPLICATION 0] IMPLICIT SEQUENCE"""
-    tag: ClassVar[x690.Tag] = x690.Tag(
-        class_=Class.APPLICATION,
-        class_number=0,
-        constructed=True)
+    tag: ClassVar[x690.Tag] = x690.Tag(0, Class.APPLICATION, constructed=True)
     protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION
-    application_context_name: ApplicationContextName1
+    application_context_name: ApplicationContextName
     called_ap_title: Optional[CalledAPTitle]
     called_ae_qualifier: Optional[CalledAEQualifier]
-    called_ap_invocation_id: Optional[CalledAPInvocationIdentifier]
-    called_ae_invocation_id: Optional[CalledAEInvocationIdentifier]
+    called_ap_invocation_id: Optional[CalledAPInvocationId]
+    called_ae_invocation_id: Optional[CalledAEInvocationId]
     calling_ap_title: Optional[CallingAPTitle]
     calling_ae_qualifier: Optional[CallingAEQualifier]
-    calling_ap_invocation_id: Optional[CallingAPInvocationIdentifier]
-    calling_ae_invocation_id: Optional[CallingAEInvocationIdentifier]
+    calling_ap_invocation_id: Optional[CallingAPInvocationId]
+    calling_ae_invocation_id: Optional[CallingAEInvocationId]
     sender_acse_requirements: Optional[SenderACSERequirements]
     mechanism_name: Optional[RequestMechanismName]
     calling_authentication_value: Optional[CallingAuthenticationValue]
@@ -278,15 +235,15 @@ class AARQapdu(ImplicitTaggedType, SequenceType):
         self,
         *,
         protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION,
-        application_context_name: ApplicationContextName1,
+        application_context_name: ApplicationContextName,
         called_ap_title: Optional[CalledAPTitle] = None,
         called_ae_qualifier: Optional[CalledAEQualifier] = None,
-        called_ap_invocation_id: Optional[CalledAPInvocationIdentifier] = None,
-        called_ae_invocation_id: Optional[CalledAEInvocationIdentifier] = None,
+        called_ap_invocation_id: Optional[CalledAPInvocationId] = None,
+        called_ae_invocation_id: Optional[CalledAEInvocationId] = None,
         calling_ap_title: Optional[CallingAPTitle] = None,
         calling_ae_qualifier: Optional[CallingAEQualifier] = None,
-        calling_ap_invocation_id: Optional[CallingAPInvocationIdentifier] = None,
-        calling_ae_invocation_id: Optional[CallingAEInvocationIdentifier] = None,
+        calling_ap_invocation_id: Optional[CallingAPInvocationId] = None,
+        calling_ae_invocation_id: Optional[CallingAEInvocationId] = None,
         sender_acse_requirements: Optional[SenderACSERequirements] = None,
         mechanism_name: Optional[RequestMechanismName] = None,
         calling_authentication_value: Optional[CallingAuthenticationValue] = None,
@@ -310,60 +267,52 @@ class AARQapdu(ImplicitTaggedType, SequenceType):
         self.user_information = user_information
 
 
-class RespondingAPTitle(ber.TaggedType[APTitle]):
-    """[4] AP-title"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=4)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class RespondingAPTitle(ExplicitTaggedType, APTitle):
+    """responding-AP-title [4] AP-title"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(4, Class.CONTEXT_SPECIFIC, True)
 
 
-class RespondingAEQualifier(ber.TaggedType[AEQualifier]):
-    """[5] AE-qualifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=5)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class RespondingAEQualifier(ExplicitTaggedType, AEQualifier):
+    """responding-AE-qualifier [5] AE-qualifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(5, Class.CONTEXT_SPECIFIC, True)
 
 
-class RespondingAPInvocationIdentifier(ber.TaggedType[APInvocationIdentifier]):
-    """[6] AP-invocation-identifier tagged"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=6)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class RespondingAPInvocationId(ExplicitTaggedType, APInvocationIdentifier):
+    """responding-AP-invocation-id [6] AP-invocation-identifier tagged"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(6, Class.CONTEXT_SPECIFIC, True)
 
 
-class RespondingAEInvocationIdentifier(ber.TaggedType[AEInvocationIdentifier]):
-    """[7] AE-invocation-identifier"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=7)
-    mode: ClassVar[TaggingMode] = TaggingMode.DEFAULT
+class RespondingAEInvocationId(ExplicitTaggedType, AEInvocationIdentifier):
+    """responding-AE-invocation-id [7] AE-invocation-identifier"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(7, Class.CONTEXT_SPECIFIC, True)
 
 
 class ResponderACSERequirements(ImplicitTaggedType, ACSERequirements):
     """responder-acse-requirements [8] IMPLICIT ACSE-requirements tagged"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=8)
+    tag: ClassVar[x690.Tag] = x690.Tag(8, Class.CONTEXT_SPECIFIC)
 
 
 class ResponseMechanismName(ImplicitTaggedType, MechanismName):
     """mechanism-name [9] IMPLICIT Mechanism-name"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=9)
+    tag: ClassVar[x690.Tag] = x690.Tag(9, Class.CONTEXT_SPECIFIC)
 
 
-class RespondingAuthenticationValue(ber.TaggedType[AuthenticationValue]):
-    """[11] EXPLICIT Authentication-value"""
-    tag: ClassVar[x690.Tag] = x690.Tag(class_=Class.CONTEXT_SPECIFIC, class_number=11)
-    mode: ClassVar[TaggingMode] = TaggingMode.EXPLICIT
+class RespondingAuthenticationValue(ExplicitTaggedType, AuthenticationValue):
+    """responding-authentication-value [10] EXPLICIT Authentication-value"""
+    tag2: ClassVar[x690.Tag] = x690.Tag(10, Class.CONTEXT_SPECIFIC, True)
 
 
 class AAREapdu(ImplicitTaggedType, SequenceType):
     """AARE-apdu ::= [APPLICATION 1] IMPLICIT SEQUENCE"""
-    tag: ClassVar[x690.Tag] = x690.Tag(
-        class_=Class.APPLICATION,
-        class_number=1,
-        constructed=True)
+    tag: ClassVar[x690.Tag] = x690.Tag(1, Class.APPLICATION, True)
     protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION
-    application_context_name: ApplicationContextName1
+    application_context_name: ApplicationContextName
     result: Result
     result_source_diagnostic: ResultSourceDiagnostic
     responding_ap_title: Optional[RespondingAPTitle]
     responding_ae_qualifier: Optional[RespondingAEQualifier]
-    responding_ap_invocation_id: Optional[RespondingAPInvocationIdentifier]
-    responding_ae_invocation_id: Optional[RespondingAEInvocationIdentifier]
+    responding_ap_invocation_id: Optional[RespondingAPInvocationId]
+    responding_ae_invocation_id: Optional[RespondingAEInvocationId]
     responder_acse_requirements: Optional[ResponderACSERequirements]
     mechanism_name: Optional[ResponseMechanismName]
     responding_authentication_value: Optional[RespondingAuthenticationValue]
@@ -374,13 +323,13 @@ class AAREapdu(ImplicitTaggedType, SequenceType):
         self,
         *,
         protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION,
-        application_context_name: ApplicationContextName1,
+        application_context_name: ApplicationContextName,
         result: Result,
         result_source_diagnostic: ResultSourceDiagnostic,
         responding_ap_title: Optional[RespondingAPTitle] = None,
         responding_ae_qualifier: Optional[RespondingAEQualifier] = None,
-        responding_ap_invocation_id: Optional[RespondingAPInvocationIdentifier] = None,
-        responding_ae_invocation_id: Optional[RespondingAEInvocationIdentifier] = None,
+        responding_ap_invocation_id: Optional[RespondingAPInvocationId] = None,
+        responding_ae_invocation_id: Optional[RespondingAEInvocationId] = None,
         responder_acse_requirements: Optional[ResponderACSERequirements] = None,
         mechanism_name: Optional[ResponseMechanismName] = None,
         responding_authentication_value: Optional[RespondingAuthenticationValue] = None,
@@ -405,10 +354,7 @@ class AAREapdu(ImplicitTaggedType, SequenceType):
 @dataclass
 class RLRQapdu(ImplicitTaggedType, SequenceType):
     """RLRQ-apdu ::= [APPLICATION 2] IMPLICIT SEQUENCE"""
-    tag: ClassVar[x690.Tag] = x690.Tag(
-        class_=Class.APPLICATION,
-        class_number=2,
-        constructed=True)
+    tag: ClassVar[x690.Tag] = x690.Tag(2, Class.APPLICATION, True)
     reason: Optional[RequestReason] = None
     user_information: Optional[UserInformation] = None
 
@@ -416,15 +362,12 @@ class RLRQapdu(ImplicitTaggedType, SequenceType):
 @dataclass
 class RLREapdu(ImplicitTaggedType, SequenceType):
     """RLRE-apdu ::= [APPLICATION 3] IMPLICIT SEQUENCE"""
-    tag: ClassVar[x690.Tag] = x690.Tag(
-        class_=Class.APPLICATION,
-        class_number=3,
-        constructed=True)
+    tag: ClassVar[x690.Tag] = x690.Tag(3, Class.APPLICATION, True)
     reason: Optional[ResponseReason] = None
     user_information: Optional[UserInformation] = None
 
 
-class ACSEApdu(ber.ChoiceType):
+class ACSEApdu(ChoiceType):
     """ACSE-APDU"""
     alternatives = create_alternatives(
         NamedType("aarq", AARQapdu),

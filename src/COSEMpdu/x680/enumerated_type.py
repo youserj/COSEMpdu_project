@@ -88,6 +88,30 @@ class EnumeratedType(Simple[INTEGER], BuiltinType):
             for member in cls.named_members:
                 setattr(cls, member.identifier, member.value)
 
+    # @classmethod
+    # def _init_sequence_components(cls) -> None:
+    #     """
+    #     Build <components> tuple from class annotations.
+    #     Should be called from SequenceType.__init_subclass__ in encoding modules (ber/axdr).
+    #     """
+    #     elements: list[NamedType[Type] | OptionalNamedType | DefaultNamedType[Type]] = []
+    #     if hasattr(cls, "components"):
+    #         elements.extend(cls.components)
+    #     for identifier, type_ in cls.__annotations__.items():
+    #         if _is_classvar(type_):
+    #             continue
+    #         if (
+    #             hasattr(cls, identifier)
+    #             and (value := cls.__dict__[identifier]) is not None
+    #         ):
+    #             n_t = DefaultNamedType(identifier, type_, value)
+    #         elif in_type := get_optional(type_):
+    #             n_t = OptionalNamedType(identifier, in_type)
+    #         else:
+    #             n_t = NamedType(identifier, type_)
+    #         elements.append(n_t)
+    #     cls.components = tuple(elements)
+
     @classmethod
     def default(cls) -> Self:
         """Default value: first member in the list."""

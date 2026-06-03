@@ -3,7 +3,7 @@ from typing import ClassVar, Self, cast, Optional, Protocol
 from StructResult.result import ValueOrError, Error
 from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
 from . import x680
-from .x680 import TaggingMode, UniversalClassTagAssignments
+from .x680 import UniversalClassTagAssignments
 from .byte_buffer import ByteBuffer, put_chain
 from .x690 import Tag, Length, TagError
 
@@ -38,98 +38,143 @@ type NamedType = x680.NamedType[Type]
 type SEQUENCE = tuple[Optional[Type], ...]
 
 
-class TaggedType[T: Type](Type, x680.TaggedType[T]):
-    tag: ClassVar[Tag]
-    value: T
+class ExplicitTaggedType(x680.Type, Protocol):
+    """
+    EXPLICIT tagged type for BER encoding (X.690 §8.14).
 
-    def is_explicit(self) -> bool:
-        """Check if this is an explicit tag (X.680 §30.6)"""
-        if self.mode == x680.TaggingMode.DEFAULT:
-            return True  # Default is EXPLICIT
-        return self.mode == x680.TaggingMode.EXPLICIT
+    In EXPLICIT tagging the outer tag wraps the **complete** base
+    encoding — the wire format is:
+
+        ``[outer tag] [length] [inner TLV]``
+
+    where *inner TLV* is the normal Tag-Length-Value encoding of the
+    base type (e.g. ``INTEGER``, ``OCTET STRING`` …).  The inner type
+    therefore **retains its own universal tag**.
+
+    **Two tags, two roles**
+
+    ======== =====================================================
+    Tag      Role
+    ======== =====================================================
+    ``tag2`` outer (explicit) tag — must be ``constructed=True``
+             per X.690 §8.14.3.  Defined on the subclass.
+    ``tag``   inner tag — inherited from the concrete base type
+             (e.g. ``IntegerType.tag = Tag(UNIVERSAL 2)``)
+    ======== =====================================================
+
+    **Inheritance note**
+
+    The class extends ``x680.Type`` — *not* ``ber.Type`` — so that
+    ``super().get()`` / ``super().put()`` go through the MRO to the
+    concrete type's ``get()`` / ``put()`` which already include
+    inner-tag validation and length framing.  This is the key design
+    choice that keeps the EXPLICIT logic **thin** (only outer tag +
+    outer length).
+
+    Contrast with ``ImplicitTaggedType``, which extends ``ber.Type``
+    and performs pure tag substitution — the outer tag directly
+    replaces the inner tag, no inner TLV frame is emitted.
+
+    Usage::
+
+        class MyExplicitType(ExplicitTaggedType, IntegerType):
+            tag2 = Tag(class_number=42, class_=Class.Context, constructed=True)
+
+    References:
+        - X.690 §8.14: Encoding of a tagged value
+    """
+    tag2: ClassVar[Tag]
 
     @classmethod
-    def is_implicit(cls) -> bool:
-        """Check if this is an implicit tag (X.680 §30.6)"""
-        return cls.mode == x680.TaggingMode.IMPLICIT
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """
+        Decode EXPLICIT tagged value from BER (X.690 §8.14).
 
-    @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        if cls.is_implicit():
-            if isinstance(value := cls._T.get_lc(buf), Error):  # IMPLICIT: decode base type contents directly (no inner tag)
-                return value
-        else:
-            if isinstance(length := Length.get(buf), Error):  # EXPLICIT: decode length, then complete base encoding (TLV)
-                return length
-            if length.value == -1:
-                return Error.from_e(ValueError("Indefinite length not supported for tagged types"))
-            # Decode inner value (with its own tag)
-            if isinstance(value := cls._T.get(buf), Error):
-                return value
-        return cls(value)
+        Decoding sequence:
+
+        1. Validate outer tag (``tag2``).
+        2. Decode **outer length** — the byte count of the inner
+           TLV frame.
+        3. Reject indefinite length (not supported).
+        4. Call ``super().get()`` — thanks to the MRO this reaches
+           ``ber.Type.get()`` on the concrete base type, which
+           itself validates the **inner tag**, decodes the inner
+           length, and reads the contents.
+        5. Verify that exactly the declared outer length was
+           consumed (length-mismatch guard).
+        """
+        if isinstance(err := cls.tag2.validate(buf), Error):
+            return err
+        # EXPLICIT: decode length, then complete base encoding (TLV)
+        if isinstance(length := Length.get(buf), Error):
+            return length
+        if length.value == -1:
+            return Error.from_e(ValueError("Indefinite length not supported for tagged types"))
+        # Decode inner value (with its own tag)
+        start_pos = buf.get_pos()
+        if isinstance(result := super().get(buf), Error):
+            return result
+        consumed = buf.get_pos() - start_pos
+        if consumed != length.value:
+            return Error.from_e(ValueError(f"Tagged type length mismatch: declared {length.value}, consumed {consumed}"))
+        return result
 
     def __str__(self) -> str:
-        """ASN.1 notation representation"""
-        mode_str = ""
-        if self.mode == TaggingMode.IMPLICIT:
-            mode_str = "IMPLICIT"
-        elif self.mode == TaggingMode.EXPLICIT:
-            mode_str = "EXPLICIT"
-        return f"[{int(self.tag)}] {mode_str} {self._T.__name__}"
+        """
+        ASN.1 notation representation.
+
+        Uses ``super().__class__.__name__`` to obtain the name of
+        the **concrete** type (e.g. ``IntegerType``) rather than
+        ``ExplicitTaggedType`` itself.
+        """
+        return f"[{int(self.tag2)}] EXPLICIT {super().__class__.__name__}"
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode tagged type per X.690 §8.14
+        Encode EXPLICIT tagged value per X.690 §8.14.
+
+        Encoding algorithm (length-writeback pattern):
+
+        1. Write outer tag (``tag2``).
+        2. Reserve 1 byte for the outer length (position ``l_pos``).
+        3. Call ``super().put()`` → concrete type's full TLV encoding
+           (inner tag + inner length + contents).  Record the number
+           of bytes written as ``n_super``.
+        4. Create a ``Length(n_super)``.  If its DER-encoded form is
+           longer than 1 byte, ``shift_right`` the inner TLV frame
+           to make room.
+        5. Write the outer length into the reserved slot.
+        6. Reposition past the moved data and return the total number
+           of bytes written.
+
+        Wire format::
+
+            [outer tag] [outer length] [inner TLV]
 
         Returns number of bytes written.
-
-        X.690 §8.14:
-        - IMPLICIT: encode outer tag + base type contents (no inner tag)
-        - EXPLICIT: encode outer tag (constructed) + length + complete base encoding
         """
         # Encode the outer tag
-        if self.is_explicit():
-            # EXPLICIT: always constructed (X.690 §8.14.2)
-            tag_to_encode = Tag(
-                class_number=self.tag.class_number,
-                class_=self.tag.class_,
-                constructed=True
-            )
-        else:
-            # IMPLICIT: preserve base type's constructed flag
-            tag_to_encode = self.tag
-        return put_chain(
-            tag_to_encode.put(buf),
-            self.put_lc(buf)
-        )
-
-    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        if self.is_explicit():
-            # EXPLICIT: encode complete base encoding as contents
-            if isinstance(l_pos := buf.shift_pos(1), Error):
-                return l_pos
-            if isinstance(counter := self.value.put(buf), Error):
-                return counter
-            length = Length(counter)
-            if (step := len(length) - 1) > 0:
-                if isinstance(end := buf.shift_right(l_pos + 1, counter, step), Error):
-                    return end
-            else:
-                end = buf.get_pos()
-            if isinstance(err := buf.set_pos(l_pos), Error):
-                return err
-            if isinstance(err := length.put(buf), Error):
-                return err
-            if isinstance(err := buf.set_pos(end), Error):
-                return err
-            return step + 1 + counter
-        # IMPLICIT: encode base type contents only
-        return self.value.put_lc(buf)
+        start_pos: int = buf.get_pos()
+        if isinstance(n_tag2 := self.tag2.put(buf), Error):
+            return n_tag2
+        sub_buf = buf.sub_buffer()
+        if isinstance(err := buf.shift_pos(1), Error):
+            return err
+        if isinstance(n_super := super().put(buf), Error):
+            return n_super
+        length = Length(n_super)
+        if (step := len(length) - 1) > 0:
+            if isinstance(shift := buf.shift_right(start_pos + 2, n_super, step), Error):
+                return shift
+            buf.set_pos(shift)
+        if isinstance(err := length.put(sub_buf), Error):
+            return err
+        return buf.get_pos() - start_pos
 
 
 class ImplicitTaggedType(Type, Protocol):
     """
-    IMPLICIT — pure tag substitution for BER (X.690 §8.14.1).
+    IMPLICIT โ�� pure tag substitution for BER (X.690 ยง8.14.1).
 
     In IMPLICIT tagging the outer tag replaces the inner type's tag
     entirely.  Contents encoding/decoding is delegated straight to the
@@ -137,8 +182,8 @@ class ImplicitTaggedType(Type, Protocol):
     conditional logic.
 
     Because *all* behaviour is inherited:
-      - ``get()``  / ``put()``     → outer tag from ``ber.Type``
-      - ``get_lc()`` / ``put_lc()`` → contents from the ``_T`` protocol
+      - ``get()``  / ``put()``     โ�� outer tag from ``ber.Type``
+      - ``get_lc()`` / ``put_lc()`` โ�� contents from the ``_T`` protocol
     this class requires **zero method overrides**.  Only ``tag`` must be
     supplied by the subclass.
 
@@ -155,16 +200,16 @@ class ImplicitTaggedType(Type, Protocol):
 
 class BitStringType(Type, x680.BitStringType):
     """
-    BIT STRING with BER encoding/decoding (X.690 §8.6)
+    BIT STRING with BER encoding/decoding (X.690 ยง8.6)
 
     BER encoding structure (primitive form):
         [Tag=0x03] [Length] [unused_bits(1)] [padded_bits(N)]
 
     Standards:
-        - Tag: UNIVERSAL 3 (X.690 §8.6)
+        - Tag: UNIVERSAL 3 (X.690 ยง8.6)
         - Primitive encoding (constructed form not supported)
-        - Unused bits in final octet: 0-7 (X.690 §8.6.2.2)
-        - Bits ordered MSB-first within each octet (X.690 §8.6.2.1)
+        - Unused bits in final octet: 0-7 (X.690 ยง8.6.2.2)
+        - Bits ordered MSB-first within each octet (X.690 ยง8.6.2.1)
     """
     # Cached BER tag instance (primitive form)
     tag: ClassVar[Tag] = Tag(
@@ -175,7 +220,7 @@ class BitStringType(Type, x680.BitStringType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode BIT STRING from BER (X.690 §8.6)
+        Decode BIT STRING from BER (X.690 ยง8.6)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -209,7 +254,7 @@ class BitStringType(Type, x680.BitStringType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode BIT STRING to BER primitive form (X.690 §8.6.2)
+        Encode BIT STRING to BER primitive form (X.690 ยง8.6.2)
         Returns number of bytes written.
         """
         n = len(self.value)
@@ -231,21 +276,21 @@ class BitStringType(Type, x680.BitStringType):
 
 class BooleanType(Type, x680.BooleanType):
     """
-    BOOLEAN with BER encoding/decoding (X.690 §8.2)
+    BOOLEAN with BER encoding/decoding (X.690 ยง8.2)
 
     BER encoding structure:
         [Tag=0x01] [Length=0x01] [Content]
 
     Content:
-        - FALSE → 0x00 (all bits zero)
-        - TRUE  → 0xFF (any non-zero value, sender's option per X.690 §8.2.2)
-                  DER/CER requires 0xFF (all bits one, X.690 §11.1)
+        - FALSE โ�� 0x00 (all bits zero)
+        - TRUE  โ�� 0xFF (any non-zero value, sender's option per X.690 ยง8.2.2)
+                  DER/CER requires 0xFF (all bits one, X.690 ยง11.1)
 
     Standards:
-        - Tag: UNIVERSAL 1 (X.680 §17.2, X.690 §8.2)
-        - Length: always 1 octet (X.690 §8.2.1)
-        - Content: 1 octet (X.690 §8.2.2)
-        - A-XDR: same as BER (IEC 61334-6 §6.3)
+        - Tag: UNIVERSAL 1 (X.680 ยง17.2, X.690 ยง8.2)
+        - Length: always 1 octet (X.690 ยง8.2.1)
+        - Content: 1 octet (X.690 ยง8.2.2)
+        - A-XDR: same as BER (IEC 61334-6 ยง6.3)
     """
     # Cached BER tag instance (primitive form)
     tag: ClassVar[Tag] = Tag(
@@ -256,7 +301,7 @@ class BooleanType(Type, x680.BooleanType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode BOOLEAN from BER (X.690 §8.2)
+        Decode BOOLEAN from BER (X.690 ยง8.2)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -269,12 +314,12 @@ class BooleanType(Type, x680.BooleanType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode BOOLEAN to BER (X.690 §8.2.2)
+        Encode BOOLEAN to BER (X.690 ยง8.2.2)
         Returns number of bytes written (always 3).
 
         Content encoding:
-            FALSE → 0x00
-            TRUE  → 0xFF (all bits one, DER/CER compliant)
+            FALSE โ�� 0x00
+            TRUE  โ�� 0xFF (all bits one, DER/CER compliant)
         """
         return put_chain(
             Length(1).put(buf),
@@ -283,7 +328,7 @@ class BooleanType(Type, x680.BooleanType):
 
 
 class GraphicString(Type, x680.GraphicString):
-    """GRAPHIC STRING with BER encoding/decoding (X.690 §8.21)"""
+    """GRAPHIC STRING with BER encoding/decoding (X.690 ยง8.21)"""
 
     # Cached BER tag instance (primitive form)
     tag: ClassVar[Tag] = Tag(
@@ -297,8 +342,8 @@ class GraphicString(Type, x680.GraphicString):
         Decode GRAPHIC STRING contents only (no tag validation).
 
         Used for:
-            - CHOICE alternatives (X.690 §8.13)
-            - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+            - CHOICE alternatives (X.690 ยง8.13)
+            - SEQUENCE components in A-XDR (IEC 61334-6 ยง6.9)
 
         Returns instance and advances buffer position.
         """
@@ -317,8 +362,8 @@ class GraphicString(Type, x680.GraphicString):
         Encode GRAPHIC STRING contents only (no tag).
 
         Used for:
-            - CHOICE alternatives (X.690 §8.13)
-            - SEQUENCE components in A-XDR (IEC 61334-6 §6.9)
+            - CHOICE alternatives (X.690 ยง8.13)
+            - SEQUENCE components in A-XDR (IEC 61334-6 ยง6.9)
         Returns number of bytes written.
         """
         return put_lc(buf, len(self.value), self.value.encode("ascii", errors="replace"))    # GRAPHIC STRING is ISO 8859-1, but we'll encode as ASCII for simplicity
@@ -350,14 +395,14 @@ def create_alternatives(*values: NamedType) -> dict[int, NamedType]:
 
 class ChoiceType(x680.ChoiceType[Type]):
     """
-    CHOICE with BER encoding/decoding (X.690 §8.13)
+    CHOICE with BER encoding/decoding (X.690 ยง8.13)
 
     BER encoding structure:
         [Tag=chosen_alternative] [Length] [Contents]
 
     Standards:
-        - Tag: From chosen alternative (X.690 §8.13)
-        - IEC 61334-6 §6.6: CHOICE alternatives must be explicitly tagged
+        - Tag: From chosen alternative (X.690 ยง8.13)
+        - IEC 61334-6 ยง6.6: CHOICE alternatives must be explicitly tagged
         - A-XDR: Tag number encoded as 1 byte for CHOICE alternatives
 
     Note:
@@ -380,7 +425,7 @@ class ChoiceType(x680.ChoiceType[Type]):
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode CHOICE from BER (X.690 §8.13)
+        Decode CHOICE from BER (X.690 ยง8.13)
         Returns instance with chosen alternative and advances buffer position.
         """
         if isinstance(tag := Tag.get(buf), Error):
@@ -405,7 +450,7 @@ class ChoiceType(x680.ChoiceType[Type]):
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode CHOICE to BER (X.690 §8.13)
+        Encode CHOICE to BER (X.690 ยง8.13)
         Returns number of bytes written.
 
         Encoding is identical to the chosen alternative type.
@@ -424,22 +469,22 @@ class ChoiceType(x680.ChoiceType[Type]):
 
 class EnumeratedType(Type, x680.EnumeratedType):
     """
-    ENUMERATED with BER encoding/decoding (X.690 §8.4)
+    ENUMERATED with BER encoding/decoding (X.690 ยง8.4)
 
     BER encoding structure (primitive form):
         [Tag=0x0A] [Length] [Content]
     Content:
         - Enumeration index as signed integer (two's complement)
-        - Minimal octets required (X.690 §8.3.2)
+        - Minimal octets required (X.690 ยง8.3.2)
 
     Standards:
-        - Tag: UNIVERSAL 10 (X.680 §19.7, X.690 §8.4)
-        - Encoding: Same as INTEGER (X.690 §8.4)
+        - Tag: UNIVERSAL 10 (X.680 ยง19.7, X.690 ยง8.4)
+        - Encoding: Same as INTEGER (X.690 ยง8.4)
         - Primitive encoding (constructed form not used)
-        - IEC 61334-6 §6.4: DLMS ENUMERATED range 0..255 (1 byte)
+        - IEC 61334-6 ยง6.4: DLMS ENUMERATED range 0..255 (1 byte)
 
     Note:
-        - Enumeration indices assigned per X.680 §19.3
+        - Enumeration indices assigned per X.680 ยง19.3
         - Root enumeration: indices start at 0
         - Extension additions: indices continue from root
     """
@@ -452,7 +497,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode ENUMERATED from BER (X.690 §8.4)
+        Decode ENUMERATED from BER (X.690 ยง8.4)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -471,7 +516,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode ENUMERATED to BER primitive form (X.690 §8.4)
+        Encode ENUMERATED to BER primitive form (X.690 ยง8.4)
         Returns number of bytes written.
 
         Content encoding:
@@ -497,20 +542,20 @@ class EnumeratedType(Type, x680.EnumeratedType):
 
 class IntegerType(Type, x680.IntegerType):
     """
-    INTEGER with BER encoding/decoding (X.690 §8.3)
+    INTEGER with BER encoding/decoding (X.690 ยง8.3)
 
     BER encoding structure (primitive form):
         [Tag=0x02] [Length] [Content]
 
     Content:
-        - Two's complement binary number (X.690 §8.3.3)
-        - Minimal octets required (X.690 §8.3.2)
+        - Two's complement binary number (X.690 ยง8.3.3)
+        - Minimal octets required (X.690 ยง8.3.2)
         - No leading zero bytes except for sign
 
     Standards:
-        - Tag: UNIVERSAL 2 (X.680 §18.8, X.690 §8.3)
+        - Tag: UNIVERSAL 2 (X.680 ยง18.8, X.690 ยง8.3)
         - Primitive encoding (constructed form not used)
-        - A-XDR: Fixed-length for constrained types (IEC 61334-6 §6.1)
+        - A-XDR: Fixed-length for constrained types (IEC 61334-6 ยง6.1)
 
     Note:
         - Positive integers: MSB must be 0 (may need leading 0x00)
@@ -526,7 +571,7 @@ class IntegerType(Type, x680.IntegerType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode INTEGER from BER (X.690 §8.3)
+        Decode INTEGER from BER (X.690 ยง8.3)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -544,7 +589,7 @@ class IntegerType(Type, x680.IntegerType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode INTEGER to BER primitive form (X.690 §8.3)
+        Encode INTEGER to BER primitive form (X.690 ยง8.3)
         Returns number of bytes written.
 
         Content encoding:
@@ -567,20 +612,20 @@ class IntegerType(Type, x680.IntegerType):
 
 class NullType(Type, x680.NullType):
     """
-    NULL with BER encoding/decoding (X.690 §8.8)
+    NULL with BER encoding/decoding (X.690 ยง8.8)
     BER encoding structure (primitive form):
         [Tag=0x05] [Length=0x00] [Contents=<empty>]
 
     Standards:
-        - Tag: UNIVERSAL 5 (X.680 §23.2, X.690 §8.8)
+        - Tag: UNIVERSAL 5 (X.680 ยง23.2, X.690 ยง8.8)
         - Primitive encoding (constructed form not used)
-        - Length: always 0 octets (X.690 §8.8.2)
+        - Length: always 0 octets (X.690 ยง8.8.2)
         - Contents: empty (no octets)
 
     Note:
         - NULL has only one value (the null value)
         - Used to indicate absence of information or as placeholder
-        - IEC 61334-6: NULL encoding same as BER (§6.13)
+        - IEC 61334-6: NULL encoding same as BER (ยง6.13)
     """
     # Cached BER tag instance (primitive form)
     tag: ClassVar[Tag] = Tag(
@@ -591,7 +636,7 @@ class NullType(Type, x680.NullType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode NULL from BER (X.690 §8.8)
+        Decode NULL from BER (X.690 ยง8.8)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -603,7 +648,7 @@ class NullType(Type, x680.NullType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode NULL to BER primitive form (X.690 §8.8)
+        Encode NULL to BER primitive form (X.690 ยง8.8)
         Returns number of bytes written (always 2).
 
         Encoding:
@@ -621,7 +666,7 @@ class NullType(Type, x680.NullType):
 
 class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
     """
-    OBJECT IDENTIFIER with BER encoding/decoding (X.690 §8.19).
+    OBJECT IDENTIFIER with BER encoding/decoding (X.690 ยง8.19).
 
     BER encoding structure:
         [Tag=0x06] [Length] [Content]
@@ -641,8 +686,8 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
         - Full encoding: 0x06 0x02 0x28 0x01
 
     References:
-        - X.690 §8.19: Encoding of an object identifier value
-        - X.680 §31: Notation for the object identifier type
+        - X.690 ยง8.19: Encoding of an object identifier value
+        - X.680 ยง31: Notation for the object identifier type
         - ITU-T X.660 | ISO/IEC 9834-1: OID registration procedures
     """
 
@@ -659,7 +704,7 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
         Decode OBJECT IDENTIFIER contents only (no tag validation).
 
         Used for:
-            - CHOICE alternatives (X.690 §8.13)
+            - CHOICE alternatives (X.690 ยง8.13)
             - Explicitly tagged types where outer tag already validated
 
         Returns instance and advances buffer position.
@@ -700,7 +745,7 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
         Encode OBJECT IDENTIFIER contents only (no tag).
 
         Used for:
-            - CHOICE alternatives (X.690 §8.13)
+            - CHOICE alternatives (X.690 ยง8.13)
             - Explicitly tagged types where outer tag already encoded
 
         Returns number of bytes written.
@@ -733,16 +778,16 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
 
 class OctetStringType(Type, x680.OctetStringType):
     """
-    OCTET STRING with BER encoding/decoding (X.690 §8.7)
+    OCTET STRING with BER encoding/decoding (X.690 ยง8.7)
 
     BER encoding structure (primitive form):
         [Tag=0x04] [Length] [Contents(N)]
 
     Standards:
-        - Tag: UNIVERSAL 4 (X.680 §22.2, X.690 §8.7)
+        - Tag: UNIVERSAL 4 (X.680 ยง22.2, X.690 ยง8.7)
         - Primitive encoding (constructed form optional)
         - Contents: raw octets (no unused bits like BIT STRING)
-        - A-XDR: same as BER for variable-length (IEC 61334-6 §6.5)
+        - A-XDR: same as BER for variable-length (IEC 61334-6 ยง6.5)
 
     Note:
         - Simpler than BIT STRING (no unused_bits octet)
@@ -758,7 +803,7 @@ class OctetStringType(Type, x680.OctetStringType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode OCTET STRING from BER (X.690 §8.7)
+        Decode OCTET STRING from BER (X.690 ยง8.7)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -774,7 +819,7 @@ class OctetStringType(Type, x680.OctetStringType):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
-        Encode OCTET STRING to BER primitive form (X.690 §8.7.2)
+        Encode OCTET STRING to BER primitive form (X.690 ยง8.7.2)
         Returns number of bytes written.
 
         Content encoding:
@@ -786,17 +831,17 @@ class OctetStringType(Type, x680.OctetStringType):
 
 class SequenceType(Type, x680.SequenceType):
     """
-    SEQUENCE with BER encoding/decoding (X.690 §8.9)
+    SEQUENCE with BER encoding/decoding (X.690 ยง8.9)
 
     BER encoding structure (constructed form):
         [Tag=0x30] [Length] [Component1] [Component2] ... [ComponentN]
 
     Standards:
-        - Tag: UNIVERSAL 16 (X.680 §24.16, X.690 §8.9)
-        - Constructed encoding (always, X.690 §8.9.1)
-        - Components encoded in definition order (X.690 §8.9.2)
-        - OPTIONAL/DEFAULT components may be absent (X.690 §8.9.3)
-        - IEC 61334-6 §6.9: SEQUENCE component tags NOT encoded
+        - Tag: UNIVERSAL 16 (X.680 ยง24.16, X.690 ยง8.9)
+        - Constructed encoding (always, X.690 ยง8.9.1)
+        - Components encoded in definition order (X.690 ยง8.9.2)
+        - OPTIONAL/DEFAULT components may be absent (X.690 ยง8.9.3)
+        - IEC 61334-6 ยง6.9: SEQUENCE component tags NOT encoded
     """
     # Cached BER tag instance (constructed form)
     tag: ClassVar[Tag] = Tag(
@@ -812,7 +857,7 @@ class SequenceType(Type, x680.SequenceType):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode SEQUENCE from BER (X.690 §8.9)
+        Decode SEQUENCE from BER (X.690 ยง8.9)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -852,7 +897,8 @@ class SequenceType(Type, x680.SequenceType):
         """
         # Encode all present components
         counter: int = 0
-        l_pos: int = buf.get_pos()
+        start_pos: int = buf.get_pos()
+        sub_buf = buf.sub_buffer()
         if isinstance(err := buf.shift_pos(1), Error):
             return err
         for n_t in self.components:
@@ -871,29 +917,25 @@ class SequenceType(Type, x680.SequenceType):
             counter += tmp
         length = Length(counter)
         if (step := len(length) - 1) > 0:
-            if isinstance(end := buf.shift_right(l_pos + 1, counter, step), Error):
-                return end
-        else:
-            end = buf.get_pos()
-        if isinstance(err := buf.set_pos(l_pos), Error):
+            if isinstance(shift := buf.shift_right(start_pos + 1, counter, step), Error):
+                return shift
+            buf.set_pos(shift)
+        if isinstance(err := length.put(sub_buf), Error):
             return err
-        length.put(buf)
-        if isinstance(err := buf.set_pos(end), Error):
-            return err
-        return step + 1 + counter
+        return buf.get_pos() - start_pos
 
 
 class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     """
-    SEQUENCE OF with BER encoding/decoding (X.690 §8.10)
+    SEQUENCE OF with BER encoding/decoding (X.690 ยง8.10)
     BER encoding structure (constructed form):
         [Tag=0x30] [Length] [Component1] [Component2] ... [ComponentN]
 
     Standards:
-        - Tag: UNIVERSAL 16 (X.680 §25.2, X.690 §8.10)
-        - Constructed encoding (always, X.690 §8.10.1)
-        - Components encoded in order of appearance (X.690 §8.10.3)
-        - IEC 61334-6 §6.10: DLMS/COSEM SEQUENCE OF usage
+        - Tag: UNIVERSAL 16 (X.680 ยง25.2, X.690 ยง8.10)
+        - Constructed encoding (always, X.690 ยง8.10.1)
+        - Components encoded in order of appearance (X.690 ยง8.10.3)
+        - IEC 61334-6 ยง6.10: DLMS/COSEM SEQUENCE OF usage
 
     Note:
         - Each component is encoded using its own BER encoding rules
@@ -901,7 +943,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         - Empty sequence: Length = 0, no component encodings
     """
     # Class variable: universal tag for SEQUENCE OF (constructed)
-    # X.680 Table 1, X.690 §8.10.1: UNIVERSAL 16, constructed
+    # X.680 Table 1, X.690 ยง8.10.1: UNIVERSAL 16, constructed
     tag: ClassVar[Tag] = Tag(
         class_number=x680.UniversalClassTagAssignments.SequenceOf,
         constructed=True
@@ -911,7 +953,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
-        Decode SEQUENCE OF from BER (X.690 §8.10)
+        Decode SEQUENCE OF from BER (X.690 ยง8.10)
         Returns instance and advances buffer position.
         """
         if isinstance(length := Length.get(buf), Error):
@@ -943,7 +985,8 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         Returns number of bytes written.
         """
         counter: int = 0
-        l_pos: int = buf.get_pos()
+        start_pos: int = buf.get_pos()
+        sub_buf = buf.sub_buffer()
         if isinstance(_ := buf.shift_pos(1), Error):
             return _
         for component in self.value:
@@ -952,16 +995,12 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
             counter += tmp
         length = Length(counter)
         if (step := len(length) - 1) > 0:
-            if isinstance(end := buf.shift_right(l_pos + 1, counter, step), Error):
-                return end
-        else:
-            end = buf.get_pos()
-        if isinstance(err := buf.set_pos(l_pos), Error):
+            if isinstance(shift := buf.shift_right(start_pos + 1, counter, step), Error):
+                return shift
+            buf.set_pos(shift)
+        if isinstance(err := length.put(sub_buf), Error):
             return err
-        length.put(buf)
-        if isinstance(err := buf.set_pos(end), Error):
-            return err
-        return step + 1 + counter
+        return buf.get_pos() - start_pos
 
     @property
     def is_empty(self) -> bool:
@@ -973,7 +1012,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
 
 
 class GeneralizedTime(Type, x680.GeneralizedTime):
-    """GeneralizedTime with BER encoding (X.690 §8.23)"""
+    """GeneralizedTime with BER encoding (X.690 ยง8.23)"""
     tag: ClassVar[Tag] = Tag(class_number=UniversalClassTagAssignments.GeneralizedTime, constructed=False)
 
     @classmethod
