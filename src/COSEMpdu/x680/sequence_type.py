@@ -1,7 +1,8 @@
 # src/COSEMpdu/x680/sequence_type.py
 from typing import ClassVar, Optional, Self, Any, Union, get_origin, get_args
+from StructResult.result import Error
 from types import UnionType
-from .type import BuiltinType, NamedType, Type, TYPE_VALUE, NULL, DefaultNamedType, OptionalNamedType
+from .type import BuiltinType, NamedType, Type, TYPE_VALUE, NULL, DefaultNamedType, OptionalNamedType, is_classvar, InitError
 
 
 def get_optional(type_: Any) -> Optional[type]:
@@ -13,11 +14,6 @@ def get_optional(type_: Any) -> Optional[type]:
         if len(non_none_types) == 1:
             return non_none_types[0]
     return None
-
-
-def _is_classvar(type_: Type) -> bool:
-    """Check if annotation is ClassVar[X]."""
-    return get_origin(type_) is ClassVar
 
 
 class SequenceType(BuiltinType):
@@ -80,6 +76,13 @@ class SequenceType(BuiltinType):
     components: ClassVar[tuple[NamedType[Type], ...]]
 
     @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        raise RuntimeError()
+        # if isinstance(value, int):
+        #     return None
+        # return Error.from_e(InitError(f"got {value=}, expected ENUM"))
+
+    @classmethod
     def parse[U: TYPE_VALUE](cls, value: tuple[U]) -> Self:
         return cls(**{comp.identifier: None if val is None else comp.type_.parse(val) for comp, val in zip(cls.components, value, strict=True)})
 
@@ -121,7 +124,7 @@ class SequenceType(BuiltinType):
         if hasattr(cls, "components"):
             elements.extend(cls.components)
         for identifier, type_ in cls.__annotations__.items():
-            if _is_classvar(type_):
+            if is_classvar(type_):
                 continue
             if (
                 hasattr(cls, identifier)

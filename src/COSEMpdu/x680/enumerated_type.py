@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, Optional, Self
-from .type import BuiltinType, INTEGER, Simple
+from StructResult.result import Error
+from typing import ClassVar, Optional, Self, Any
+from .type import BuiltinType, INTEGER, Simple, is_classvar, InitError
 
 
 @dataclass(frozen=True)
@@ -16,62 +17,22 @@ class EnumerationMember:
         return f"{self.identifier}({self.value})"
 
 
-class EnumerationList:
-    """
-    EnumerationList ::= EnumerationItem | EnumerationList "," EnumerationItem
-    Base container for enumeration members (X.680 §19). Subclasses define `members` ClassVar.
-
-    Supports:
-    - Lookup by identifier (str) → value (int)
-    - Lookup by value (int) → identifier (str)
-    - Membership checks for both
-    """
-    members: ClassVar[tuple[EnumerationMember, ...]]
-
-    def get_value(self, identifier: str) -> Optional[int]:
-        """Get integer value for identifier (X.680 §19.8)."""
-        for m in self.members:
-            if m.identifier == identifier:
-                return m.value
-        return None
-
-    def get_identifier(self, value: int) -> Optional[str]:
-        """Get identifier for integer value."""
-        for m in self.members:
-            if m.value == value:
-                return m.identifier
-        return None
-
-    def __contains__(self, item: str | int) -> bool:
-        """Check membership: 'success' in enum_list or 0 in enum_list"""
-        return (isinstance(item, str) and self.get_value(item) is not None) or \
-               (isinstance(item, int) and self.get_identifier(item) is not None)
-
-    def __iter__(self) -> Iterator[EnumerationMember]:
-        return iter(self.members)
-
-    def __len__(self) -> int:
-        return len(self.members)
-
-    def __str__(self) -> str:
-        return "{" + ", ".join(str(m) for m in self.members) + "}"
-
-
 class EnumeratedType(Simple[INTEGER], BuiltinType):
     """
     ENUMERATED type (X.680 §19)
     NATIVE REPRESENTATION: int (non-negative enumeration index)
 
-    Subclassing pattern (matches BitStringType.named_bits pattern):
-        class AccessResultMembers(EnumerationList):
-            members: ClassVar[tuple[EnumerationMember, ...]] = (
-                EnumerationMember("success", 0),
-                EnumerationMember("object-undefined", 1),
-                EnumerationMember("access-violated", 5),  # non-contiguous allowed
-            )
-
+    Subclassing pattern — declare members as `Final[int]` annotations:
         class AccessResult(EnumeratedType):
-            named_members: ClassVar[EnumerationList] = AccessResultMembers()
+            SUCCESS: Final[int] = 0
+            OBJECT_UNDEFINED: Final[int] = 1
+            ACCESS_VIOLATED: Final[int] = 5  # non-contiguous allowed
+
+    Implicitly tagged subtypes follow the same pattern:
+        class ApplicationReference(ImplicitTaggedType, EnumeratedType):
+            tag: ClassVar[int] = 0
+            OTHER: Final[int] = 0
+            TIME_ELAPSED: Final[int] = 1
 
     Standards compliance:
     - Values: non-negative integers (X.680 §19.3, §19.6)
@@ -80,59 +41,54 @@ class EnumeratedType(Simple[INTEGER], BuiltinType):
     - A-XDR constraint: 0..255 (IEC 61334-6 §6.77) — enforced in codecs
     - Supports NamedNumber syntax (identifier "(" number ")") and implicit numbering
     """
-    named_members: ClassVar[Optional[EnumerationList]] = None
+    members: ClassVar[tuple[EnumerationMember, ...]] = ()
     value: INTEGER
 
-    def __init_subclass__(cls) -> None:
-        if cls.named_members:
-            for member in cls.named_members:
-                setattr(cls, member.identifier, member.value)
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, int):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected ENUM"))
 
-    # @classmethod
-    # def _init_sequence_components(cls) -> None:
-    #     """
-    #     Build <components> tuple from class annotations.
-    #     Should be called from SequenceType.__init_subclass__ in encoding modules (ber/axdr).
-    #     """
-    #     elements: list[NamedType[Type] | OptionalNamedType | DefaultNamedType[Type]] = []
-    #     if hasattr(cls, "components"):
-    #         elements.extend(cls.components)
-    #     for identifier, type_ in cls.__annotations__.items():
-    #         if _is_classvar(type_):
-    #             continue
-    #         if (
-    #             hasattr(cls, identifier)
-    #             and (value := cls.__dict__[identifier]) is not None
-    #         ):
-    #             n_t = DefaultNamedType(identifier, type_, value)
-    #         elif in_type := get_optional(type_):
-    #             n_t = OptionalNamedType(identifier, in_type)
-    #         else:
-    #             n_t = NamedType(identifier, type_)
-    #         elements.append(n_t)
-    #     cls.components = tuple(elements)
+    def __init_subclass__(cls) -> None:
+        """
+        Build <members> tuple from `Final[int]` class annotations.
+        Ignores ClassVar members.
+        """
+        members: list[EnumerationMember] = []
+        if hasattr(cls, "members"):
+            members.extend(cls.members)
+        for identifier, type_ in cls.__annotations__.items():
+            if is_classvar(type_):
+                continue
+            if (
+                hasattr(cls, identifier)
+                and isinstance(value := cls.__dict__[identifier], int)
+            ):
+                members.append(EnumerationMember(identifier, value))
+        cls.members = tuple(members)
 
     @classmethod
     def default(cls) -> Self:
         """Default value: first member in the list."""
-        if cls.named_members is None:
+        if len(cls.members) == 0:
             return cls(0)  # Default to 0 if no members defined, though this may be invalid
-        return cls(cls.named_members.members[0].value)
+        return cls(cls.members[0].value)
 
     def __str__(self) -> str:
         """
         ASN.1 value notation per X.680 §19.8:
-        - Returns identifier if defined in named_members (e.g., "success")
+        - Returns identifier if defined (e.g., "success")
         - Falls back to integer string otherwise (e.g., "42")
         """
-        if self.named_members and (ident := self.named_members.get_identifier(self.value)):
+        if ident := self._get_identifier(self.value):
             return ident
         return str(self.value)
 
     def __repr__(self) -> str:
         if (
-            self.named_members
-            and (name := self.named_members.get_identifier(self.value))
+            len(self.members) != 0
+            and (name := self._get_identifier(self.value))
         ):
             return f"{self.__class__.__name__}.{name.upper()}"
         return f"{self.__class__.__name__}({self.value})"
@@ -140,20 +96,22 @@ class EnumeratedType(Simple[INTEGER], BuiltinType):
     @property
     def identifier(self) -> Optional[str]:
         """Get identifier string for current value if defined, else None."""
-        return self.named_members.get_identifier(self.value) if self.named_members else None
-
-    @classmethod
-    def from_identifier(cls, identifier: str) -> Self:
-        """
-        Create instance from enumeration identifier (X.680 §19.8).
-        Raises KeyError if identifier not found in named_members.
-        """
-        if cls.named_members is None:
-            raise KeyError(f"Type {cls.__name__} has no named members defined")
-        if (val := cls.named_members.get_value(identifier)) is None:
-            raise KeyError(f"Identifier '{identifier}' not found in {cls.__name__}")
-        return cls(val)
+        return self._get_identifier(self.value)
 
     def __int__(self) -> int:
         """Native integer conversion (required for codec implementations)."""
         return self.value
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, int):
+            return self.value == value
+        if isinstance(value, EnumeratedType):
+            return self.value == value.value
+        raise NotImplementedError
+
+    def _get_identifier(self, value: int) -> Optional[str]:
+        """Get identifier for integer value."""
+        for m in self.members:
+            if m.value == value:
+                return m.identifier
+        return None

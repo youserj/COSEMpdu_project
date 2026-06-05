@@ -1,5 +1,6 @@
-from typing import Self
-from .type import BuiltinType, OCTET_STRING, Simple
+from typing import Self, Any
+from StructResult.result import Error
+from .type import BuiltinType, OCTET_STRING, Simple, InitError
 
 
 class OctetStringType(Simple[OCTET_STRING], BuiltinType):
@@ -17,6 +18,12 @@ class OctetStringType(Simple[OCTET_STRING], BuiltinType):
     - XML notation: <OCTET_STRING>hex</OCTET_STRING> (X.680 Table 4)
     """
     value: OCTET_STRING
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, bytes):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected OCTET STRING"))
 
     @classmethod
     def default(cls) -> Self:

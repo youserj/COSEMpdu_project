@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Self
 from StructResult.result import ValueOrError, Error, Fallible, OK
 from . import x680
@@ -96,13 +96,6 @@ class Tag(EDTLV, x680.Tag):
     """
     # class_number: int
     constructed: bool = False  # Bit 6 per X.690 §8.1.2.5
-    _hash_cache: int = field(init=False, repr=False, default=0)
-
-    def __post_init__(self) -> None:
-        # Вычисляем хэш один раз при создании
-        object.__setattr__(self, "_hash_cache",
-            hash((self.class_, self.class_number, self.constructed)))
-        object.__setattr__(self, "_hash_computed", True)
 
     def validate(self, buf: ByteBuffer) -> Fallible:
         pos = buf.get_pos()
@@ -179,10 +172,3 @@ class Tag(EDTLV, x680.Tag):
             and self.class_ == other.class_
             and self.constructed == other.constructed
         )
-
-    def __hash__(self) -> int:
-        """
-        Efficient hash for Choice alternative lookup.
-        Combines class (2 bits), constructed flag (1 bit), and number.
-        """
-        return self._hash_cache

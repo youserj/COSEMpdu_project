@@ -26,7 +26,7 @@ from COSEMpdu.x680.constrained_type import (
     SizeConstraint,
     ValueRange,
 )
-from COSEMpdu.axdr import ConstrainedIntegerType, ConstrainedBitStringType, ConstrainedSequenceOfType, ConstrainedOctetStringType
+from COSEMpdu.axdr import ConstrainedIntegerType, ConstrainedBitStringType, ConstrainedSequenceOfType, ConstrainedOctetStringType, IntegerType
 
 # from COSEMpdu.x680.bit_string_type import BitStringType
 # from COSEMpdu.x680.octet_string_type import OctetStringType
@@ -56,7 +56,7 @@ def make_constrained_integer(class_name: str, constraint_spec: ConstraintSpec):
 
 
 class TestValueRange(unittest.TestCase):
-    def test_contains_inclusive(self):
+    def test_contains_inclusive(self) -> None:
         vr = ValueRange(0, 100)
         self.assertTrue(vr.contains(0))
         self.assertTrue(vr.contains(50))
@@ -64,33 +64,33 @@ class TestValueRange(unittest.TestCase):
         self.assertFalse(vr.contains(-1))
         self.assertFalse(vr.contains(101))
 
-    def test_contains_exclusive_lower(self):
+    def test_contains_exclusive_lower(self) -> None:
         vr = ValueRange(0, 100, lower_inclusive=False)
         self.assertFalse(vr.contains(0))
         self.assertTrue(vr.contains(1))
         self.assertTrue(vr.contains(100))
 
-    def test_contains_exclusive_upper(self):
+    def test_contains_exclusive_upper(self) -> None:
         vr = ValueRange(0, 100, upper_inclusive=False)
         self.assertTrue(vr.contains(0))
         self.assertTrue(vr.contains(99))
         self.assertFalse(vr.contains(100))
 
-    def test_contains_exclusive_both(self):
+    def test_contains_exclusive_both(self) -> None:
         vr = ValueRange(0, 100, lower_inclusive=False, upper_inclusive=False)
         self.assertFalse(vr.contains(0))
         self.assertTrue(vr.contains(50))
         self.assertFalse(vr.contains(100))
 
-    def test_str_inclusive(self):
+    def test_str_inclusive(self) -> None:
         vr = ValueRange(0, 255)
         self.assertEqual(str(vr), "(0..255)")
 
-    def test_str_exclusive_lower(self):
+    def test_str_exclusive_lower(self) -> None:
         vr = ValueRange(0, 255, lower_inclusive=False)
         self.assertEqual(str(vr), "(0<..255)")
 
-    def test_str_exclusive_upper(self):
+    def test_str_exclusive_upper(self) -> None:
         vr = ValueRange(0, 255, upper_inclusive=False)
         self.assertEqual(str(vr), "(0..<255)")
 
@@ -101,22 +101,22 @@ class TestValueRange(unittest.TestCase):
 
 
 class TestSingleValue(unittest.TestCase):
-    def test_contains_int(self):
+    def test_contains_int(self) -> None:
         sv = SingleValue(42)
         self.assertTrue(sv.contains(42))
         self.assertFalse(sv.contains(0))
         self.assertFalse(sv.contains(43))
 
-    def test_contains_str(self):
+    def test_contains_str(self) -> None:
         sv = SingleValue("A")
         self.assertTrue(sv.contains("A"))
         self.assertFalse(sv.contains("B"))
 
-    def test_str(self):
+    def test_str(self) -> None:
         sv = SingleValue(42)
         self.assertEqual(str(sv), "42")
 
-    def test_str_string_value(self):
+    def test_str_string_value(self) -> None:
         sv = SingleValue("X")
         self.assertEqual(str(sv), "X")
 
@@ -127,29 +127,29 @@ class TestSingleValue(unittest.TestCase):
 
 
 class TestSizeConstraint(unittest.TestCase):
-    def test_fixed_size_contains(self):
+    def test_fixed_size_contains(self) -> None:
         sc = SizeConstraint(4)
         self.assertTrue(sc.contains(4))
-        with self.assertRaises(ValueError, msg="size != 4"):
+        with self.assertRaises(ConstraintError, msg="size != 4"):
             sc.contains(3)
-        with self.assertRaises(ValueError, msg="size != 4"):
+        with self.assertRaises(ConstraintError, msg="size != 4"):
             sc.contains(5)
 
-    def test_range_size_contains(self):
+    def test_range_size_contains(self) -> None:
         sc = SizeConstraint(max_size=10, min_size=2)
         self.assertTrue(sc.contains(2))
         self.assertTrue(sc.contains(10))
         self.assertTrue(sc.contains(5))
-        with self.assertRaises(ValueError, msg="size < min"):
+        with self.assertRaises(ConstraintError, msg="size < min"):
             sc.contains(1)
-        with self.assertRaises(ValueError, msg="size > max"):
+        with self.assertRaises(ConstraintError, msg="size > max"):
             sc.contains(11)
 
-    def test_str_fixed(self):
+    def test_str_fixed(self) -> None:
         sc = SizeConstraint(4)
         self.assertEqual(str(sc), "SIZE(4)")
 
-    def test_str_range(self):
+    def test_str_range(self) -> None:
         sc = SizeConstraint(max_size=10, min_size=2)
         self.assertEqual(str(sc), "SIZE(2..10)")
 
@@ -160,10 +160,10 @@ class TestSizeConstraint(unittest.TestCase):
 
 
 class TestConstraintError(unittest.TestCase):
-    def test_is_exception(self):
+    def test_is_exception(self) -> None:
         self.assertTrue(issubclass(ConstraintError, Exception))
 
-    def test_raise_and_catch(self):
+    def test_raise_and_catch(self) -> None:
         with self.assertRaises(ConstraintError) as ctx:
             raise ConstraintError("out of range")
         self.assertIn("out of range", str(ctx.exception))
@@ -178,7 +178,7 @@ class TestConstrainedTypeSafety(unittest.TestCase):
     """Test that ConstrainedType.get_lc catches ConstraintError and returns
     a safe StructResult Error rather than propagating the exception."""
 
-    def test_get_lc_catches_constraint_error(self):
+    def test_get_lc_catches_constraint_error(self) -> None:
         # Build a constrained integer 0..100, then decode a value > 100
         # via the BER IntegerType codec.
         class SmallInt(ConstrainedIntegerType):
@@ -200,14 +200,14 @@ class TestConstrainedTypeSafety(unittest.TestCase):
         result = SmallInt.get(buf2)
         self.assertIsInstance(result, Error)
 
-    def test_get_lc_allows_ok_value(self):
+    def test_get_lc_allows_ok_value(self) -> None:
         class SmallInt(ConstrainedIntegerType):
             constraint_spec: ClassVar[ConstraintSpec] = ValueRange(0, 100)
             exception_spec = None
 
-        ber_int = BERIntegerType(50)
+        int = IntegerType(50)
         buf = ByteBuffer.allocate(100)
-        if isinstance(ber_int.put(buf), Error):
+        if isinstance(int.put(buf), Error):
             self.fail("put Error")
         encoded = bytes(buf)
 
@@ -226,54 +226,54 @@ class TestConstrainedIntegerType(unittest.TestCase):
     """Tests for ConstrainedIntegerType: constraint validation in __init__,
     signed/fixed_length derivation via _init_subclass."""
 
-    def test_valid_value(self):
+    def test_valid_value(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         obj = T(42)
         self.assertEqual(obj.value, 42)
 
-    def test_invalid_value_below(self):
+    def test_invalid_value_below(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         with self.assertRaises(ConstraintError):
             T(-1)
 
-    def test_invalid_value_above(self):
+    def test_invalid_value_above(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         with self.assertRaises(ConstraintError):
             T(256)
 
-    def test_boundary_lower(self):
+    def test_boundary_lower(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         obj = T(0)
         self.assertEqual(obj.value, 0)
 
-    def test_boundary_upper(self):
+    def test_boundary_upper(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         obj = T(255)
         self.assertEqual(obj.value, 255)
 
-    def test_unsigned_when_lower_non_negative(self):
+    def test_unsigned_when_lower_non_negative(self) -> None:
         T = make_constrained_integer("_U16", ValueRange(0, 65535))
         self.assertEqual(T.signed, False)
         self.assertIsNotNone(T.fixed_length)
 
-    def test_fixed_length_derivation(self):
+    def test_fixed_length_derivation(self) -> None:
         """Range 0..255 → 8 bits → 1 octet fixed_length"""
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         self.assertEqual(T.fixed_length, 1)
 
-    def test_fixed_length_wide_range(self):
+    def test_fixed_length_wide_range(self) -> None:
         """Range 0..65535 → 16 bits → 2 octets"""
         T = make_constrained_integer("_U16", ValueRange(0, 65535))
         self.assertEqual(T.fixed_length, 2)
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
         obj = T(42)
         r = repr(obj)
         self.assertIn("_U8", r)
         self.assertIn("42", r)
 
-    def test_str_uses_named_numbers(self):
+    def test_str_uses_named_numbers(self) -> None:
         """If named_numbers is defined, str() returns identifier."""
         class Result(make_constrained_integer("_R", ValueRange(0, 1))):
             named_numbers = NamedNumberList((
@@ -295,7 +295,7 @@ class TestConstrainedIntegerType(unittest.TestCase):
 
 
 class TestConstrainedBitStringType(unittest.TestCase):
-    def test_valid_exact_size(self):
+    def test_valid_exact_size(self) -> None:
         class BS8(ConstrainedBitStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(8)
             exception_spec = None
@@ -303,7 +303,7 @@ class TestConstrainedBitStringType(unittest.TestCase):
         obj = BS8((1, 0, 1, 0, 1, 0, 1, 0))
         self.assertEqual(len(obj.value), 8)
 
-    def test_invalid_size(self):
+    def test_invalid_size(self) -> None:
         class BS8(ConstrainedBitStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(8)
             exception_spec = None
@@ -311,7 +311,7 @@ class TestConstrainedBitStringType(unittest.TestCase):
         with self.assertRaises(ConstraintError):
             BS8((1, 0, 1))
 
-    def test_fixed_length_set(self):
+    def test_fixed_length_set(self) -> None:
         class BS8(ConstrainedBitStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(8)
             exception_spec = None
@@ -325,7 +325,7 @@ class TestConstrainedBitStringType(unittest.TestCase):
 
 
 class TestConstrainedSequenceOfType(unittest.TestCase):
-    def test_valid_exact_count(self):
+    def test_valid_exact_count(self) -> None:
         class SO3(ConstrainedSequenceOfType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(3)
             exception_spec = None
@@ -338,7 +338,7 @@ class TestConstrainedSequenceOfType(unittest.TestCase):
 
         self.assertEqual(SO3.fixed_length, 3)
 
-    def test_fixed_length_set(self):
+    def test_fixed_length_set(self) -> None:
         class SO5(ConstrainedSequenceOfType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(5)
             exception_spec = None
@@ -352,7 +352,7 @@ class TestConstrainedSequenceOfType(unittest.TestCase):
 
 
 class TestConstrainedOctetString(unittest.TestCase):
-    def test_valid_exact_size(self):
+    def test_valid_exact_size(self) -> None:
         class OS4(ConstrainedOctetStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(4)
             exception_spec = None
@@ -360,7 +360,7 @@ class TestConstrainedOctetString(unittest.TestCase):
         obj = OS4(b"\x01\x02\x03\x04")
         self.assertEqual(len(obj.value), 4)
 
-    def test_invalid_size(self):
+    def test_invalid_size(self) -> None:
         class OS4(ConstrainedOctetStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(4)
             exception_spec = None
@@ -368,14 +368,14 @@ class TestConstrainedOctetString(unittest.TestCase):
         with self.assertRaises(ConstraintError):
             OS4(b"\x01\x02")
 
-    def test_fixed_length_set(self):
+    def test_fixed_length_set(self) -> None:
         class OS4(ConstrainedOctetStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(4)
             exception_spec = None
 
         self.assertEqual(OS4.fixed_length, 4)
 
-    def test_default_all_zeroes(self):
+    def test_default_all_zeroes(self) -> None:
         class OS4(ConstrainedOctetStringType):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(4)
             exception_spec = None

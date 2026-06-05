@@ -1,7 +1,7 @@
 from .tag import Tag, UniversalClassTagAssignments, Class
 from .bit_string import BitStringType, NamedBitList, NamedBit
 from .boolean_type import BooleanType
-from .enumerated_type import EnumeratedType, EnumerationList, EnumerationMember
+from .enumerated_type import EnumeratedType, EnumerationMember
 from .choice_type import ChoiceType
 from .integer_type import IntegerType, NamedNumberList, NamedNumber
 from .octet_string_type import OctetStringType
@@ -30,7 +30,6 @@ __all__ = [
     "VisibleString",
     "Utf8String",
     "EnumeratedType",
-    "EnumerationList",
     "EnumerationMember",
     "ChoiceType",
     "IntegerType",

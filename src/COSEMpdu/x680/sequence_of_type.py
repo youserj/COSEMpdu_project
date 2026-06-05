@@ -10,9 +10,9 @@ Standards:
 Note:
     - SEQUENCE OF is a BUILTIN type per X.680 §16.2
 """
-from typing import Iterator, Self
+from typing import Iterator, Self, Any
 from StructResult.result import Error, ValueOrError
-from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE
+from .type import BuiltinType, SEQUENCE_OF, Type, TYPE_VALUE, InitError
 
 
 class SequenceOfType[T: Type](BuiltinType):
@@ -22,6 +22,12 @@ class SequenceOfType[T: Type](BuiltinType):
 
     def __init__(self, value: SEQUENCE_OF[T] = []) -> None:
         self.value = value
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, list):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected ENUM"))
 
     @classmethod
     def parse[U: TYPE_VALUE](cls, value: tuple[U]) -> Self:

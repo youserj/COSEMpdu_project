@@ -3,23 +3,21 @@ COSEM PDU Types Implementation
 Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6
 """
-from typing import ClassVar, Optional, TypeAlias
+from typing import ClassVar, Final, Optional, TypeAlias, Union
 from dataclasses import dataclass
 from .data import Data, SequenceOfData, ObjectName, Unsigned16, Unsigned8, Unsigned32, Integer8
-from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .axdr import (
-    EnumeratedType, OctetStringType, SequenceType, SequenceOfType, create_alternatives,
+    EnumeratedType, OctetStringType, SequenceType, SequenceOfType,
     ChoiceType, NullType, GeneralizedTime, NullType0, ImplicitTaggedType, BooleanType
 )
-from .x680.type import NamedType
 from .types_used import (
+    TaggedData,
     CosemAttributeDescriptor,
     CosemAttributeDescriptorWithSelection,
     CosemMethodDescriptor,
     InvokeIdAndPriority,
     SelectiveAccessDescriptor,
     VariableAccessSpecification,
-    TaggedData,
     dataAccessResult,
     DataBlockResult,
     LongInvokeIdAndPriority,
@@ -150,13 +148,7 @@ class ReadResponseChoice(ChoiceType):
         block-number      [3] IMPLICIT Unsigned16
     }
     """
-    alternatives = create_alternatives(
-        NamedType("data", TaggedData),
-        NamedType("data-access-error", dataAccessResult),
-        NamedType("data-block-result", dataBlockResult),
-        NamedType("block-number", BlockNumber3),
-    )
-    value: dataBlockResult | dataAccessResult | dataBlockResult | BlockNumber3
+    value: TaggedData | dataAccessResult | dataBlockResult | BlockNumber3
 
 
 class ReadResponse(ImplicitTaggedType, SequenceOfType[ReadResponseChoice]):
@@ -188,11 +180,6 @@ class WriteResponseChoice(ChoiceType):
         block-number      [2] Unsigned16
     }
     """
-    alternatives = {
-        0: NamedType("success", NullType0),
-        1: NamedType("data-access-error", dataAccessResult),
-        2: NamedType("block-number", BlockNumber2),
-    }
     value: NullType0 | dataAccessResult | BlockNumber2
     SUCCESS: ClassVar["WriteResponseChoice"]
 
@@ -372,11 +359,7 @@ class GetRequestWithList(ImplicitTaggedType, SequenceType):
 class GetRequest(ImplicitTaggedType, ChoiceType):
     """get-request"""
     tag: ClassVar[int] = 192
-    alternatives = {
-        1: NamedType("get-request-normal", GetRequestNormal),
-        2: NamedType("get-request-next", GetRequestNext),
-        3: NamedType("get-request-with-list", GetRequestWithList),
-    }
+    value: GetRequestNormal | GetRequestNext | GetRequestWithList
 
 
 @dataclass
@@ -410,11 +393,7 @@ class GetResponseWithList(ImplicitTaggedType, SequenceType):
 class GetResponse(ImplicitTaggedType, ChoiceType):
     """get-response"""
     tag: ClassVar[int] = 196
-    alternatives = {
-        1: NamedType("get-response-normal", GetResponseNormal),
-        2: NamedType("get-response-with-datablock", GetResponseWithDatablock),
-        3: NamedType("get-response-with-list", GetResponseWithList),
-    }
+    value: GetResponseNormal | GetResponseWithDatablock | GetResponseWithList
 
 
 class SetRequestNormal(ImplicitTaggedType, SequenceType):
@@ -492,13 +471,7 @@ class SetRequestWithListAndFirstDatablock(ImplicitTaggedType, SequenceType):
 class SetRequest(ImplicitTaggedType, ChoiceType):
     """set-request"""
     tag: ClassVar[int] = 193
-    alternatives = {
-        1: NamedType("set-request-normal", SetRequestNormal),
-        2: NamedType("set-request-with-first-datablock", SetRequestWithFirstDatablock),
-        3: NamedType("set-request-with-datablock", SetRequestWithDatablock),
-        4: NamedType("set-request-with-list", SetRequestWithList),
-        5: NamedType("set-request-with-list-and-first-datablock", SetRequestWithListAndFirstDatablock),
-    }
+    value: SetRequestNormal | SetRequestWithFirstDatablock | SetRequestWithDatablock | SetRequestWithList | SetRequestWithListAndFirstDatablock
 
 
 @dataclass
@@ -550,13 +523,7 @@ class SetResponseWithList(ImplicitTaggedType, SequenceType):
 class SetResponse(ImplicitTaggedType, ChoiceType):
     """set-response [197] IMPLICIT Set-Response"""
     tag: ClassVar[int] = 197
-    alternatives = {
-        1: NamedType("set-response-normal", SetResponseNormal),
-        2: NamedType("set-response-datablock", SetResponseDatablock),
-        3: NamedType("set-response-last-datablock", SetResponseLastDatablock),
-        4: NamedType("set-response-last-datablock-with-list", SetResponseLastDatablockWithList),
-        5: NamedType("set-response-with-list", SetResponseWithList)
-    }
+    value: SetResponseNormal | SetResponseDatablock | SetResponseLastDatablock | SetResponseLastDatablockWithList | SetResponseWithList
 
 
 @dataclass
@@ -618,14 +585,7 @@ class ActionRequestWithPblock(ImplicitTaggedType, SequenceType):
 class ActionRequest(ImplicitTaggedType, ChoiceType):
     """action-request"""
     tag: ClassVar[int] = 195
-    alternatives = {
-        1: NamedType("action-request-normal", ActionRequestNormal),
-        2: NamedType("action-request-next-pblock", ActionRequestNextPblock),
-        3: NamedType("action-request-with-list", ActionRequestWithList),
-        4: NamedType("action-request-with-first-pblock", ActionRequestWithFirstPblock),
-        5: NamedType("action-request-with-list-and-first-pblock", ActionRequestWithListAndFirstPblock),
-        6: NamedType("action-request-with-pblock", ActionRequestWithPblock)
-    }
+    value: ActionRequestNormal | ActionRequestNextPblock | ActionRequestWithList | ActionRequestWithFirstPblock | ActionRequestWithListAndFirstPblock | ActionRequestWithPblock
 
 
 @dataclass
@@ -667,12 +627,7 @@ class ActionResponseNextPblock(ImplicitTaggedType, SequenceType):
 class ActionResponse(ImplicitTaggedType, ChoiceType):
     """action-Response"""
     tag: ClassVar[int] = 199
-    alternatives = {
-        1: NamedType("action-response-normal", ActionResponseNormal),
-        2: NamedType("action-response-with-pblock", ActionResponseWithPblock),
-        3: NamedType("action-response-with-list", ActionResponseWithList),
-        4: NamedType("action-response-next-pblock", ActionResponseNextPblock)
-    }
+    value: ActionResponseNormal | ActionResponseWithPblock | ActionResponseWithList | ActionResponseNextPblock
 
 
 class EventNotificationRequest(ImplicitTaggedType, SequenceType):
@@ -760,17 +715,11 @@ class DedActionResponse(ImplicitTaggedType, OctetStringType):
     tag: ClassVar[int] = 215
 
 
-class StateErrorList(EnumerationList):
-    members = (
-        EnumerationMember("service-not-allowed", 1),
-        EnumerationMember("service-unknown", 2)
-    )
-
-
 class StateError(ImplicitTaggedType, EnumeratedType):
     """state-error [0] IMPLICIT ENUMERATED"""
     tag: ClassVar[int] = 0
-    named_members = StateErrorList()
+    SERVICE_NOT_ALLOWED: Final[int] = 1
+    SERVICE_UNKNOWN: Final[int] = 2
 
 
 class OperationNotPossible(ImplicitTaggedType, NullType):
@@ -806,14 +755,7 @@ class InvocationCounterError(ImplicitTaggedType, Unsigned32):
 class serviceError(ImplicitTaggedType, ChoiceType):
     """service-error"""
     tag: ClassVar[int] = 1
-    alternatives = {
-        1: NamedType("operation-not-possible", OperationNotPossible),
-        2: NamedType("service-not-supported", ServiceNotSupported),
-        3: NamedType("other-reason", OtherReason),
-        4: NamedType("pdu-too-long", PduTooLong),
-        5: NamedType("deciphering-error", DecipheringError),
-        6: NamedType("invocation-counter-error", InvocationCounterError)
-    }
+    value: OperationNotPossible | ServiceNotSupported | OtherReason | PduTooLong | DecipheringError | InvocationCounterError
 
 
 @dataclass
@@ -874,29 +816,15 @@ class GeneralGloCiphering(ImplicitTaggedType, SequenceType):
     ciphered_content: OctetStringType
 
 
-class KeyIdList(EnumerationList):
-    """KeyId enumeration members"""
-    members = (
-        EnumerationMember("global-unicast-encryption-key", 0),
-        EnumerationMember("global-broadcast-encryption-key", 1),
-    )
-
-
 class KeyId(EnumeratedType):
     """Key-Id"""
-    named_members = KeyIdList()
-
-
-class KekIdList(EnumerationList):
-    """KekId enumeration members"""
-    members = (
-        EnumerationMember("master-key", 0),
-    )
+    GLOBAL_UNICAST_ENCRYPTION_KEY: Final[int] = 0
+    GLOBAL_BROADCAST_ENCRYPTION_KEY: Final[int] = 1
 
 
 class KekId(EnumeratedType):
     """Kek-Id"""
-    named_members = KekIdList()
+    MASTER_KEY: Final[int] = 0
 
 
 @dataclass
@@ -924,11 +852,6 @@ class AgreedKey(ImplicitTaggedType, SequenceType):
 
 class KeyInfo(ChoiceType):
     """Key-Info"""
-    alternatives = {
-        0: NamedType("identified-key", IdentifiedKey),
-        1: NamedType("wrapped-key", WrappedKey),
-        2: NamedType("agreed-key", AgreedKey)
-    }
     value: IdentifiedKey | WrappedKey | AgreedKey
 
 
@@ -970,72 +893,23 @@ class GeneralBlockTransfer(ImplicitTaggedType, SequenceType):
 
 class XDLMS_APDU(ChoiceType):
     """XDLMS-APDU"""
-    alternatives = {
-        1: NamedType("initiateRequest", InitialRequest),
-        5: NamedType("readRequest", ReadRequest),
-        6: NamedType("writeRequest", WriteRequest),
-        8: NamedType("initiateResponse", InitialResponse),
-        12: NamedType("readResponse", ReadResponse),
-        13: NamedType("writeResponse", WriteResponse),
-        14: NamedType("confirmedServiceError", confirmedServiceError),
-        15: NamedType("data-notification", DataNotification),
-        16: NamedType("data-notification-confirm", DataNotificationConfirm),
-        22: NamedType("unconfirmedWriteRequest", UnconfirmedWriteRequest),
-        24: NamedType("informationReportRequest", informationReportRequest),
-        # -- with global ciphering (OCTET STRING)
-        33: NamedType("glo-initiateRequest", GloInitiateRequest),
-        37: NamedType("glo-readRequest", GloReadRequest),
-        38: NamedType("glo-writeRequest", GloWriteRequest),
-        40: NamedType("glo-initiateResponse", GloInitiateResponse),
-        44: NamedType("glo-readResponse", GloReadResponse),
-        45: NamedType("glo-writeResponse", GloWriteResponse),
-        46: NamedType("glo-confirmedServiceError", GloConfirmedServiceError),
-        54: NamedType("glo-unconfirmedWriteRequest", GloUnconfirmedWriteRequest),
-        56: NamedType("glo-informationReportRequest", GloInformationReportRequest),
-        # -- with dedicated ciphering (OCTET STRING)
-        65: NamedType("ded-initiateRequest", DedInitiateRequest),
-        69: NamedType("ded-readRequest", DedReadRequest),
-        70: NamedType("ded-writeRequest", DedWriteRequest),
-        72: NamedType("ded-initiateResponse", DedInitiateResponse),
-        76: NamedType("ded-readResponse", DedReadResponse),
-        77: NamedType("ded-writeResponse", DedWriteResponse),
-        78: NamedType("ded-confirmedServiceError", DedConfirmedServiceError),
-        86: NamedType("ded-unconfirmedWriteRequest", DedUnconfirmedWriteRequest),
-        88: NamedType("ded-informationReportRequest", DedInformationReportRequest),
-        # -- xDLMS APDUs used with LN referencing -- with no ciphering
-        192: NamedType("get-request", GetRequest),
-        193: NamedType("set-request", SetRequest),
-        194: NamedType("event-notification-request", EventNotificationRequest),
-        195: NamedType("action-request", ActionRequest),
-        196: NamedType("get-response", GetResponse),
-        197: NamedType("set-response", SetResponse),
-        199: NamedType("action-response", ActionResponse),
-        # -- with global ciphering (LN)
-        200: NamedType("glo-get-request", GloGetRequest),
-        201: NamedType("glo-set-request", GloSetRequest),
-        202: NamedType("glo-event-notification-request", GloEventNotificationRequest),
-        203: NamedType("glo-action-request", GloActionRequest),
-        204: NamedType("glo-get-response", GloGetResponse),
-        205: NamedType("glo-set-response", GloSetResponse),
-        207: NamedType("glo-action-response", GloActionResponse),
-        # -- with dedicated ciphering (LN)
-        208: NamedType("ded-get-request", DedGetRequest),
-        209: NamedType("ded-set-request", DedSetRequest),
-        210: NamedType("ded-event-notification-request", DedEventNotificationRequest),
-        211: NamedType("ded-actionRequest", DedActionRequest),
-        212: NamedType("ded-get-response", DedGetResponse),
-        213: NamedType("ded-set-response", DedSetResponse),
-        215: NamedType("ded-action-response", DedActionResponse),
-        # -- the exception response pdu
-        216: NamedType("exception-response", ExceptionResponse),
-        # -- access
-        217: NamedType("access-request", AccessRequest),
-        218: NamedType("access-response", AccessResponse),
-        # -- general APDUs
-        219: NamedType("general-glo-ciphering", GeneralGloCiphering),
-        220: NamedType("general-ded-ciphering", GeneralDedCiphering),
-        221: NamedType("general-ciphering", GeneralCiphering),
-        223: NamedType("general-signing", GeneralSigning),
-        224: NamedType("general-block-transfer", GeneralBlockTransfer),
-        # -- The tags 230 and 231 are reserved for DLMS Gateway
-    }
+    value: Union[
+        InitialRequest, ReadRequest, WriteRequest, InitialResponse,
+        ReadResponse, WriteResponse, confirmedServiceError,
+        DataNotification, DataNotificationConfirm, UnconfirmedWriteRequest,
+        informationReportRequest, GloInitiateRequest, GloReadRequest,
+        GloWriteRequest, GloInitiateResponse, GloReadResponse, GloWriteResponse,
+        GloConfirmedServiceError, GloUnconfirmedWriteRequest, GloInformationReportRequest,
+        DedInitiateRequest, DedReadRequest, DedWriteRequest,
+        DedInitiateResponse, DedReadResponse, DedWriteResponse,
+        DedConfirmedServiceError, DedUnconfirmedWriteRequest, DedInformationReportRequest,
+        GetRequest, SetRequest, EventNotificationRequest, ActionRequest,
+        GetResponse, SetResponse, ActionResponse,
+        GloGetRequest, GloSetRequest, GloEventNotificationRequest, GloActionRequest,
+        GloGetResponse, GloSetResponse, GloActionResponse,
+        DedGetRequest, DedSetRequest, DedEventNotificationRequest, DedActionRequest,
+        DedGetResponse, DedSetResponse, DedActionResponse,
+        ExceptionResponse, AccessRequest, AccessResponse,
+        GeneralGloCiphering, GeneralDedCiphering, GeneralCiphering,
+        GeneralSigning, GeneralBlockTransfer,
+    ]

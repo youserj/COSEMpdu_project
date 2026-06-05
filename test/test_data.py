@@ -14,7 +14,6 @@ from src.COSEMpdu.x680.type import CHOICE
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x680.constrained_type import ConstraintError
 from src.COSEMpdu.data import (
-    union2alternatives,
     # TypeDescription types
     NamedType,
     ExternallyData,
@@ -101,14 +100,14 @@ class TestTypeDescriptionArray(unittest.TestCase):
         # array: SEQUENCE { number-of-elements Unsigned16, type-description TypeDescription }
         original = TypeDescription(TypeDescriptionArray(
             Unsigned16(5),
-            TypeDescription(TypeDescriptionInteger(axdr.NullType(None)))
+            TypeDescription(TypeDescriptionInteger(None))
         ))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
         if isinstance(decoded := TypeDescription.get(buf), Error):
             self.fail("Error")
-        self.assertEqual(decoded.selected, "array")
+        self.assertIsInstance(decoded.value, TypeDescriptionArray)
         self.assertEqual(decoded.value.number_of_elements.value, 5)
 
 
@@ -119,7 +118,7 @@ class TestTypeDescriptionStructure(unittest.TestCase):
         """Test structure encoding/decoding"""
         # structure: SEQUENCE OF TypeDescription
         elements = SequenceOfData([
-            TypeDescription(TypeDescriptionInteger(axdr.NullType(None))),
+            TypeDescription(TypeDescriptionInteger(None)),
             TypeDescription(TypeDescriptionBoolean(None)),
         ])
         original = TypeDescription(TypeDescriptionStructure(elements))
@@ -127,7 +126,7 @@ class TestTypeDescriptionStructure(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, TypeDescriptionStructure)
         self.assertEqual(len(decoded.value.value), 2)
 
 
@@ -136,12 +135,12 @@ class TestTypeDescriptionBoolean(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test boolean encoding/decoding"""
-        original = TypeDescription(TypeDescriptionBoolean(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionBoolean(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "boolean")
+        self.assertIsInstance(decoded.value, TypeDescriptionBoolean)
 
 
 class TestTypeDescriptionOctetString(unittest.TestCase):
@@ -149,12 +148,12 @@ class TestTypeDescriptionOctetString(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test octet-string encoding/decoding"""
-        original = TypeDescription(TypeDescriptionOctetString(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionOctetString(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "octet-string")
+        self.assertIsInstance(decoded.value, TypeDescriptionOctetString)
 
 
 class TestTypeDescriptionInteger(unittest.TestCase):
@@ -162,12 +161,12 @@ class TestTypeDescriptionInteger(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test integer encoding/decoding"""
-        original = TypeDescription(TypeDescriptionInteger(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionInteger(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "integer")
+        self.assertIsInstance(decoded.value, TypeDescriptionInteger)
 
 
 class TestTypeDescriptionUnsigned(unittest.TestCase):
@@ -175,12 +174,12 @@ class TestTypeDescriptionUnsigned(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test unsigned encoding/decoding"""
-        original = TypeDescription(TypeDescriptionUnsigned(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionUnsigned(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "unsigned")
+        self.assertIsInstance(decoded.value, TypeDescriptionUnsigned)
 
 
 class TestTypeDescriptionFloat32(unittest.TestCase):
@@ -188,12 +187,12 @@ class TestTypeDescriptionFloat32(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test float32 encoding/decoding"""
-        original = TypeDescription(TypeDescriptionFloat32(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionFloat32(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "float32")
+        self.assertIsInstance(decoded.value, TypeDescriptionFloat32)
 
 
 class TestTypeDescriptionDateTime(unittest.TestCase):
@@ -201,12 +200,12 @@ class TestTypeDescriptionDateTime(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test date-time encoding/decoding"""
-        original = TypeDescription(TypeDescriptionDateTime(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionDateTime(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "date-time")
+        self.assertIsInstance(decoded.value, TypeDescriptionDateTime)
 
 
 class TestTypeDescriptionDontCare(unittest.TestCase):
@@ -214,12 +213,12 @@ class TestTypeDescriptionDontCare(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test dont-care encoding/decoding"""
-        original = TypeDescription(TypeDescriptionDontCare(axdr.NullType(None)))
+        original = TypeDescription(TypeDescriptionDontCare(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = TypeDescription.get(buf)
-        self.assertEqual(decoded.selected, "dont-care")
+        self.assertIsInstance(decoded.value, TypeDescriptionDontCare)
         self.assertEqual(TypeDescriptionDontCare.tag, 255)
 
 
@@ -228,12 +227,11 @@ class TestDataNullData(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test null-data encoding/decoding"""
-        original = Data(NullData(axdr.NullType(None)))
+        original = Data(NullData(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "null-data")
         self.assertIsInstance(decoded.value, NullData)
 
     def test_tag_number(self) -> None:
@@ -251,7 +249,7 @@ class TestDataBoolean(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "boolean")
+        self.assertIsInstance(decoded.value, Boolean)
         self.assertTrue(decoded.value.value)
 
     def test_encode_decode_false(self) -> None:
@@ -261,7 +259,7 @@ class TestDataBoolean(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "boolean")
+        self.assertIsInstance(decoded.value, Boolean)
         self.assertFalse(decoded.value.value)
 
 
@@ -276,7 +274,7 @@ class TestDataInteger(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "integer")
+        self.assertIsInstance(decoded.value, Integer)
         self.assertEqual(decoded.value.value, 127)
 
     def test_encode_decode_negative(self) -> None:
@@ -286,7 +284,7 @@ class TestDataInteger(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "integer")
+        self.assertIsInstance(decoded.value, Integer)
         self.assertEqual(decoded.value.value, -128)
 
     def test_encode_decode_zero(self) -> None:
@@ -296,7 +294,7 @@ class TestDataInteger(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "integer")
+        self.assertIsInstance(decoded.value, Integer)
         self.assertEqual(decoded.value.value, 0)
 
 
@@ -310,7 +308,7 @@ class TestDataUnsigned(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "unsigned")
+        self.assertIsInstance(decoded.value, Unsigned)
         self.assertEqual(decoded.value.value, 255)
 
 
@@ -324,7 +322,7 @@ class TestDataLong(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "long")
+        self.assertIsInstance(decoded.value, Long)
         self.assertEqual(decoded.value.value, 32767)
 
 
@@ -338,7 +336,7 @@ class TestDataLongUnsigned(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "long-unsigned")
+        self.assertIsInstance(decoded.value, LongUnsigned)
         self.assertEqual(decoded.value.value, 65535)
 
 
@@ -352,7 +350,7 @@ class TestDataDoubleLong(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "double-long")
+        self.assertIsInstance(decoded.value, DoubleLong)
         self.assertEqual(decoded.value.value, 2147483647)
 
 
@@ -366,7 +364,7 @@ class TestDataDoubleLongUnsigned(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "double-long-unsigned")
+        self.assertIsInstance(decoded.value, DoubleLongUnsigned)
         self.assertEqual(decoded.value.value, 4294967295)
 
 
@@ -380,7 +378,7 @@ class TestDataLong64(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "long64")
+        self.assertIsInstance(decoded.value, Long64)
         self.assertEqual(decoded.value.value, 9223372036854775807)
 
 
@@ -394,7 +392,7 @@ class TestDataLong64Unsigned(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "long64-unsigned")
+        self.assertIsInstance(decoded.value, Long64Unsigned)
         self.assertEqual(decoded.value.value, 18446744073709551615)
 
 
@@ -408,7 +406,7 @@ class TestDataOctetString(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "octet-string")
+        self.assertIsInstance(decoded.value, OctetString)
         self.assertEqual(decoded.value.value, b"")
 
     def test_encode_decode_data(self) -> None:
@@ -418,7 +416,7 @@ class TestDataOctetString(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "octet-string")
+        self.assertIsInstance(decoded.value, OctetString)
         self.assertEqual(decoded.value.value, b"\x00\x01\x02\x03")
 
 
@@ -432,7 +430,7 @@ class TestDataVisibleString(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "visible-string")
+        self.assertIsInstance(decoded.value, VisibleString)
         self.assertEqual(decoded.value.value, "Hello")
 
 
@@ -447,7 +445,7 @@ class TestDataUtf8String(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "utf8-string")
+        self.assertIsInstance(decoded.value, Utf8String)
         self.assertEqual(decoded.value.value, "Привет")
 
 
@@ -462,7 +460,7 @@ class TestDataBitString(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "bit-string")
+        self.assertIsInstance(decoded.value, BitString)
         self.assertEqual(decoded.value.value, bits)
 
 
@@ -483,7 +481,7 @@ class TestDataEnum(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "enum")
+        self.assertIsInstance(decoded.value, Enum)
         self.assertEqual(decoded.normalize(), CHOICE(22, 42))
 
 
@@ -498,7 +496,7 @@ class TestDataFloat32(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "float32")
+        self.assertIsInstance(decoded.value, Float32)
         self.assertEqual(len(decoded.value.value), 4)
 
 
@@ -513,7 +511,7 @@ class TestDataFloat64(unittest.TestCase):
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertEqual(float(original.value), float(decoded.value))
-        self.assertEqual(decoded.selected, "float64")
+        self.assertIsInstance(decoded.value, Float64)
         self.assertEqual(len(decoded.value.value), 8)
 
 
@@ -529,7 +527,7 @@ class TestDataDateTime(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "date-time")
+        self.assertIsInstance(decoded.value, DateTime)
         self.assertEqual(len(decoded.value.value), 12)
 
     def test_encode_decode_invalid_length(self) -> None:
@@ -550,7 +548,7 @@ class TestDataDate(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "date")
+        self.assertIsInstance(decoded.value, Date)
         self.assertEqual(len(decoded.value.value), 5)
 
     def test_encode_decode_invalid_length(self) -> None:
@@ -572,7 +570,7 @@ class TestDataTime(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "time")
+        self.assertIsInstance(decoded.value, Time)
         self.assertEqual(len(decoded.value.value), 4)
 
     def test_encode_decode_invalid_length(self) -> None:
@@ -591,7 +589,7 @@ class TestDataArray(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "array")
+        self.assertIsInstance(decoded.value, Array)
         self.assertEqual(len(decoded.value.value), 0)
 
     def test_encode_decode_with_elements(self) -> None:
@@ -602,7 +600,7 @@ class TestDataArray(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "array")
+        self.assertIsInstance(decoded.value, Array)
         self.assertEqual(len(decoded.value.value), 3)
         self.assertEqual(decoded.value.value[0].value.value, 1)
         self.assertEqual(decoded.value.value[1].value.value, 2)
@@ -619,7 +617,7 @@ class TestDataStructure(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, Structure)
         self.assertEqual(len(decoded.value.components), 0)
 
     def test_encode_decode_with_elements(self) -> None:
@@ -632,7 +630,7 @@ class TestDataStructure(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, Structure)
         self.assertEqual(len(decoded.value.components), 3)
 
 
@@ -643,7 +641,7 @@ class TestDataCompactArray(unittest.TestCase):
         """Test compact-array encoding/decoding"""
         # compact-array: SEQUENCE { contents-description TypeDescription, array-contents OCTET STRING }
         original = Data(CompactArray(
-            contents_description=(TypeDescription(TypeDescriptionInteger(None))),
+            contents_description=ContentsDescription(TypeDescriptionInteger(None)),
             array_contents=ArrayContents(b"\x00\x01\x02\x03")
         ))
         z = original.value.get_array()
@@ -653,8 +651,8 @@ class TestDataCompactArray(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "compact-array")
-        self.assertEqual(decoded.value.contents_description.selected, "integer")
+        self.assertIsInstance(decoded.value, CompactArray)
+        self.assertIsInstance(decoded.value.contents_description.value, TypeDescriptionInteger)
         self.assertEqual(decoded.value.array_contents.value, b"\x00\x01\x02\x03")
 
 
@@ -663,13 +661,12 @@ class TestDataDontCare(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test dont-care encoding/decoding"""
-        original = Data(DontCare(axdr.NullType(None)))
+        original = Data(DontCare(None))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "dont-care")
-        self.assertEqual(DontCare.tag, 255)
+        self.assertIsInstance(decoded.value, DontCare)
 
 
 class TestDataBcd(unittest.TestCase):
@@ -682,7 +679,7 @@ class TestDataBcd(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "bcd")
+        self.assertIsInstance(decoded.value, Bcd)
         self.assertEqual(decoded.value.value, 99)
 
 
@@ -702,85 +699,85 @@ class TestDataConvenienceConstructors(unittest.TestCase):
     def test_null_data_constructor(self) -> None:
         """Test null_data() constructor"""
         data = Data(NullData())
-        self.assertEqual(data.selected, "null-data")
+        self.assertIsInstance(data.value, NullData)
 
     def test_boolean_constructor(self) -> None:
         """Test boolean() constructor"""
         data = Data(Boolean(True))
-        self.assertEqual(data.selected, "boolean")
+        self.assertIsInstance(data.value, Boolean)
         self.assertTrue(data.value.value)
 
     def test_integer_constructor(self) -> None:
         """Test integer() constructor"""
         data = Data(Integer(42))
-        self.assertEqual(data.selected, "integer")
+        self.assertIsInstance(data.value, Integer)
         self.assertEqual(data.value.value, 42)
 
     def test_unsigned_constructor(self) -> None:
         """Test unsigned() constructor"""
         data = Data(Unsigned(255))
-        self.assertEqual(data.selected, "unsigned")
+        self.assertIsInstance(data.value, Unsigned)
         self.assertEqual(data.value.value, 255)
 
     def test_octet_string_constructor(self) -> None:
         """Test octet_string() constructor"""
         data = Data(OctetString(b"\xDE\xAD\xBE\xEF"))
-        self.assertEqual(data.selected, "octet-string")
+        self.assertIsInstance(data.value, OctetString)
         self.assertEqual(data.value.value, b"\xDE\xAD\xBE\xEF")
 
     def test_visible_string_constructor(self) -> None:
         """Test visible_string() constructor"""
         data = Data(VisibleString(b"Hello"))
-        self.assertEqual(data.selected, "visible-string")
+        self.assertIsInstance(data.value, VisibleString)
         self.assertEqual(data.value.value, b"Hello")
 
     def test_array_constructor(self) -> None:
         """Test array() constructor"""
         elements = [Data(Integer(1)), Data(Integer(2))]
         data = Data(Array(elements))
-        self.assertEqual(data.selected, "array")
+        self.assertIsInstance(data.value, Array)
         self.assertEqual(len(data.value.value), 2)
 
     def test_structure_constructor(self) -> None:
         """Test structure() constructor"""
         data = Data(Structure.from_data(Data(Integer(1)), Data(Boolean(True))))
-        self.assertEqual(data.selected, "structure")
+        self.assertIsInstance(data.value, Structure)
         self.assertEqual(len(data.value.components), 2)
 
     def test_float32_constructor(self) -> None:
         """Test float32() constructor"""
         data = Data(Float32.from_float(4.0))
-        self.assertEqual(data.selected, "float32")
+        self.assertIsInstance(data.value, Float32)
         self.assertEqual(len(data.value.value), 4)
 
     def test_float64_constructor(self) -> None:
         """Test float64() constructor"""
         data = Data(Float64.from_float(8.0))
-        self.assertEqual(data.selected, "float64")
+        self.assertIsInstance(data.value, Float64)
         self.assertEqual(len(data.value.value), 8)
 
     def test_date_time_constructor(self) -> None:
         """Test date_time() constructor"""
         data = Data(DateTime(OctetStringType(b"\x07\xE4\x01\x01\x0C\x00\x00\x00\xFF\x88\x00\x00")))
-        self.assertEqual(data.selected, "date-time")
+        self.assertIsInstance(data.value, DateTime)
         self.assertEqual(len(data.value.value.value), 12)
 
     def test_date_constructor(self) -> None:
         """Test date() constructor"""
         data = Data(Date(OctetStringType(b"\x07\xE4\x01\x01\xFF")))
-        self.assertEqual(data.selected, "date")
+        self.assertIsInstance(data.value, Date)
         self.assertEqual(len(data.value.value.value), 5)
 
     def test_time_constructor(self) -> None:
         """Test time() constructor"""
         data = Data(Time(OctetStringType(b"\x0C\x00\x00\x00")))
-        self.assertEqual(data.selected, "time")
+        self.assertIsInstance(data.value, Time)
         self.assertEqual(len(data.value.value.value), 4)
 
     def test_dont_care_constructor(self) -> None:
         """Test dont_care() constructor"""
         data = Data(DontCare())
-        self.assertEqual(data.selected, "dont-care")
+        self.assertIsInstance(data.value, DontCare)
 
 
 class TestDataRoundTrip(unittest.TestCase):
@@ -817,7 +814,7 @@ class TestDataRoundTrip(unittest.TestCase):
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = Data.get(buf)
-                self.assertEqual(decoded.selected, original.selected)
+                self.assertEqual(decoded.value, original.value)
 
 
 class TestTypeDescriptionRoundTrip(unittest.TestCase):
@@ -826,30 +823,30 @@ class TestTypeDescriptionRoundTrip(unittest.TestCase):
     def test_round_trip_all_types(self) -> None:
         """Test round-trip for all TypeDescription types"""
         test_cases = [
-            ("null-data", TypeDescription(NullData(None))),
-            ("boolean", TypeDescription(TypeDescriptionBoolean(axdr.NullType(None)))),
-            ("integer", TypeDescription(TypeDescriptionInteger(axdr.NullType(None)))),
-            ("unsigned", TypeDescription(TypeDescriptionUnsigned(axdr.NullType(None)))),
-            ("long", TypeDescription(TypeDescriptionLong(axdr.NullType(None)))),
-            ("long-unsigned", TypeDescription(TypeDescriptionLongUnsigned(axdr.NullType(None)))),
-            ("octet-string", TypeDescription(TypeDescriptionOctetString(axdr.NullType(None)))),
-            ("visible-string", TypeDescription(TypeDescriptionVisibleString(axdr.NullType(None)))),
-            ("enum", TypeDescription(TypeDescriptionEnum(axdr.NullType(None)))),
-            ("float32", TypeDescription(TypeDescriptionFloat32(axdr.NullType(None)))),
-            ("float64", TypeDescription(TypeDescriptionFloat64(axdr.NullType(None)))),
-            ("date-time", TypeDescription(TypeDescriptionDateTime(axdr.NullType(None)))),
-            ("date", TypeDescription(TypeDescriptionDate(axdr.NullType(None)))),
-            ("time", TypeDescription(TypeDescriptionTime(axdr.NullType(None)))),
-            ("dont-care", TypeDescription(TypeDescriptionDontCare(axdr.NullType(None)))),
+            (NullData, TypeDescription(NullData(None))),
+            (TypeDescriptionBoolean, TypeDescription(TypeDescriptionBoolean(None))),
+            (TypeDescriptionInteger, TypeDescription(TypeDescriptionInteger(None))),
+            (TypeDescriptionUnsigned, TypeDescription(TypeDescriptionUnsigned(None))),
+            (TypeDescriptionLong, TypeDescription(TypeDescriptionLong(None))),
+            (TypeDescriptionLongUnsigned, TypeDescription(TypeDescriptionLongUnsigned(None))),
+            (TypeDescriptionOctetString, TypeDescription(TypeDescriptionOctetString(None))),
+            (TypeDescriptionVisibleString, TypeDescription(TypeDescriptionVisibleString(None))),
+            (TypeDescriptionEnum, TypeDescription(TypeDescriptionEnum(None))),
+            (TypeDescriptionFloat32, TypeDescription(TypeDescriptionFloat32(None))),
+            (TypeDescriptionFloat64, TypeDescription(TypeDescriptionFloat64(None))),
+            (TypeDescriptionDateTime, TypeDescription(TypeDescriptionDateTime(None))),
+            (TypeDescriptionDate, TypeDescription(TypeDescriptionDate(None))),
+            (TypeDescriptionTime, TypeDescription(TypeDescriptionTime(None))),
+            (TypeDescriptionDontCare, TypeDescription(TypeDescriptionDontCare(None))),
         ]
 
-        for name, original in test_cases:
-            with self.subTest(name=name):
+        for expected_class, original in test_cases:
+            with self.subTest(expected_class=expected_class.__name__):
                 buf = ByteBuffer.allocate(100)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = TypeDescription.get(buf)
-                self.assertEqual(decoded.selected, original.selected)
+                self.assertIsInstance(decoded.value, expected_class)
 
 
 class TestDataNestedStructures(unittest.TestCase):
@@ -863,7 +860,7 @@ class TestDataNestedStructures(unittest.TestCase):
         outer_array.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "array")
+        self.assertIsInstance(decoded.value, Array)
         self.assertEqual(len(decoded.value.value), 2)
 
     def test_nested_structure(self) -> None:
@@ -874,7 +871,7 @@ class TestDataNestedStructures(unittest.TestCase):
         outer_struct.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, Structure)
         self.assertEqual(len(decoded.value.components), 2)
 
     def test_mixed_nested(self) -> None:
@@ -887,7 +884,7 @@ class TestDataNestedStructures(unittest.TestCase):
         mixed.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, Structure)
         self.assertEqual(len(decoded.value.components), 2)
 
 
@@ -907,7 +904,7 @@ class TestDataEdgeCases(unittest.TestCase):
         data.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "structure")
+        self.assertIsInstance(decoded.value, Structure)
         self.assertEqual(len(decoded.value.components), 0)
 
     def test_empty_array(self) -> None:
@@ -917,7 +914,7 @@ class TestDataEdgeCases(unittest.TestCase):
         data.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
-        self.assertEqual(decoded.selected, "array")
+        self.assertIsInstance(decoded.value, Array)
         self.assertEqual(len(decoded.value.value), 0)
 
     def test_maximum_integer_values(self) -> None:
@@ -965,10 +962,8 @@ class TestDataOctetImplicit(unittest.TestCase):
     def test_octetObj(self) -> None:
         from .test_axdr import OctetStringObjectIdentifierType
 
-        IdentifierDataType: TypeAlias = OctetStringObjectIdentifierType | Unsigned
-
         class IdentifierData(axdr.ChoiceType):
-            alternatives = union2alternatives(IdentifierDataType)
+            value: OctetStringObjectIdentifierType | Unsigned
 
         buf = ByteBuffer.allocate(20)
         iddata = IdentifierData.parse(CHOICE(9, (2, 16, 0x2f4, 5, 8, 1, 1)))
@@ -990,10 +985,7 @@ class TestSelector(Enum):
 
 class TestExternallyData(ExternallyData):
     """Controlled subset of alternatives to simplify testing"""
-    alternatives = {
-        0: NamedType("null-data", NullData),
-        3: NamedType("boolean", Boolean),
-    }
+    value: NullData | Boolean
 
 
 @dataclass
@@ -1021,22 +1013,12 @@ class TestExternallyData_(unittest.TestCase):
     def test_selected_property_returns_correct_identifier(self) -> None:
         """selected property should dynamically match the wrapped type's tag."""
         # Test with NullData (tag 0)
-        obj_null = TestExternallyData(NullData(axdr.NullType(None)))
-        self.assertEqual(obj_null.selected, "null-data")
+        obj_null = TestExternallyData(NullData(None))
+        self.assertIsInstance(obj_null.value, NullData)
 
         # Test with Boolean (tag 3)
         obj_bool = TestExternallyData(Boolean(True))
-        self.assertEqual(obj_bool.selected, "boolean")
-
-    def test_selected_raises_on_unknown_type(self) -> None:
-        """selected should raise ValueError if value type is not in alternatives."""
-        # Integer (tag 15) is NOT in TestExternallyData.alternatives
-        obj_unknown = TestExternallyData(Integer(42))
-
-        with self.assertRaises(ValueError) as ctx:
-            _ = obj_unknown.selected
-        self.assertIn("not in alternatives", str(ctx.exception))
-        self.assertIn("null-data, boolean", str(ctx.exception))
+        self.assertIsInstance(obj_bool.value, Boolean)
 
 
 class TestDiscriminatedUnion_(unittest.TestCase):
@@ -1101,12 +1083,8 @@ class TestDiscriminatedUnion_(unittest.TestCase):
         decoded = TestDiscriminatedUnion.get(buf)
         self.assertFalse(isinstance(decoded, Error))
         self.assertEqual(decoded.selector.value, 3)
-        self.assertEqual(decoded.payload.selected, "boolean")
+        self.assertIsInstance(decoded.payload.value, Boolean)
         self.assertFalse(decoded.payload.value.value)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 if __name__ == "__main__":

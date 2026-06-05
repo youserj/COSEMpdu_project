@@ -8,9 +8,9 @@ Standards:
 - X.690 §8.19: OBJECT IDENTIFIER encoding rules (handled in x690)
 - X.680 Table 1: UNIVERSAL tag 6
 """
-from typing import Self
+from typing import Self, Any
 from StructResult.result import Error, ValueOrError
-from .type import OBJECT_IDENTIFIER, BuiltinType, Simple
+from .type import OBJECT_IDENTIFIER, BuiltinType, Simple, InitError
 
 
 class ObjectIdentifierType(Simple[OBJECT_IDENTIFIER], BuiltinType):
@@ -64,6 +64,12 @@ class ObjectIdentifierType(Simple[OBJECT_IDENTIFIER], BuiltinType):
             if arc < 0:
                 raise ValueError(f"Arc {i} must be non-negative, got {arc}")
         self.value = value
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, tuple):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected OBJECT IDENTIFIER"))
 
     @classmethod
     def default(cls) -> Self:

@@ -131,7 +131,7 @@
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "justMyCode": true,
+      "justMyCode": false,
       "env": {
             "PYTHONPATH": "${workspaceFolder}/src"
       }

@@ -6,16 +6,9 @@ Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COS
 from dataclasses import dataclass
 from typing import ClassVar, Optional
 from . import x690
-from .x680 import (
-    NamedType,
-    NamedBitList,
-    NamedBit,
-    NamedNumberList,
-    NamedNumber
-)
+from .x680 import NamedBitList, NamedBit, NamedNumberList, NamedNumber
 from .x680.tag import Class
-from .ber import create_alternatives, ImplicitTaggedType, GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, \
-    ChoiceType, ObjectIdentifierType
+from .ber import ImplicitTaggedType, GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, ChoiceType, ObjectIdentifierType
 
 
 class ApplicationContextName(ExplicitTaggedType, ObjectIdentifierType):
@@ -60,10 +53,6 @@ class BitString(ImplicitTaggedType, BitStringType):
 
 class AuthenticationValue(ChoiceType):
     """Authentication-value"""
-    alternatives = create_alternatives(
-        NamedType("charstring", Charstring),
-        NamedType("bitstring", BitString)
-    )
     value: Charstring | BitString
 
 
@@ -122,10 +111,7 @@ class ACSEServiceProvider(ExplicitTaggedType, IntegerType):
 class ResultSourceDiagnostic(ExplicitTaggedType, ChoiceType):
     """result-source-diagnostic [3] Associate-source-diagnostic"""
     tag2: ClassVar[x690.Tag] = x690.Tag(3, Class.CONTEXT_SPECIFIC, True)
-    alternatives = create_alternatives(
-        NamedType("acse-service-user", ACSEServiceUser),
-        NamedType("acse-service-provider", ACSEServiceProvider)
-    )
+    value: ACSEServiceUser | ACSEServiceProvider
 
 
 class RequestReason(ImplicitTaggedType, IntegerType):
@@ -369,9 +355,4 @@ class RLREapdu(ImplicitTaggedType, SequenceType):
 
 class ACSEApdu(ChoiceType):
     """ACSE-APDU"""
-    alternatives = create_alternatives(
-        NamedType("aarq", AARQapdu),
-        NamedType("aare", AAREapdu),
-        NamedType("rlrq", RLRQapdu),
-        NamedType("rlre", RLREapdu)
-    )
+    value: AARQapdu | AAREapdu | RLRQapdu | RLREapdu

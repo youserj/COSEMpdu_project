@@ -1,298 +1,217 @@
-from typing import ClassVar
-from .x680.enumerated_type import EnumerationList, EnumerationMember
-from .x680.type import NamedType
-from .axdr import create_alternatives, ImplicitTaggedType, EnumeratedType
+from typing import ClassVar, Final, Union
+from .axdr import ImplicitTaggedType, EnumeratedType
 from . import axdr
-
-
-class ApplicationReferenceList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("time-elapsed", 1),
-        EnumerationMember("application-unreachable", 2),
-        EnumerationMember("application-reference-invalid", 3),
-        EnumerationMember("application-context-unsupported", 4),
-        EnumerationMember("provider-communication-error", 5),
-        EnumerationMember("deciphering-error", 6)
-    )
 
 
 class ApplicationReference(ImplicitTaggedType, EnumeratedType):
     """application-reference [0] IMPLICIT ENUMERATED"""
     tag: ClassVar[int] = 0
-    named_members = ApplicationReferenceList()
-
-
-class HardwareResourceList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("memory-unavailable", 1),
-        EnumerationMember("processor-resource-unavailable", 2),
-        EnumerationMember("mass-storage-unavailable", 3),
-        EnumerationMember("other-resource-unavailable", 4)
-    )
+    OTHER: Final[int] = 0
+    TIME_ELAPSED: Final[int] = 1
+    APPLICATION_UNREACHABLE: Final[int] = 2
+    APPLICATION_REFERENCE_INVALID: Final[int] = 3
+    APPLICATION_CONTEXT_UNSUPPORTED: Final[int] = 4
+    PROVIDER_COMMUNICATION_ERROR: Final[int] = 5
+    DECIPHERING_ERROR: Final[int] = 6
 
 
 class HardwareResource(ImplicitTaggedType, EnumeratedType):
     """hardware-resource [1] IMPLICIT ENUMERATED"""
     tag: ClassVar[int] = 1
-    named_members = HardwareResourceList()
-
-
-class VDEStateErrorList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("no-dlms-context", 1),
-        EnumerationMember("loading-data-set", 2),
-        EnumerationMember("status-nochange", 3),
-        EnumerationMember("status-inoperable", 4)
-    )
+    OTHER: Final[int] = 0
+    MEMORY_UNAVAILABLE: Final[int] = 1
+    PROCESSOR_RESOURCE_UNAVAILABLE: Final[int] = 2
+    MASS_STORAGE_UNAVAILABLE: Final[int] = 3
+    OTHER_RESOURCE_UNAVAILABLE: Final[int] = 4
 
 
 class VDEStateError(ImplicitTaggedType, EnumeratedType):
     """vde-state-error [2] IMPLICIT ENUMERATED"""
     tag: ClassVar[int] = 2
-    named_members = VDEStateErrorList()
-
-
-class ServiceList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("pdu-size", 1),
-        EnumerationMember("service-unsupported", 2)
-    )
+    OTHER: Final[int] = 0
+    NO_DLMS_CONTEXT: Final[int] = 1
+    LOADING_DATA_SET: Final[int] = 2
+    STATUS_NOCHANGE: Final[int] = 3
+    STATUS_INOPERABLE: Final[int] = 4
 
 
 class Service(ImplicitTaggedType, EnumeratedType):
     """service [3] IMPLICIT ENUMERATED"""
     tag: ClassVar[int] = 3
-    named_members = ServiceList()
-
-
-class DefinitionList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("object-undefined", 1),
-        EnumerationMember("object-class-inconsistent", 2),
-        EnumerationMember("object-attribute-inconsistent", 3)
-    )
+    OTHER: Final[int] = 0
+    PDU_SIZE: Final[int] = 1
+    SERVICE_UNSUPPORTED: Final[int] = 2
 
 
 class Definition(ImplicitTaggedType, EnumeratedType):
     """definition [4] IMPLICIT ENUMERATED"""
-    tag = 4
-    named_members = DefinitionList()
-
-
-class AccessList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("scope-of-access-violated", 1),
-        EnumerationMember("object-access-violated", 2),
-        EnumerationMember("hardware-fault", 3),
-        EnumerationMember("object-unavailable", 4)
-    )
+    tag: ClassVar[int] = 4
+    OTHER: Final[int] = 0
+    OBJECT_UNDEFINED: Final[int] = 1
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 2
+    OBJECT_ATTRIBUTE_INCONSISTENT: Final[int] = 3
 
 
 class Access(ImplicitTaggedType, EnumeratedType):
     """access [5] IMPLICIT ENUMERATED"""
-    tag = 5
-    named_members = AccessList()
-
-
-class InitiateList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("dlms-version-too-low", 1),
-        EnumerationMember("incompatible-conformance", 2),
-        EnumerationMember("pdu-size-too-short", 3),
-        EnumerationMember("refused-by-the-vde-handler", 4)
-    )
+    tag: ClassVar[int] = 5
+    OTHER: Final[int] = 0
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 1
+    OBJECT_ACCESS_VIOLATED: Final[int] = 2
+    HARDWARE_FAULT: Final[int] = 3
+    OBJECT_UNAVAILABLE: Final[int] = 4
 
 
 class Initiate(ImplicitTaggedType, EnumeratedType):
     """initiate [6] IMPLICIT ENUMERATED"""
-    tag = 6
-    named_members = InitiateList()
-
-
-class LoadDataSetList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("primitive-out-of-sequence", 1),
-        EnumerationMember("not-loadable", 2),
-        EnumerationMember("dataset-size-too-large", 3),
-        EnumerationMember("not-awaited-segment", 4),
-        EnumerationMember("interpretation-failure", 5),
-        EnumerationMember("storage-failure", 6),
-        EnumerationMember("data-set-not-ready", 7)
-    )
+    tag: ClassVar[int] = 6
+    OTHER: Final[int] = 0
+    DLMS_VERSION_TOO_LOW: Final[int] = 1
+    INCOMPATIBLE_CONFORMANCE: Final[int] = 2
+    PDU_SIZE_TOO_SHORT: Final[int] = 3
+    REFUSED_BY_THE_VDE_HANDLER: Final[int] = 4
 
 
 class LoadDataSet(ImplicitTaggedType, EnumeratedType):
     """load-data-set [7] IMPLICIT ENUMERATED"""
-    tag = 7
-    named_members = LoadDataSetList()
-
-
-class TaskList(EnumerationList):
-    members = (
-        EnumerationMember("other", 0),
-        EnumerationMember("no-remote-control", 1),
-        EnumerationMember("ti-stopped", 2),
-        EnumerationMember("ti-running", 3),
-        EnumerationMember("ti-unusable", 4)
-    )
+    tag: ClassVar[int] = 7
+    OTHER: Final[int] = 0
+    PRIMITIVE_OUT_OF_SEQUENCE: Final[int] = 1
+    NOT_LOADABLE: Final[int] = 2
+    DATASET_SIZE_TOO_LARGE: Final[int] = 3
+    NOT_AWAITED_SEGMENT: Final[int] = 4
+    INTERPRETATION_FAILURE: Final[int] = 5
+    STORAGE_FAILURE: Final[int] = 6
+    DATA_SET_NOT_READY: Final[int] = 7
 
 
 class Task(ImplicitTaggedType, EnumeratedType):
     """task [9] IMPLICIT ENUMERATED"""
-    tag = 9
-    named_members = TaskList()
+    tag: ClassVar[int] = 9
+    OTHER: Final[int] = 0
+    NO_REMOTE_CONTROL: Final[int] = 1
+    TI_STOPPED: Final[int] = 2
+    TI_RUNNING: Final[int] = 3
+    TI_UNUSABLE: Final[int] = 4
 
 
 class Changescope(ImplicitTaggedType, EnumeratedType):
     """change-scope [8] IMPLICIT ENUMERATED"""
-    tag = 8
+    tag: ClassVar[int] = 8
 
 
 class Other(ImplicitTaggedType, EnumeratedType):
     """other [10] IMPLICIT ENUMERATED"""
-    tag = 10
+    tag: ClassVar[int] = 10
 
 
 class ServiceError(axdr.ChoiceType):
     """ServiceError"""
-    alternatives = create_alternatives(
-        NamedType("application-reference", ApplicationReference),
-        NamedType("hardware-resource", HardwareResource),
-        NamedType("vde-state-error", VDEStateError),
-        NamedType("service", Service),
-        NamedType("definition", Definition),
-        NamedType("access", Access),
-        NamedType("initiate", Initiate),
-        NamedType("load-data-set", LoadDataSet),
-        NamedType("change-scope", Changescope),
-        NamedType("task", Task),
-        NamedType("other", Other),
-    )
+    value: Union[
+        ApplicationReference, HardwareResource, VDEStateError, Service, Definition,
+        Access, Initiate, LoadDataSet, Changescope, Task, Other]
 
 
 class InitiateError(ImplicitTaggedType, ServiceError):
     """[1] ServiceError"""
-    tag = 1
+    tag: ClassVar[int] = 1
 
 
 class GetStatus(ImplicitTaggedType, ServiceError):
     """[2] ServiceError"""
-    tag = 2
+    tag: ClassVar[int] = 2
 
 
 class GetNameList(ImplicitTaggedType, ServiceError):
     """[3] ServiceError"""
-    tag = 3
+    tag: ClassVar[int] = 3
 
 
 class GetVariableAttribute(ImplicitTaggedType, ServiceError):
     """[4] ServiceError"""
-    tag = 4
+    tag: ClassVar[int] = 4
 
 
 class Read(ImplicitTaggedType, ServiceError):
     """[5] ServiceError"""
-    tag = 5
+    tag: ClassVar[int] = 5
 
 
 class Write(ImplicitTaggedType, ServiceError):
     """[6] ServiceError"""
-    tag = 6
+    tag: ClassVar[int] = 6
 
 
 class GetDataSetAttribute(ImplicitTaggedType, ServiceError):
     """[7] ServiceError"""
-    tag = 7
+    tag: ClassVar[int] = 7
 
 
 class GetTIAttribute(ImplicitTaggedType, ServiceError):
     """[8] ServiceError"""
-    tag = 8
+    tag: ClassVar[int] = 8
 
 
 class ChangeScope(ImplicitTaggedType, ServiceError):
     """[9] ServiceError"""
-    tag = 9
+    tag: ClassVar[int] = 9
 
 
 class Start(ImplicitTaggedType, ServiceError):
     """[10] ServiceError"""
-    tag = 10
+    tag: ClassVar[int] = 10
 
 
 class Stop(ImplicitTaggedType, ServiceError):
     """[11] ServiceError"""
-    tag = 11
+    tag: ClassVar[int] = 11
 
 
 class Resume(ImplicitTaggedType, ServiceError):
     """[12] ServiceError"""
-    tag = 12
+    tag: ClassVar[int] = 12
 
 
 class MakeUsable(ImplicitTaggedType, ServiceError):
     """[13] ServiceError"""
-    tag = 13
+    tag: ClassVar[int] = 13
 
 
 class InitiateLoad(ImplicitTaggedType, ServiceError):
     """[14] ServiceError"""
-    tag = 14
+    tag: ClassVar[int] = 14
 
 
 class LoadSegment(ImplicitTaggedType, ServiceError):
     """[15] ServiceError"""
-    tag = 15
+    tag: ClassVar[int] = 15
 
 
 class TerminateLoad(ImplicitTaggedType, ServiceError):
     """[16] ServiceError"""
-    tag = 16
+    tag: ClassVar[int] = 16
 
 
 class InitiateUpLoad(ImplicitTaggedType, ServiceError):
     """[17] ServiceError"""
-    tag = 17
+    tag: ClassVar[int] = 17
 
 
 class UpLoadSegment(ImplicitTaggedType, ServiceError):
     """[18] ServiceError"""
-    tag = 18
+    tag: ClassVar[int] = 18
 
 
 class TerminateUpLoad(ImplicitTaggedType, ServiceError):
     """[19] ServiceError"""
-    tag = 19
+    tag: ClassVar[int] = 19
 
 
 class ConfirmedServiceError(axdr.ChoiceType):
     """ConfirmedServiceError"""
-    alternatives = create_alternatives(
-        NamedType("initiate-error", InitiateError),
-        NamedType("get-status", GetStatus),
-        NamedType("get-name-list", GetNameList),
-        NamedType("get-variable-attribute", GetVariableAttribute),
-        NamedType("read", Read),
-        NamedType("write", Write),
-        NamedType("get-data-set-attribute", GetDataSetAttribute),
-        NamedType("get-ti-attribute", GetTIAttribute),
-        NamedType("change-scope", ChangeScope),
-        NamedType("start", Start),
-        NamedType("stop", Stop),
-        NamedType("resume", Resume),
-        NamedType("make-usable", MakeUsable),
-        NamedType("initiate-load", InitiateLoad),
-        NamedType("load-segment", LoadSegment),
-        NamedType("terminate-load", TerminateLoad),
-        NamedType("initiate-upload", InitiateUpLoad),
-        NamedType("upload-segment", UpLoadSegment),
-        NamedType("terminate-upload", TerminateUpLoad),
-    )
+    value: Union[
+        InitiateError, GetStatus, GetNameList, GetVariableAttribute, Read, Write,
+        GetDataSetAttribute, GetTIAttribute, ChangeScope, Start, Stop, Resume,
+        MakeUsable, InitiateLoad, LoadSegment, TerminateLoad, InitiateUpLoad,
+        UpLoadSegment, TerminateUpLoad
+    ]

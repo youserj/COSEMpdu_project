@@ -1,7 +1,8 @@
 # src/COSEMpdu/x680/integer_type.py
 from dataclasses import dataclass
+from StructResult.result import Error
 from typing import ClassVar, Iterator, Optional, Self, Any, Protocol, runtime_checkable
-from .type import BuiltinType, INTEGER, Simple
+from .type import BuiltinType, INTEGER, Simple, InitError
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,12 @@ class IntegerType(Simple[INTEGER], BuiltinType, Protocol):
     - A-XDR constraint: 0..255 for ENUMERATED (IEC 61334-6 §6.77), NOT for INTEGER
     """
     named_numbers: ClassVar[Optional[NamedNumberList]] = None
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, int):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected INTEGER"))
 
     @classmethod
     def default(cls) -> Self:

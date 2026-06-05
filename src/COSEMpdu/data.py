@@ -54,6 +54,11 @@ SN_REFERENCE = ObjectName(-1536)  # 0xFA00
 
 class TypeDescription(axdr.ChoiceType):  # Forward declaration
     """TypeDescription"""
+    value: "NullData | TypeDescriptionArray | TypeDescriptionStructure | TypeDescriptionBoolean | TypeDescriptionBitString"
+    " | TypeDescriptionDoubleLong | TypeDescriptionDoubleLongUnsigned | TypeDescriptionOctetString | TypeDescriptionVisibleString"
+    " | TypeDescriptionUtf8String | TypeDescriptionBcd | TypeDescriptionInteger | TypeDescriptionLong | TypeDescriptionUnsigned"
+    " | TypeDescriptionLongUnsigned | TypeDescriptionLong64 | TypeDescriptionLong64Unsigned | TypeDescriptionEnum | TypeDescriptionFloat32"
+    " | TypeDescriptionFloat64 | TypeDescriptionDateTime | TypeDescriptionDate | TypeDescriptionTime | TypeDescriptionDontCare"
 
 
 NullData = NullType0
@@ -187,30 +192,30 @@ class TypeDescriptionDontCare(ImplicitTaggedType, NullType):
 
 
 setattr(TypeDescription, "alternatives", {
-    0: NamedType("null-data", NullData),
-    1: NamedType("array", TypeDescriptionArray),
-    2: NamedType("structure", TypeDescriptionStructure),
-    3: NamedType("boolean", TypeDescriptionBoolean),
-    4: NamedType("bit-string", TypeDescriptionBitString),
-    5: NamedType("double-long", TypeDescriptionDoubleLong),
-    6: NamedType("double-long-unsigned", TypeDescriptionDoubleLongUnsigned),
-    9: NamedType("octet-string", TypeDescriptionOctetString),
-    10: NamedType("visible-string", TypeDescriptionVisibleString),
-    12: NamedType("utf8-string", TypeDescriptionUtf8String),
-    13: NamedType("bcd", TypeDescriptionBcd),
-    15: NamedType("integer", TypeDescriptionInteger),
-    16: NamedType("long", TypeDescriptionLong),
-    17: NamedType("unsigned", TypeDescriptionUnsigned),
-    18: NamedType("long-unsigned", TypeDescriptionLongUnsigned),
-    20: NamedType("long64", TypeDescriptionLong64),
-    21: NamedType("long64-unsigned", TypeDescriptionLong64Unsigned),
-    22: NamedType("enum", TypeDescriptionEnum),
-    23: NamedType("float32", TypeDescriptionFloat32),
-    24: NamedType("float64", TypeDescriptionFloat64),
-    25: NamedType("date-time", TypeDescriptionDateTime),
-    26: NamedType("date", TypeDescriptionDate),
-    27: NamedType("time", TypeDescriptionTime),
-    255: NamedType("dont-care", TypeDescriptionDontCare)
+    0: NullData,
+    1: TypeDescriptionArray,
+    2: TypeDescriptionStructure,
+    3: TypeDescriptionBoolean,
+    4: TypeDescriptionBitString,
+    5: TypeDescriptionDoubleLong,
+    6: TypeDescriptionDoubleLongUnsigned,
+    9: TypeDescriptionOctetString,
+    10: TypeDescriptionVisibleString,
+    12: TypeDescriptionUtf8String,
+    13: TypeDescriptionBcd,
+    15: TypeDescriptionInteger,
+    16: TypeDescriptionLong,
+    17: TypeDescriptionUnsigned,
+    18: TypeDescriptionLongUnsigned,
+    20: TypeDescriptionLong64,
+    21: TypeDescriptionLong64Unsigned,
+    22: TypeDescriptionEnum,
+    23: TypeDescriptionFloat32,
+    24: TypeDescriptionFloat64,
+    25: TypeDescriptionDateTime,
+    26: TypeDescriptionDate,
+    27: TypeDescriptionTime,
+    255: TypeDescriptionDontCare
 })
 
 
@@ -414,9 +419,8 @@ class CompactArray(ImplicitTaggedType, axdr.SequenceType):
     array_contents: ArrayContents
 
     def get_array(self) -> list[ImplicitTaggedType]:
-        if (type_ := Data.alternatives.get(self.contents_description.value.tag)) is None:
+        if (data_class := Data.alternatives.get(self.contents_description.value.tag)) is None:
             raise ValueError(f"Unknown TypeDescription tag: {self.contents_description}")
-        data_class = type_.type_
         contents_bytes = bytes(self.array_contents.value)
         if not contents_bytes:
             return []
@@ -436,11 +440,11 @@ class CompactArray(ImplicitTaggedType, axdr.SequenceType):
         if contents is None:
             if len(array) == 0:
                 raise ValueError("expected <contents> for empty array")
-            contents = TypeDescription(TypeDescription.alternatives[array[0].tag].type_(None))
+            contents = ContentsDescription(ContentsDescription.alternatives[array[0].tag](None))
         buf = ByteBuffer.allocate(buf_size)
         for el in array:
             el.put_lc(buf)
-        array_contents = ArrayContents(OctetStringType(bytes(buf.extract())))
+        array_contents = ArrayContents(bytes(buf.extract()))
         return cls(contents, array_contents)
 
 
@@ -536,25 +540,11 @@ class Float32(ImplicitTaggedType, OctetStringTypeSize4, _Float):
     tag = 23
     fmt = ">f"
 
-    # @classmethod
-    # def from_float(cls, value: float) -> Self:
-    #     return cls(OctetStringType(pack(cls.fmt, value)))
-
-    # def __float__(self) -> float:
-    #     return unpack(self.fmt, bytes(self.value.value))[0]
-
 
 class Float64(ImplicitTaggedType, OctetStringTypeSize8, _Float):
     """float64 [24] IMPLICIT OCTET STRING (SIZE(8))"""
     tag = 24
     fmt = ">d"
-
-    # @classmethod
-    # def from_float(cls, value: float) -> Self:
-    #     return cls(OctetStringType(pack(cls.fmt, value)))
-
-    # def __float__(self) -> float:
-    #     return unpack(self.fmt, bytes(self.value.value))[0]
 
 
 class DateTime(ImplicitTaggedType, OctetStringTypeSize12):
@@ -626,87 +616,25 @@ class DontCare(ImplicitTaggedType, axdr.NullType):
     tag = 255
 
 
-SimpleDataType = Union[NullData | Boolean | BitString | DoubleLong | DoubleLongUnsigned | OctetString | VisibleString | \
-                Utf8String | Bcd | Integer | Long | Unsigned | LongUnsigned | Long64 | Long64Unsigned | Enum | Float32 | \
-                Float64 | DateTime | Date | Time | DeltaInteger | DeltaLong | DeltaDoubleLong | DeltaUnsigned | DeltaLongUnsigned | \
-                DeltaDoubleLongUnsigned]
-ComplexDataType = Union[Array[ImplicitTaggedType] | Structure | CompactArray]
-CDT = Union[SimpleDataType | ComplexDataType]
+SimpleDataType = Union[NullData, Boolean, BitString, DoubleLong, DoubleLongUnsigned, OctetString, VisibleString,
+                Utf8String, Bcd, Integer, Long, Unsigned, LongUnsigned, Long64, Long64Unsigned, Enum, Float32,
+                Float64, DateTime, Date, Time, DeltaInteger, DeltaLong, DeltaDoubleLong, DeltaUnsigned, DeltaLongUnsigned,
+                DeltaDoubleLongUnsigned, DontCare]
+ComplexDataType = Union[Array[ImplicitTaggedType], Structure, CompactArray]
+CDT = Union[SimpleDataType, ComplexDataType]
 
 
 class Data(axdr.ChoiceType):
-    alternatives: axdr.Alternatives = {
-        0: NamedType("null-data", NullData),
-        1: NamedType("array", Array),
-        2: NamedType("structure", Structure),
-        3: NamedType("boolean", Boolean),
-        4: NamedType("bit-string", BitString),
-        5: NamedType("double-long", DoubleLong),
-        6: NamedType("double-long-unsigned", DoubleLongUnsigned),
-        9: NamedType("octet-string", OctetString),
-        10: NamedType("visible-string", VisibleString),
-        12: NamedType("utf8-string", Utf8String),
-        13: NamedType("bcd", Bcd),
-        15: NamedType("integer", Integer),
-        16: NamedType("long", Long),
-        17: NamedType("unsigned", Unsigned),
-        18: NamedType("long-unsigned", LongUnsigned),
-        19: NamedType("compact-array", CompactArray),
-        20: NamedType("long64", Long64),
-        21: NamedType("long64-unsigned", Long64Unsigned),
-        22: NamedType("enum", Enum),
-        23: NamedType("float32", Float32),
-        24: NamedType("float64", Float64),
-        25: NamedType("date-time", DateTime),
-        26: NamedType("date", Date),
-        27: NamedType("time", Time),
-        28: NamedType("delta-integer", DeltaInteger),
-        29: NamedType("delta-long", DeltaLong),
-        30: NamedType("delta-double-long", DeltaDoubleLong),
-        31: NamedType("delta-unsigned", DeltaUnsigned),
-        32: NamedType("delta-long-unsigned", DeltaLongUnsigned),
-        33: NamedType("delta-double-long-unsigned", DeltaDoubleLongUnsigned),
-        255: NamedType("dont-care", DontCare)
-    }
     value: CDT
 
 
-Data.alternatives[1] = NamedType("array", Array[Data])
-
-
-def union2alternatives(item: UnionType) -> axdr.Alternatives:
-    new = {}
-    args: tuple[ImplicitTaggedType, ...] = cast("tuple[ImplicitTagged, ...]", get_args(item))
-    if not args:
-        args = item,
-    for type_ in args:
-        for id, n_t in Data.alternatives.items():
-            if type_.tag == n_t.type_.tag:
-                new[id] = NamedType(n_t.identifier, type_)
-                break
-    return new
-
-
-def include_alternatives(type_alias: TypeAlias) -> dict[int, NamedType[CDT]]:
-    new = {}
-    for type_ in get_args(type_alias):
-        for id, n_t in Data.alternatives.items():
-            if issubclass(type_, n_t.type_):
-                new[id] = type_
-    return new
+Data.alternatives[1] = Array[Data]
 
 
 setattr(SequenceOfData, "_T", Data)
 
 
 class ExternallyData(axdr.ChoiceType):
-
-    @property
-    def selected(self) -> str:
-        for n_t in self.alternatives.values():
-            if isinstance(self.value, n_t.type_):
-                return n_t.identifier
-        raise ValueError(f"Value {self.value} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in self.alternatives.values())))}")
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self | Error:
@@ -745,6 +673,6 @@ class DiscriminatedUnion(Structure):
             return selector
         if (alt := cls.components[1].type_.alternatives.get(int(selector))) is None:
             return Error.from_e(ValueError(f"got {cls.components[0].identifier}={selector}, expected {list(cls.components[1].type_.alternatives.keys())}"))
-        if isinstance(value := alt.type_.get(buf), Error):
+        if isinstance(value := alt.get(buf), Error):
             return value
         return cls(selector, cls.components[1].type_(value))

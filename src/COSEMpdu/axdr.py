@@ -17,10 +17,10 @@ Standards:
 - X.680: ASN.1 notation
 - X.690: BER encoding (reference for comparison)
 """
-from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, override, runtime_checkable, Iterator
+from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, runtime_checkable, Iterator, get_args
 from StructResult.result import ValueOrError, Error
 from . import x690
-from .x680.type import OptionalNamedType, DefaultNamedType, NamedType, INTEGER, SEQUENCE_OF, CHOICE
+from .x680.type import OptionalNamedType, DefaultNamedType, INTEGER, SEQUENCE_OF, CHOICE
 from . import x680
 from .byte_buffer import ByteBuffer, put_chain
 
@@ -420,7 +420,7 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # =============================================================================
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
-Alternatives: TypeAlias = dict[int, NamedType["ImplicitTaggedType | ChoiceType"]]
+Alternatives: TypeAlias = dict[int, "ImplicitTaggedType | ChoiceType"]
 
 
 @runtime_checkable
@@ -448,14 +448,21 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
     alternatives: Alternatives
     value: ImplicitTaggedType
 
+    def __init_subclass__(cls) -> None:
+        if (
+            not hasattr(cls, "alternatives")
+            and (values := cls.__annotations__.get("value"))
+        ):
+            cls.alternatives = {type_.tag: type_ for type_ in get_args(values)}
+
     @classmethod
     def parse(cls, value: CHOICE) -> Self:
-        if (n_t := cls.alternatives.get(value.select)) is not None:
-            return cls(n_t.type_.parse(value.value))
+        if (t_ := cls.alternatives.get(value.select)) is not None:
+            return cls(t_.parse(value.value))
         raise ValueError("not find type in choice")
 
     def normalize(self) -> CHOICE:
-        return CHOICE(hash(self.value.tag), self.value.normalize())
+        return CHOICE(self.value.tag, self.value.normalize())
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -466,9 +473,9 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
         """
         if isinstance(tag := buf.get_u8(), Error):
             return tag
-        if (n_t := cls.alternatives.get(tag)) is None:
-            return Error.from_e(ValueError(f"{tag} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}"))
-        if isinstance(value := n_t.type_.get_lc(buf), Error):
+        if (t_ := cls.alternatives.get(tag)) is None:
+            return Error.from_e(ValueError(f"{tag} not in alternatives: {", ".join((t_.__name__ for t_ in cls.alternatives.values()))}"))
+        if isinstance(value := t_.get_lc(buf), Error):
             return value
         return cls(value)
 
@@ -479,13 +486,6 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
         Returns number of bytes written.
         """
         return self.value.put(buf)
-
-    # todo: copypast from Ber.ChoiceType
-    @property
-    def selected(self) -> str:
-        if (n_t := self.alternatives.get(self.value.tag)) is None:
-            raise ValueError(f"Value {self.value} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in self.alternatives.values())))}")
-        return n_t.identifier
 
 
 # =============================================================================
@@ -943,7 +943,3 @@ class ConstrainedSequenceOfType[T: SequenceOfType[Type]](x680.ConstrainedSequenc
         if isinstance(self.fixed_length, int):
             return self.put_c(buf)
         return self.put_lc(buf)
-
-
-def create_alternatives(*values: NamedType[ImplicitTaggedType | ChoiceType]) -> dict[int, NamedType[ImplicitTaggedType | ChoiceType]]:
-    return {value.type_.tag: value for value in values}

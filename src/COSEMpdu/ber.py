@@ -1,5 +1,5 @@
 # src/COSEMpdu/x690/bit_string.py
-from typing import ClassVar, Self, cast, Optional, Protocol
+from typing import ClassVar, Self, cast, Optional, Protocol, get_args
 from StructResult.result import ValueOrError, Error
 from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
 from . import x680
@@ -389,10 +389,6 @@ class GraphicString(Type, x680.GraphicString):
         return f"{self.__class__.__name__}({self.value!r})"
 
 
-def create_alternatives(*values: NamedType) -> dict[int, NamedType]:
-    return {hash(value.type_.tag): value for value in values}
-
-
 class ChoiceType(x680.ChoiceType[Type]):
     """
     CHOICE with BER encoding/decoding (X.690 ยง8.13)
@@ -410,17 +406,22 @@ class ChoiceType(x680.ChoiceType[Type]):
         - Tag identifies which alternative was selected
         - For DLMS/COSEM, alternatives use CONTEXT SPECIFIC class
     """
-    alternatives: ClassVar[dict[int, NamedType]]
+    # alternatives: ClassVar[dict[int, Type]]
     value: Type
+
+    def __init_subclass__(cls) -> None:
+        if not hasattr(cls, "alternatives"):
+            cls.alternatives = {(type_.tag2 if hasattr(type_, "tag2") else type_.tag).class_number: type_ for type_ in get_args(cls.__annotations__["value"])}
 
     @classmethod
     def parse(cls, value: CHOICE) -> Self:
-        if (n_t := cls.alternatives.get(value.select)) is not None:
-            return cls(n_t.type_.parse(value.value))
+        if (t_ := cls.alternatives.get(value.select)) is not None:
+            return cls(t_.parse(value.value))
         raise ValueError("not find type in choice")
 
     def normalize(self) -> CHOICE:
-        return CHOICE(hash(self.value.tag), self.value.normalize())
+        tag = self.value.tag2 if hasattr(self.value, "tag2") else self.value.tag
+        return CHOICE(tag.class_number, self.value.normalize())
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -430,17 +431,9 @@ class ChoiceType(x680.ChoiceType[Type]):
         """
         if isinstance(tag := Tag.get(buf), Error):
             return tag
-        if (n_t := cls.alternatives.get(hash(tag))) is None:
-            return Error.from_e(ValueError(f"{tag=} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives.values())))}"))
-        # tag_byte = buf.get_uint8()
-        # tag_number = tag_byte & 0x1F
-        # for n_t in cls.alternatives:
-        #     alternative_type = n_t.type_
-        #     if int(alternative_type.tag) == tag_number:
-        #         break
-        # else:
-        #     raise ValueError(f"Tag {tag_number} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in cls.alternatives)))}")
-        if isinstance(value := n_t.type_.get_lc(buf), Error):
+        if (t_ := cls.alternatives.get(tag.class_number)) is None:
+            return Error.from_e(ValueError(f"got {tag=}, expected {", ".join(map(str, (t_.__class__.__name__ for t_ in cls.alternatives.values())))}"))
+        if isinstance(value := t_.get_lc(buf), Error):
             return value
         return cls(value)
 
@@ -459,12 +452,6 @@ class ChoiceType(x680.ChoiceType[Type]):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         return self.put(buf)
-
-    @property
-    def selected(self) -> str:
-        if (n_t := self.alternatives.get(hash(self.value.tag))) is None:
-            raise ValueError(f"Value {self.value} not in alternatives: {", ".join(map(str, (n_t.identifier for n_t in self.alternatives.values())))}")
-        return n_t.identifier
 
 
 class EnumeratedType(Type, x680.EnumeratedType):

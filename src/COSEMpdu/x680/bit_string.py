@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional, Self, ClassVar, overload
-from .type import BuiltinType, BIT_STRING, Simple
+from StructResult.result import Error
+from typing import Iterator, Optional, Self, ClassVar, overload, Any
+from .type import BuiltinType, BIT_STRING, Simple, InitError
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,12 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     """
     named_bits: ClassVar[Optional[NamedBitList]] = None  # ← ClassVar!
     value: BIT_STRING
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, tuple):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected BIT_STRING"))
 
     @classmethod
     def default(cls) -> Self:

@@ -1,5 +1,6 @@
-from typing import Self
-from .type import BuiltinType, BOOLEAN, Simple
+from typing import Any, Self
+from StructResult.result import Error
+from .type import BuiltinType, BOOLEAN, Simple, InitError
 
 
 class BooleanType(Simple[BOOLEAN], BuiltinType):
@@ -8,6 +9,12 @@ class BooleanType(Simple[BOOLEAN], BuiltinType):
     NATIVE REPRESENTATION: bool
     """
     value: BOOLEAN
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, bool):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected BOOLEAN"))
 
     @classmethod
     def default(cls) -> Self:

@@ -1,4 +1,5 @@
-from typing import Self
+from typing import Self, Any
+from StructResult.result import Error
 from .type import BuiltinType, NULL, Simple
 
 
@@ -20,6 +21,10 @@ class NullType(Simple[NULL], BuiltinType):
 
     def __init__(self, value: NULL = None) -> None:
         self.value = value
+
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        return None
 
     @classmethod
     def default(cls) -> Self:

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Self, Protocol, Optional, Any, runtime_checkable
+from typing import Self, Protocol, Optional, Any, runtime_checkable, ClassVar, get_origin
 from StructResult.result import ValueOrError, Error
 from ..byte_buffer import ByteBuffer
 
@@ -53,6 +53,10 @@ class CHOICE:
 type TYPE_VALUE = SIMPLE | COMPLEX | CHOICE
 
 
+class InitError(Exception):
+    """marked Type init error"""
+
+
 @runtime_checkable
 class Type(Protocol):
     """
@@ -83,6 +87,9 @@ class Type(Protocol):
        - Contains pure data values (str/list[str]), NO structural metadata
        - Field names and type context are handled by container types (SEQUENCE, etc.)
     """
+
+    @classmethod
+    def validate(cls, value: Any) -> ValueOrError[None]: ...
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -131,6 +138,12 @@ class Type(Protocol):
 class Simple[T: SIMPLE](Type, Protocol):
     value: T
 
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, int):
+            return Error.from_e(InitError(f"got {value=}, expected {T}"))
+        return None
+
     def __init__(self, value: T) -> None:
         self.value = value
 
@@ -165,6 +178,11 @@ class ReferencedType(Type, Protocol):
 
 class UsefulType(Simple[SIMPLE], ReferencedType, Protocol):
     """16.3"""
+    @classmethod
+    def validate(cls, value: Any) -> None | Error:
+        if isinstance(value, str):
+            return None
+        return Error.from_e(InitError(f"got {value=}, expected STRING"))
 
 
 @dataclass
@@ -268,6 +286,11 @@ class VisibleString(RestrictedCharacterStringType):
 @dataclass
 class Utf8String(RestrictedCharacterStringType):
     ...
+
+
+def is_classvar(type_: Type) -> bool:
+    """Check if annotation is ClassVar[X]."""
+    return get_origin(type_) is ClassVar
 
 
 __all__ = [

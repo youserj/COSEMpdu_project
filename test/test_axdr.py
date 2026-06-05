@@ -5,17 +5,16 @@ Tests cover all type encodings per standard specifications.
 import unittest
 from dataclasses import dataclass
 from typing import Optional
-from src.COSEMpdu import x680
+from StructResult.result import Error
 from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
-    create_alternatives, ImplicitTaggedType, CHOICE,
+    ImplicitTaggedType, CHOICE,
     ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
     BooleanType, IntegerType, BitStringType, OctetStringType, ObjectIdentifierType,
     ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
     _encode_variable_length_integer, get_length
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
-from src.COSEMpdu.x680 import NamedType
 
 
 class Integer0(ImplicitTaggedType, IntegerType):
@@ -27,11 +26,8 @@ class OctetString1(ImplicitTaggedType, OctetStringType):
 
 
 class TestChoice(ChoiceType):
-    alternatives = create_alternatives(
-        NamedType("first", Integer0),
-        NamedType("second", OctetString1)
-    )
     value: Integer0 | OctetString1
+
 
 class OctetStringObjectIdentifierType(ImplicitTaggedType, ObjectIdentifierType):
     tag = 9
@@ -415,7 +411,6 @@ class TestChoiceType(unittest.TestCase):
         """Decode CHOICE with INTEGER alternative"""
         buf = ByteBuffer.wrap(b"\x00\x2A")
         val = TestChoice.get(buf)
-        self.assertEqual(val.selected, "first")
         self.assertEqual(val.value.value, 42)
 
     def test_decode_invalid_tag(self) -> None:
@@ -618,10 +613,6 @@ class TestIntegration(unittest.TestCase):
             tag = 1
 
         class InnerChoice(ChoiceType):
-            alternatives = create_alternatives(
-                NamedType("first", Integer0),
-                NamedType("second", Boolean1)
-            )
             value: Integer0 | Boolean1
 
         @dataclass
@@ -649,10 +640,6 @@ class TestIntegration(unittest.TestCase):
             tag = 1
 
         class ServiceChoice(ChoiceType):
-            alternatives = create_alternatives(
-                NamedType("first", Enumerated0),
-                NamedType("second", Integer1)
-            )
             value: Enumerated0 | Integer1
 
         ServiceList = SequenceOfType[ServiceChoice]
@@ -691,12 +678,12 @@ class TestIntegration(unittest.TestCase):
 
         # Decode
         buf.set_pos(0)
-        decoded = TestSeq.get(buf)
-
+        if isinstance(decoded := TestSeq.get(buf), Error):
+            decoded.unwrap()
         # Verify
         self.assertEqual(decoded.id.value, 123)
         self.assertEqual(decoded.data.value, b"TEST")
-        self.assertEqual(decoded.choice.selected, "first")
+        self.assertIsInstance(decoded.choice.value, IntegerType)
         self.assertEqual(decoded.choice.value.value, 456)
 
 

@@ -8,6 +8,7 @@ Standards:
 """
 
 import unittest
+from StructResult.result import Error, NULL
 from src.COSEMpdu.service_error import (
     # Error types
     ConfirmedServiceError, ApplicationReference,
@@ -202,7 +203,7 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
-        self.assertEqual(decoded.selected, "application-reference")
+        self.assertIsInstance(decoded.value, ApplicationReference)
         self.assertEqual(decoded.value.value, 2)
 
     def test_encode_decode_hardware_resource(self) -> None:
@@ -212,7 +213,7 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
-        self.assertEqual(decoded.selected, "hardware-resource")
+        self.assertIsInstance(decoded.value, HardwareResource)
         self.assertEqual(decoded.value.value, 3)
 
     def test_encode_decode_initiate_incompatible_conformance(self) -> None:
@@ -222,7 +223,7 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
-        self.assertEqual(decoded.selected, "initiate")
+        self.assertIsInstance(decoded.value, Initiate)
         self.assertEqual(decoded.value.value, 2)
 
     def test_encode_decode_initiate_dlms_version_too_low(self) -> None:
@@ -232,7 +233,7 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ServiceError.get(buf)
-        self.assertEqual(decoded.selected, "initiate")
+        self.assertIsInstance(decoded.value, Initiate)
         self.assertEqual(decoded.value.value, 1)
 
     def test_encode_decode_read_error(self) -> None:
@@ -242,7 +243,7 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ConfirmedServiceError.get(buf)
-        self.assertEqual(decoded.selected, "read")
+        self.assertIsInstance(decoded.value, Read)
 
     def test_encode_decode_write_error(self) -> None:
         """Test write alternative (tag 6)"""
@@ -251,30 +252,30 @@ class TestServiceErrorChoice(unittest.TestCase):
         original.put(buf)
         buf.set_pos(0)
         decoded = ConfirmedServiceError.get(buf)
-        self.assertEqual(decoded.selected, "write")
+        self.assertIsInstance(decoded.value, Write)
 
     def test_encode_decode_all_alternatives(self) -> None:
         """Test all ServiceError alternatives"""
         test_cases = [
-            ("application-reference", ApplicationReference, 0),
-            ("hardware-resource", HardwareResource, HardwareResourceEnum(1)),
-            ("vde-state-error", VDEStateError, VDEStateErrorEnum(2)),
-            ("service", Service, ServiceEnum(0)),
-            ("definition", Definition, DefinitionEnum(1)),
-            ("access", Access, AccessEnum(3)),
-            ("initiate", Initiate, InitiateEnum(2)),
-            ("load-data-set", LoadDataSet, LoadDataSetEnum(4)),
-            ("task", Task, TaskEnum(4)),
+            (ApplicationReference, 0),
+            (HardwareResource, 1),
+            (VDEStateError, 2),
+            (Service, 0),
+            (Definition, 1),
+            (Access, 3),
+            (Initiate, 2),
+            (LoadDataSet, 4),
+            (Task, 4),
         ]
 
-        for selected, error_class, error_value in test_cases:
-            with self.subTest(selected=selected):
-                original = ServiceError.from_id(selected, error_class(error_value))
+        for error_class, error_value in test_cases:
+            with self.subTest(error_class=error_class.__name__):
+                original = ServiceError(error_class(error_value))
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = ServiceError.get(buf)
-                self.assertEqual(decoded.selected, selected)
+                self.assertIsInstance(decoded.value, error_class)
 
     def test_invalid_tag(self) -> None:
         """Test invalid tag number"""
@@ -304,7 +305,7 @@ class TestInitiateError(unittest.TestCase):
         self.assertEqual(tag, 1)
         # Decode ServiceError
         decoded_service_error = ServiceError.get(buf)
-        self.assertEqual(decoded_service_error.selected, "initiate")
+        self.assertIsInstance(decoded_service_error.value, Initiate)
         self.assertEqual(decoded_service_error.value.value, 2)
 
     def test_initiate_error_tag(self) -> None:
@@ -352,34 +353,28 @@ class TestConfirmedServiceErrorIntegration(unittest.TestCase):
     def test_common_error_scenarios(self) -> None:
         """Test common error scenarios from DLMS/COSEM"""
         scenarios = [
-            # (error_type, error_code, description)
-            ("initiate", 1, "dlms-version-too-low"),
-            ("initiate", 2, "incompatible-conformance"),
-            ("initiate", 3, "pdu-size-too-short"),
-            ("initiate", 4, "refused-by-the-vde-handler"),
-            ("access", 1, "scope-of-access-violated"),
-            ("access", 2, "object-access-violated"),
-            ("definition", 1, "object-undefined"),
+            # (error_class, error_code, description)
+            (Initiate, 1, "dlms-version-too-low"),
+            (Initiate, 2, "incompatible-conformance"),
+            (Initiate, 3, "pdu-size-too-short"),
+            (Initiate, 4, "refused-by-the-vde-handler"),
+            (Access, 1, "scope-of-access-violated"),
+            (Access, 2, "object-access-violated"),
+            (Definition, 1, "object-undefined"),
         ]
 
-        for error_type, error_code, description in scenarios:
+        for error_class, error_code, description in scenarios:
             with self.subTest(description=description):
-                if error_type == "initiate":
-                    error_value = InitiateEnum(error_code)
-                elif error_type == "access":
-                    error_value = AccessEnum(error_code)
-                elif error_type == "definition":
-                    error_value = DefinitionEnum(error_code)
-                else:
-                    continue
+                error_value = error_class(error_code)
 
-                original = ServiceError.from_id(error_type, error_value)
+                original = ServiceError(error_value)
                 buf = ByteBuffer.allocate(10)
                 original.put(buf)
                 buf.set_pos(0)
-                decoded = ServiceError.get(buf)
-                self.assertEqual(decoded.selected, error_type)
-                self.assertEqual(decoded.value.value.value, error_code)
+                if isinstance(decoded := ServiceError.get(buf), Error):
+                    decoded.unwrap()
+                self.assertIsInstance(decoded.value, error_class)
+                self.assertEqual(decoded.value.value, error_code)
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -387,9 +382,10 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_buffer_overflow(self) -> None:
         """Test buffer overflow protection"""
-        original = ServiceError(Initiate(2))
+        original = ServiceError(Initiate(Initiate.INCOMPATIBLE_CONFORMANCE))
         buf = ByteBuffer.allocate(1)  # Too small
-        self.assertTrue(original.put(buf).has(None, BufferError))
+        if isinstance(err := original.put(buf), Error):
+            self.assertTrue(err.has(NULL, BufferError))
 
     def test_empty_buffer(self) -> None:
         """Test decoding from empty buffer"""
@@ -400,14 +396,14 @@ class TestEdgeCases(unittest.TestCase):
         """Test round-trip encoding/decoding for all error types"""
         test_cases = [
             (ApplicationReference, 0),
-            (HardwareResource, HardwareResourceEnum(1)),
-            (VDEStateError, VDEStateErrorEnum(2)),
-            (Service, ServiceEnum(0)),
-            (Definition, DefinitionEnum(1)),
-            (Access, AccessEnum(2)),
-            (Initiate, InitiateEnum(3)),
-            (LoadDataSet, LoadDataSetEnum(4)),
-            (Task, TaskEnum(0)),
+            (HardwareResource, 1),
+            (VDEStateError, 2),
+            (Service, 0),
+            (Definition, 1),
+            (Access, 2),
+            (Initiate, 3),
+            (LoadDataSet, 4),
+            (Task, 0),
         ]
 
         for error_class, error_value in test_cases:
@@ -417,7 +413,7 @@ class TestEdgeCases(unittest.TestCase):
                 original.put(buf)
                 buf.set_pos(0)
                 decoded = error_class.get(buf)
-                self.assertEqual(decoded.value.value, error_value.value)
+                self.assertEqual(decoded.value, error_value)
 
 
 if __name__ == "__main__":

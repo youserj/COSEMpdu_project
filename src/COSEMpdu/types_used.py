@@ -1,55 +1,39 @@
-from typing import Optional, Self, Literal, ClassVar, TypeAlias
+from typing import Final, Optional, Self, Literal, ClassVar, TypeAlias
 from dataclasses import dataclass
 from StructResult.result import ValueOrError, Error
-from .x680.type import TYPE_VALUE, NamedType, INTEGER
+from .x680.type import TYPE_VALUE, INTEGER, InitError
 from .byte_buffer import ByteBuffer
-from .x680.enumerated_type import EnumerationList, EnumerationMember
 from .x680.constrained_type import SizeConstraint
 from .data import Data, Integer8, Unsigned8, Unsigned16, Unsigned32, ObjectName
 from .axdr import (
     ConstrainedOctetStringType, OctetStringType, SequenceOfType, EnumeratedType, SequenceType,
-    BooleanType, ChoiceType, create_alternatives, ImplicitTaggedType
+    BooleanType, ChoiceType, ImplicitTaggedType
 )
 
 
-class InitError(Exception):
-    """marked Type init error"""
-
 # =============================================================================
 # ENUMERATED Types (A-XDR: encoded as fixed-length unsigned integer in 1 byte)
-# Using EnumerationList pattern from service_error.py
 # =============================================================================
-
-
-class DataAccessResultList(EnumerationList):
-    """Data-Access-Result enumeration members"""
-    members = (
-        EnumerationMember("success", 0),
-        EnumerationMember("hardware-fault", 1),
-        EnumerationMember("temporary-failure", 2),
-        EnumerationMember("read-write-denied", 3),
-        EnumerationMember("object-undefined", 4),
-        EnumerationMember("object-class-inconsistent", 9),
-        EnumerationMember("object-unavailable", 11),
-        EnumerationMember("type-unmatched", 12),
-        EnumerationMember("scope-of-access-violated", 13),
-        EnumerationMember("data-block-unavailable", 14),
-        EnumerationMember("long-get-aborted", 15),
-        EnumerationMember("no-long-get-in-progress", 16),
-        EnumerationMember("long-set-aborted", 17),
-        EnumerationMember("no-long-set-in-progress", 18),
-        EnumerationMember("data-block-number-invalid", 19),
-        EnumerationMember("other-reason", 250),
-    )
 
 
 class DataAccessResult(EnumeratedType):
     """Data-Access-Result"""
-    named_members = DataAccessResultList()
-    SUCCESS: ClassVar[Self]
-
-
-DataAccessResult.SUCCESS = DataAccessResult(0)
+    SUCCESS: Final[int] = 0
+    HARDWARE_FAULT: Final[int] = 1
+    TEMPORARY_FAILURE: Final[int] = 2
+    READ_WRITE_DENIED: Final[int] = 3
+    OBJECT_UNDEFINED: Final[int] = 4
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 9
+    OBJECT_UNAVAILABLE: Final[int] = 11
+    TYPE_UNMATCHED: Final[int] = 12
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 13
+    DATA_BLOCK_UNAVAILABLE: Final[int] = 14
+    LONG_GET_ABORTED: Final[int] = 15
+    NO_LONG_GET_IN_PROGRESS: Final[int] = 16
+    LONG_SET_ABORTED: Final[int] = 17
+    NO_LONG_SET_IN_PROGRESS: Final[int] = 18
+    DATA_BLOCK_NUMBER_INVALID: Final[int] = 19
+    OTHER_REASON: Final[int] = 250
 
 
 class dataAccessResult(ImplicitTaggedType, DataAccessResult):
@@ -57,28 +41,21 @@ class dataAccessResult(ImplicitTaggedType, DataAccessResult):
     tag = 1
 
 
-class ActionResultList(EnumerationList):
-    """Action-Result enumeration members"""
-    members = (
-        EnumerationMember("success", 0),
-        EnumerationMember("hardware-fault", 1),
-        EnumerationMember("temporary-failure", 2),
-        EnumerationMember("read-write-denied", 3),
-        EnumerationMember("object-undefined", 4),
-        EnumerationMember("object-class-inconsistent", 9),
-        EnumerationMember("object-unavailable", 11),
-        EnumerationMember("type-unmatched", 12),
-        EnumerationMember("scope-of-access-violated", 13),
-        EnumerationMember("data-block-unavailable", 14),
-        EnumerationMember("long-action-aborted", 15),
-        EnumerationMember("no-long-action-in-progress", 16),
-        EnumerationMember("other-reason", 250),
-    )
-
-
 class ActionResult(EnumeratedType):
     """Action-Result"""
-    named_members = ActionResultList()
+    SUCCESS: Final[int] = 0
+    HARDWARE_FAULT: Final[int] = 1
+    TEMPORARY_FAILURE: Final[int] = 2
+    READ_WRITE_DENIED: Final[int] = 3
+    OBJECT_UNDEFINED: Final[int] = 4
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 9
+    OBJECT_UNAVAILABLE: Final[int] = 11
+    TYPE_UNMATCHED: Final[int] = 12
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 13
+    DATA_BLOCK_UNAVAILABLE: Final[int] = 14
+    LONG_ACTION_ABORTED: Final[int] = 15
+    NO_LONG_ACTION_IN_PROGRESS: Final[int] = 16
+    OTHER_REASON: Final[int] = 250
 
 
 # =============================================================================
@@ -207,13 +184,6 @@ class WriteDataBlockAccess(ImplicitTaggedType, SequenceType):
 
 class VariableAccessSpecification(ChoiceType):
     """Variable-Access-Specification"""
-    alternatives = {
-        2: NamedType("variable-name", VariableName),
-        4: NamedType("parameterized-access", ParameterizedAccess),
-        5: NamedType("block-number-access", BlockNumberAccess),
-        6: NamedType("read-data-block-access", ReadDataBlockAccess),
-        7: NamedType("write-data-block-access", WriteDataBlockAccess),
-    }
     value: VariableName | ParameterizedAccess | BlockNumberAccess | ReadDataBlockAccess | WriteDataBlockAccess
 
 
@@ -310,10 +280,7 @@ class TaggedData(ImplicitTaggedType, Data):
 
 class GetDataResult(ChoiceType):
     """Get-Data-Result"""
-    alternatives = {
-        0: NamedType("data", TaggedData),
-        1: NamedType("data-access-result", dataAccessResult)
-    }
+    value: TaggedData | dataAccessResult
 
 
 # =============================================================================
@@ -336,16 +303,13 @@ class RawData(ImplicitTaggedType, OctetStringType):
 
 class DataBlockGResult(ChoiceType):
     """
-    DataBlock-G result CHOICE:
+    DataBlock-G.result CHOICE:
     {
         raw-data                       [0] IMPLICIT OCTET STRING,
         data-access-result             [1] IMPLICIT Data-Access-Result
     }
     """
-    alternatives = create_alternatives(
-        NamedType("raw-data", RawData),
-        NamedType("data-access-result", dataAccessResult),
-    )
+    value: RawData | dataAccessResult
 
 
 @dataclass
@@ -439,20 +403,15 @@ class AccessRequestSetWithSelection(ImplicitTaggedType, SequenceType):
 
 class AccessRequestSpecification(ChoiceType):
     """Access-Request-Specification"""
-    alternatives = {
-        1: NamedType("access-request-get", AccessRequestGet),
-        2: NamedType("access-request-set", AccessRequestSet),
-        3: NamedType("access-request-action", AccessRequestAction),
-        4: NamedType("access-request-get-with-selection", AccessRequestGetWithSelection),
-        5: NamedType("access-request-set-with-selection", AccessRequestSetWithSelection),
-    }
+    value: AccessRequestGet | AccessRequestSet | AccessRequestAction | AccessRequestGetWithSelection | AccessRequestSetWithSelection
 
 
 ListOfAccessRequestSpecification = SequenceOfType[AccessRequestSpecification]
 """List-Of-Access-Request-Specification"""
 
 
-class ListOfAccessRequestSpecification0(ImplicitTaggedType, ListOfAccessRequestSpecification):
+class accessRequestSpecification(ImplicitTaggedType, ListOfAccessRequestSpecification):
+    """access-request-specification"""
     tag: ClassVar[int] = 0
 
 
@@ -491,11 +450,7 @@ class AccessResponseAction(ImplicitTaggedType, SequenceType):
 
 class AccessResponseSpecification(ChoiceType):
     """Access-Response-Specification"""
-    alternatives = {
-        1: NamedType("access-response-get", AccessResponseGet),
-        2: NamedType("access-response-set", AccessResponseSet),
-        3: NamedType("access-response-action", AccessResponseAction),
-    }
+    value: AccessResponseGet | AccessResponseSet | AccessResponseAction
 
 
 ListOfAccessResponseSpecification = SequenceOfType[AccessResponseSpecification]
@@ -504,13 +459,13 @@ ListOfAccessResponseSpecification = SequenceOfType[AccessResponseSpecification]
 
 class AccessResponseBody(SequenceType):
     """Access-Response-Body"""
-    access_request_specification: Optional[ListOfAccessRequestSpecification0] = None  # OPTIONAL — before mandatory
+    access_request_specification: Optional[accessRequestSpecification] = None  # OPTIONAL — before mandatory
     access_response_list_of_data: ListOfData
     access_response_specification: ListOfAccessResponseSpecification
 
     def __init__(self, access_response_list_of_data: ListOfData,
                  access_response_specification: ListOfAccessResponseSpecification,
-                 access_request_specification: Optional[ListOfAccessRequestSpecification0] = None) -> None:
+                 access_request_specification: Optional[accessRequestSpecification] = None) -> None:
         self.access_response_list_of_data = access_response_list_of_data
         self.access_response_specification = access_response_specification
         self.access_request_specification = access_request_specification

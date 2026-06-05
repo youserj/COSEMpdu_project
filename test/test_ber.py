@@ -5,13 +5,13 @@ Tests cover all type implementations in ber.py
 import unittest
 from dataclasses import dataclass
 from typing import Optional, override, Self
-from StructResult.result import Error
+from StructResult.result import Error, NULL
+from src.COSEMpdu.x680.type import InitError
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length, TagError
 from src.COSEMpdu.x680 import NamedType, DefaultNamedType, NamedBit, NamedBitList
 from src.COSEMpdu.ber import (
     ImplicitTaggedType,
-    create_alternatives,
     ExplicitTaggedType,
     BitStringType,
     BooleanType,
@@ -831,10 +831,7 @@ class OctetString1(ImplicitTaggedType, OctetStringType):
 
 
 class TestChoice(ChoiceType):
-    alternatives = create_alternatives(
-        NamedType("first", Integer0),
-        NamedType("second", OctetString1)
-    )
+    value: Integer0 | OctetString1
 
 
 class TestChoiceType(unittest.TestCase):
@@ -862,7 +859,7 @@ class TestChoiceType(unittest.TestCase):
         buf = ByteBuffer.wrap(b"\x80\x01\x2a")
         if isinstance(choice := TestChoice.get(buf), Error):
             choice.unwrap()
-        self.assertEqual(choice.selected, "first")
+        self.assertIsInstance(choice.value, Integer0)
         self.assertEqual(choice.value.value, 42)
 
     def test_decode_octetstring_alternative(self) -> None:
@@ -870,7 +867,7 @@ class TestChoiceType(unittest.TestCase):
         buf = ByteBuffer.wrap(b"\x81\x02AB")
         if isinstance(choice := TestChoice.get(buf), Error):
             choice.unwrap()
-        self.assertEqual(choice.selected, "second")
+        self.assertIsInstance(choice.value, OctetString1)
         self.assertEqual(choice.value.value, b"AB")
 
     def test_invalid_tag(self) -> None:
@@ -884,8 +881,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_invalid_selected_tag(self) -> None:
         """Invalid selected_tag in constructor"""
-        with self.assertRaises(ValueError):
-            TestChoice.from_id("second2", IntegerType(0))
+        TestChoice.validate(BooleanType.default()).has(NULL, InitError)
 
     def test_length_calculation(self) -> None:
         """__len__ should match alternative length"""
@@ -1350,10 +1346,7 @@ class TestIntegration(unittest.TestCase):
     def test_choice_in_sequence(self) -> None:
         """CHOICE as SEQUENCE component"""
         class MyChoice(ChoiceType):
-            alternatives = create_alternatives(
-                NamedType("first", IntegerType),
-                NamedType("second", BooleanType),
-            )
+            value: IntegerType | BooleanType
 
         @dataclass
         class Container(SequenceType):
