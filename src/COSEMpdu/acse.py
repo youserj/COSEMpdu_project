@@ -4,11 +4,11 @@ Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COSEMpdu_GB83
 """
 from dataclasses import dataclass
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Final
 from . import x690
-from .x680 import NamedBitList, NamedBit, NamedNumberList, NamedNumber
+from .x680 import NamedNumberList, NamedNumber
 from .x680.tag import Class
-from .ber import ImplicitTaggedType, GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, ChoiceType, ObjectIdentifierType
+from .ber import GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, ChoiceType, ObjectIdentifierType
 
 
 class ApplicationContextName(ExplicitTaggedType, ObjectIdentifierType):
@@ -34,19 +34,19 @@ class AEInvocationIdentifier(IntegerType):
 
 class ACSERequirements(BitStringType):
     """ACSE-requirements"""
-    named_bits = NamedBitList((NamedBit("authentication", 0),))
+    AUTHENTICATION: Final[int] = 0
 
 
 class MechanismName(ObjectIdentifierType):
     """Mechanism-name"""
 
 
-class Charstring(ImplicitTaggedType, GraphicString):
+class Charstring(GraphicString):
     """charstring [0] IMPLICIT GraphicString"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
 
 
-class BitString(ImplicitTaggedType, BitStringType):
+class BitString(BitStringType):
     """bitstring [1] IMPLICIT BIT STRING"""
     tag: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC)
 
@@ -56,7 +56,7 @@ class AuthenticationValue(ChoiceType):
     value: Charstring | BitString
 
 
-class ImplementationInformation(ImplicitTaggedType, GraphicString):
+class ImplementationInformation(GraphicString):
     """implementation-information [29] IMPLICIT Implementation-data"""
     tag: ClassVar[x690.Tag] = x690.Tag(29, Class.CONTEXT_SPECIFIC)
 
@@ -114,7 +114,7 @@ class ResultSourceDiagnostic(ExplicitTaggedType, ChoiceType):
     value: ACSEServiceUser | ACSEServiceProvider
 
 
-class RequestReason(ImplicitTaggedType, IntegerType):
+class RequestReason(IntegerType):
     """reason [0] IMPLICIT Release-request-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
     named_numbers = NamedNumberList((
@@ -124,7 +124,7 @@ class RequestReason(ImplicitTaggedType, IntegerType):
     ))
 
 
-class ResponseReason(ImplicitTaggedType, IntegerType):
+class ResponseReason(IntegerType):
     """reason [0] IMPLICIT Release-response-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
     named_numbers = NamedNumberList((
@@ -134,10 +134,10 @@ class ResponseReason(ImplicitTaggedType, IntegerType):
     ))
 
 
-class ProtocolVersion(ImplicitTaggedType, BitStringType):
+class ProtocolVersion(BitStringType):
     """protocol-version [0] IMPLICIT BIT STRING {version1 (0)}"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
-    named_bits = NamedBitList((NamedBit("version1", 0),))
+    VERSION1: Final[int] = 0
 
 
 DEFAULT_PROTOCOL_VERSION = ProtocolVersion((0,))
@@ -183,12 +183,12 @@ class CallingAEInvocationId(ExplicitTaggedType, AEInvocationIdentifier):
     tag2: ClassVar[x690.Tag] = x690.Tag(9, Class.CONTEXT_SPECIFIC, True)
 
 
-class SenderACSERequirements(ImplicitTaggedType, ACSERequirements):
+class SenderACSERequirements(ACSERequirements):
     """sender-acse-requirements [10] IMPLICIT ACSE-requirements"""
     tag: ClassVar[x690.Tag] = x690.Tag(10, Class.CONTEXT_SPECIFIC)
 
 
-class RequestMechanismName(ImplicitTaggedType, MechanismName):
+class RequestMechanismName(MechanismName):
     """mechanism-name [11] IMPLICIT Mechanism-name"""
     tag: ClassVar[x690.Tag] = x690.Tag(11, Class.CONTEXT_SPECIFIC)
 
@@ -198,7 +198,7 @@ class CallingAuthenticationValue(ExplicitTaggedType, AuthenticationValue):
     tag2: ClassVar[x690.Tag] = x690.Tag(12, Class.CONTEXT_SPECIFIC, True)
 
 
-class AARQapdu(ImplicitTaggedType, SequenceType):
+class AARQapdu(SequenceType):
     """AARQ-apdu ::= [APPLICATION 0] IMPLICIT SEQUENCE"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.APPLICATION, constructed=True)
     protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION
@@ -273,12 +273,12 @@ class RespondingAEInvocationId(ExplicitTaggedType, AEInvocationIdentifier):
     tag2: ClassVar[x690.Tag] = x690.Tag(7, Class.CONTEXT_SPECIFIC, True)
 
 
-class ResponderACSERequirements(ImplicitTaggedType, ACSERequirements):
+class ResponderACSERequirements(ACSERequirements):
     """responder-acse-requirements [8] IMPLICIT ACSE-requirements tagged"""
     tag: ClassVar[x690.Tag] = x690.Tag(8, Class.CONTEXT_SPECIFIC)
 
 
-class ResponseMechanismName(ImplicitTaggedType, MechanismName):
+class ResponseMechanismName(MechanismName):
     """mechanism-name [9] IMPLICIT Mechanism-name"""
     tag: ClassVar[x690.Tag] = x690.Tag(9, Class.CONTEXT_SPECIFIC)
 
@@ -288,7 +288,7 @@ class RespondingAuthenticationValue(ExplicitTaggedType, AuthenticationValue):
     tag2: ClassVar[x690.Tag] = x690.Tag(10, Class.CONTEXT_SPECIFIC, True)
 
 
-class AAREapdu(ImplicitTaggedType, SequenceType):
+class AAREapdu(SequenceType):
     """AARE-apdu ::= [APPLICATION 1] IMPLICIT SEQUENCE"""
     tag: ClassVar[x690.Tag] = x690.Tag(1, Class.APPLICATION, True)
     protocol_version: ProtocolVersion = DEFAULT_PROTOCOL_VERSION
@@ -338,7 +338,7 @@ class AAREapdu(ImplicitTaggedType, SequenceType):
 
 
 @dataclass
-class RLRQapdu(ImplicitTaggedType, SequenceType):
+class RLRQapdu(SequenceType):
     """RLRQ-apdu ::= [APPLICATION 2] IMPLICIT SEQUENCE"""
     tag: ClassVar[x690.Tag] = x690.Tag(2, Class.APPLICATION, True)
     reason: Optional[RequestReason] = None
@@ -346,7 +346,7 @@ class RLRQapdu(ImplicitTaggedType, SequenceType):
 
 
 @dataclass
-class RLREapdu(ImplicitTaggedType, SequenceType):
+class RLREapdu(SequenceType):
     """RLRE-apdu ::= [APPLICATION 3] IMPLICIT SEQUENCE"""
     tag: ClassVar[x690.Tag] = x690.Tag(3, Class.APPLICATION, True)
     reason: Optional[ResponseReason] = None

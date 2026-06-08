@@ -912,9 +912,9 @@ class ConstrainedOctetStringType(x680.ConstrainedOctetString, OctetStringType):
 
 
 class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
-    @classmethod
     def __init_subclass__(cls) -> None:
         cls._init_subclass()
+        return super().__init_subclass__()
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:  # copypast from other

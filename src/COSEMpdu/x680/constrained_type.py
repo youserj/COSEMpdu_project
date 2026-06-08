@@ -102,23 +102,21 @@ class ValueRange(SubtypeElements):
         return f"({lower}..{upper})"
 
 
-@dataclass
 class SizeConstraint(SubtypeElements):
     max_size: int
-    min_size: Optional[int] = None
+    min_size: int
+
+    def __init__(self, max_size: int, min_size: Optional[int] = None) -> None:
+        self.max_size = max_size
+        self.min_size = max_size if min_size is None else min_size
 
     def contains(self, value: int) -> bool:
-        if self.min_size is None:
-            if value != self.max_size:
-                raise ConstraintError(f"Size must be {self.max_size}, got {value}")
-        elif value < self.min_size:
-            raise ConstraintError(f"Size must be at least {self.min_size}, got {value}")
-        elif value > self.max_size:
-            raise ConstraintError(f"Size must be < {self.max_size}, got {value}")
-        return True
+        if value < self.min_size:
+            return False
+        return not value > self.max_size
 
     def __str__(self) -> str:
-        if self.min_size is None:
+        if self.min_size == self.max_size:
             inner = str(self.max_size)
         else:
             inner = f"{self.min_size}..{self.max_size}"
@@ -220,7 +218,7 @@ class ConstrainedBitStringType(ConstrainedType, BitStringType):
         """Set ``fixed_length`` when the constraint specifies an exact size."""
         if (
             isinstance(cls.constraint_spec, SizeConstraint)
-            and cls.constraint_spec.min_size is None
+            and cls.constraint_spec.min_size == cls.constraint_spec.max_size
         ):
             cls.fixed_length = cls.constraint_spec.max_size
 
@@ -230,7 +228,9 @@ class ConstrainedBitStringType(ConstrainedType, BitStringType):
             isinstance(self.constraint_spec, SizeConstraint)
             and not self.constraint_spec.contains(len(value))
         ):
-            raise ConstraintError(f"got {len(value)}, expected {self.constraint_spec}")
+            value += (0,) * (self.constraint_spec.min_size - len(value))
+            if not self.constraint_spec.contains(len(value)):
+                raise ConstraintError(f"got {len(value)}, expected {self.constraint_spec}")
         super().__init__(value)
 
 
@@ -251,7 +251,7 @@ class ConstrainedSequenceOfType[T: Type](ConstrainedType, SequenceOfType[T]):
         """Set ``fixed_length`` when the constraint specifies an exact size."""
         if (
             isinstance(cls.constraint_spec, SizeConstraint)
-            and cls.constraint_spec.min_size is None
+            and cls.constraint_spec.min_size == cls.constraint_spec.max_size
         ):
             cls.fixed_length = cls.constraint_spec.max_size
 
@@ -280,10 +280,11 @@ class ConstrainedOctetString(ConstrainedType, OctetStringType):
     def _init_subclass(cls) -> None:
         """Set ``fixed_length`` when the constraint specifies an exact size."""
         if (
-            isinstance(getattr(cls, "constraint_spec", None), SizeConstraint)
-            and cast("SizeConstraint", cls.constraint_spec).min_size is None
+            hasattr(cls, "constraint_spec")
+            and isinstance(cls.constraint_spec, SizeConstraint)
+            and cls.constraint_spec.min_size == cls.constraint_spec.max_size
         ):
-            cls.fixed_length = cast("SizeConstraint", cls.constraint_spec).max_size
+            cls.fixed_length = cls.constraint_spec.max_size
 
     def __init__(self, value: OCTET_STRING) -> None:
         """Validate the octet‑string length against ``fixed_length``."""

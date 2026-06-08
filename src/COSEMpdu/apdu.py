@@ -33,43 +33,40 @@ from .service_error import ConfirmedServiceError
 from . import ber
 from . import x690
 from .x680 import tag, ConstraintSpec
-from .x680.bit_string import NamedBitList, NamedBit
 from .x680.constrained_type import SizeConstraint
 
 
-class Conformance(ber.ImplicitTaggedType, ber.ConstrainedBitStringType):
+class Conformance(ber.ConstrainedBitStringType):
     """Conformance ::= [APPLICATION 31] IMPLICIT BIT STRING"""
-    tag = x690.Tag(
+    tag: ClassVar[x690.Tag] = x690.Tag(
         class_number=31,
         class_=tag.Class.APPLICATION
     )
     constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(24)
-    named_bits: ClassVar[Optional[NamedBitList]] = NamedBitList((
-        NamedBit("reserved-zero", 0),
-        NamedBit("general-protection", 1),
-        NamedBit("general-block-transfer", 2),
-        NamedBit("read", 3),
-        NamedBit("write", 4),
-        NamedBit("unconfirmed-write", 5),
-        NamedBit("delta-value-encoding", 6),
-        NamedBit("reserved-seven", 7),
-        NamedBit("attribute0-supported-with-set", 8),
-        NamedBit("priority-mgmt-supported", 9),
-        NamedBit("attribute0-supported-with-get", 10),
-        NamedBit("block-transfer-with-get-or-read", 11),
-        NamedBit("block-transfer-with-set-or-write", 12),
-        NamedBit("block-transfer-with-action", 13),
-        NamedBit("multiple-references", 14),
-        NamedBit("information-report", 15),
-        NamedBit("data-notification", 16),
-        NamedBit("access", 17),
-        NamedBit("parameterized-access", 18),
-        NamedBit("get", 19),
-        NamedBit("set", 20),
-        NamedBit("selective-access", 21),
-        NamedBit("event-notification", 22),
-        NamedBit("action", 23),
-    ))
+    RESERVED_ZERO: Final[int] = 0
+    GENERAL_PROTECTION: Final[int] = 1
+    GENERAL_BLOCK_TRANSFER: Final[int] = 2
+    READ: Final[int] = 3
+    WRITE: Final[int] = 4
+    UNCONFIRMED_WRITE: Final[int] = 5
+    DELTA_VALUE_ENCODING: Final[int] = 6
+    RESERVED_SEVEN: Final[int] = 7
+    ATTRIBUTE0_SUPPORTED_WITH_SET: Final[int] = 8
+    PRIORITY_MGMT_SUPPORTED: Final[int] = 9
+    ATTRIBUTE0_SUPPORTED_WITH_GET: Final[int] = 10
+    BLOCK_TRANSFER_WITH_GET_OR_READ: Final[int] = 11
+    BLOCK_TRANSFER_WITH_SET_OR_WRITE: Final[int] = 12
+    BLOCK_TRANSFER_WITH_ACTION: Final[int] = 13
+    MULTIPLE_REFERENCES: Final[int] = 14
+    INFORMATION_REPORT: Final[int] = 15
+    DATA_NOTIFICATION: Final[int] = 16
+    ACCESS: Final[int] = 17
+    PARAMETERIZED_ACCESS: Final[int] = 18
+    GET: Final[int] = 19
+    SET: Final[int] = 20
+    SELECTIVE_ACCESS: Final[int] = 21
+    EVENT_NOTIFICATION: Final[int] = 22
+    ACTION: Final[int] = 23
 
 
 class InitialRequest(ImplicitTaggedType, SequenceType):

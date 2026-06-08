@@ -16,28 +16,6 @@ def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
     )
 
 
-class Type(x680.Type, Protocol):
-    tag: ClassVar[Tag]
-
-    @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
-        """Decode with Tag + Length + Contents"""
-        if isinstance(err := cls.tag.validate(buf), Error):
-            return err
-        return cls.get_lc(buf)  # Then decode length + contents
-
-    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        """Encode with Tag + Length + Contents"""
-        return put_chain(
-            self.tag.put(buf),
-            self.put_lc(buf)
-        )
-
-
-type NamedType = x680.NamedType[Type]
-type SEQUENCE = tuple[Optional[Type], ...]
-
-
 class ExplicitTaggedType(x680.Type, Protocol):
     """
     EXPLICIT tagged type for BER encoding (X.690 §8.14).
@@ -172,7 +150,7 @@ class ExplicitTaggedType(x680.Type, Protocol):
         return buf.get_pos() - start_pos
 
 
-class ImplicitTaggedType(Type, Protocol):
+class ImplicitTaggedType(x680.Type, Protocol):
     """
     IMPLICIT โ�� pure tag substitution for BER (X.690 ยง8.14.1).
 
@@ -197,8 +175,26 @@ class ImplicitTaggedType(Type, Protocol):
     """
     tag: ClassVar[Tag]
 
+    @classmethod
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """Decode with Tag + Length + Contents"""
+        if isinstance(err := cls.tag.validate(buf), Error):
+            return err
+        return cls.get_lc(buf)  # Then decode length + contents
 
-class BitStringType(Type, x680.BitStringType):
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """Encode with Tag + Length + Contents"""
+        return put_chain(
+            self.tag.put(buf),
+            self.put_lc(buf)
+        )
+
+
+type TaggedType = ImplicitTaggedType | ExplicitTaggedType
+type NamedType = x680.NamedType[TaggedType]
+
+
+class BitStringType(ImplicitTaggedType, x680.BitStringType):
     """
     BIT STRING with BER encoding/decoding (X.690 ยง8.6)
 
@@ -274,7 +270,7 @@ class BitStringType(Type, x680.BitStringType):
         )
 
 
-class BooleanType(Type, x680.BooleanType):
+class BooleanType(ImplicitTaggedType, x680.BooleanType):
     """
     BOOLEAN with BER encoding/decoding (X.690 ยง8.2)
 
@@ -327,7 +323,7 @@ class BooleanType(Type, x680.BooleanType):
         )
 
 
-class GraphicString(Type, x680.GraphicString):
+class GraphicString(ImplicitTaggedType, x680.GraphicString):
     """GRAPHIC STRING with BER encoding/decoding (X.690 ยง8.21)"""
 
     # Cached BER tag instance (primitive form)
@@ -389,7 +385,7 @@ class GraphicString(Type, x680.GraphicString):
         return f"{self.__class__.__name__}({self.value!r})"
 
 
-class ChoiceType(x680.ChoiceType[Type]):
+class ChoiceType(x680.ChoiceType[TaggedType]):
     """
     CHOICE with BER encoding/decoding (X.690 ยง8.13)
 
@@ -406,8 +402,8 @@ class ChoiceType(x680.ChoiceType[Type]):
         - Tag identifies which alternative was selected
         - For DLMS/COSEM, alternatives use CONTEXT SPECIFIC class
     """
-    # alternatives: ClassVar[dict[int, Type]]
-    value: Type
+    alternatives: ClassVar[dict[int, TaggedType]]
+    value: TaggedType
 
     def __init_subclass__(cls) -> None:
         if not hasattr(cls, "alternatives"):
@@ -454,7 +450,7 @@ class ChoiceType(x680.ChoiceType[Type]):
         return self.put(buf)
 
 
-class EnumeratedType(Type, x680.EnumeratedType):
+class EnumeratedType(ImplicitTaggedType, x680.EnumeratedType):
     """
     ENUMERATED with BER encoding/decoding (X.690 ยง8.4)
 
@@ -527,7 +523,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
         return put_lc(buf, num_bytes, content_bytes)
 
 
-class IntegerType(Type, x680.IntegerType):
+class IntegerType(ImplicitTaggedType, x680.IntegerType):
     """
     INTEGER with BER encoding/decoding (X.690 ยง8.3)
 
@@ -597,7 +593,7 @@ class IntegerType(Type, x680.IntegerType):
         return put_lc(buf, len(content_bytes), content_bytes)
 
 
-class NullType(Type, x680.NullType):
+class NullType(ImplicitTaggedType, x680.NullType):
     """
     NULL with BER encoding/decoding (X.690 ยง8.8)
     BER encoding structure (primitive form):
@@ -651,7 +647,7 @@ class NullType(Type, x680.NullType):
         return isinstance(other, NullType)
 
 
-class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
+class ObjectIdentifierType(ImplicitTaggedType, x680.ObjectIdentifierType):
     """
     OBJECT IDENTIFIER with BER encoding/decoding (X.690 ยง8.19).
 
@@ -763,7 +759,7 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
         return put_lc(buf, len(content_bytes), bytes(content_bytes))
 
 
-class OctetStringType(Type, x680.OctetStringType):
+class OctetStringType(ImplicitTaggedType, x680.OctetStringType):
     """
     OCTET STRING with BER encoding/decoding (X.690 ยง8.7)
 
@@ -816,7 +812,7 @@ class OctetStringType(Type, x680.OctetStringType):
         return put_lc(buf, len(self.value), self.value)
 
 
-class SequenceType(Type, x680.SequenceType):
+class SequenceType(ImplicitTaggedType, x680.SequenceType):
     """
     SEQUENCE with BER encoding/decoding (X.690 ยง8.9)
 
@@ -853,7 +849,7 @@ class SequenceType(Type, x680.SequenceType):
             return Error.from_e(ValueError("Indefinite length form not supported for SEQUENCE"))
         # Read all component encodings within the length
         start_pos = buf.get_pos()
-        components_data: dict[str, Optional[Type]] = {}
+        components_data: dict[str, Optional[TaggedType]] = {}
         for n_t in cls.components:
             if buf.get_pos() - start_pos >= length.value:  # Component is absent (OPTIONAL or DEFAULT)
                 components_data[n_t.identifier] = None
@@ -912,7 +908,7 @@ class SequenceType(Type, x680.SequenceType):
         return buf.get_pos() - start_pos
 
 
-class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
+class SequenceOfType[T: TaggedType](ImplicitTaggedType, x680.SequenceOfType[T]):
     """
     SEQUENCE OF with BER encoding/decoding (X.690 ยง8.10)
     BER encoding structure (constructed form):
@@ -935,7 +931,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         class_number=x680.UniversalClassTagAssignments.SequenceOf,
         constructed=True
     )
-    _T: ClassVar[type[Type]]
+    _T: ClassVar[type[TaggedType]]
 
     @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -998,7 +994,7 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         return f"{self.__class__.__name__}(component={self._T.__name__}, count={len(self.value)})"
 
 
-class GeneralizedTime(Type, x680.GeneralizedTime):
+class GeneralizedTime(ImplicitTaggedType, x680.GeneralizedTime):
     """GeneralizedTime with BER encoding (X.690 ยง8.23)"""
     tag: ClassVar[Tag] = Tag(class_number=UniversalClassTagAssignments.GeneralizedTime, constructed=False)
 
@@ -1018,4 +1014,7 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
         return put_lc(buf, len(data), data)
 
 
-class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType): ...
+class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
+    def __init_subclass__(cls) -> None:
+        cls._init_subclass()
+        return super().__init_subclass__()

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from StructResult.result import Error
-from typing import Iterator, Optional, Self, ClassVar, overload, Any
-from .type import BuiltinType, BIT_STRING, Simple, InitError
+from typing import Optional, Self, ClassVar, overload, Any
+from .type import BuiltinType, BIT_STRING, Simple, InitError, is_classvar
 
 
 @dataclass(frozen=True)
@@ -21,59 +21,43 @@ class NamedBit:
         return 1 << self.position
 
 
-@dataclass
-class NamedBitList:
-    """
-    NamedBitList ::= NamedBit | NamedBitList "," NamedBit
-    """
-    bits: tuple[NamedBit, ...]
-
-    def get_mask(self) -> int:
-        """Битовая маска всех именованных битов"""
-        mask = 0
-        for bit in self.bits:
-            mask |= (1 << bit.position)
-        return mask
-
-    def get_bit(self, identifier: str) -> Optional[NamedBit]:
-        """Получить NamedBit по имени"""
-        for bit in self.bits:
-            if bit.identifier == identifier:
-                return bit
-        return None
-
-    def __getitem__(self, identifier: str) -> int:
-        """Получить позицию бита по имени"""
-        bit = self.get_bit(identifier)
-        if bit is None:
-            raise KeyError(f"No named bit: {identifier}")
-        return bit.position
-
-    def __contains__(self, identifier: str) -> bool:
-        return self.get_bit(identifier) is not None
-
-    def __iter__(self) -> Iterator[NamedBit]:
-        return iter(self.bits)
-
-    def __len__(self) -> int:
-        return len(self.bits)
-
-    def __str__(self) -> str:
-        return "{" + ", ".join(str(b) for b in self.bits) + "}"
-
-
 class BitStringType(Simple[BIT_STRING], BuiltinType):
     """
     BIT STRING type (X.680 22)
-    NATIVE REPRESENTATION:
+
+    Native representation:
     - value: tuple[int, ...] of bits (0/1) in LSB0 order
-    - named_bits: ClassVar[Optional[NamedBitList]] - имена битов для ЭТОГО ТИПА
-    Примеры ASN.1:
+    - named_bits: ClassVar[Optional[tuple[NamedBit, ...]]] — bit names defined for this type.
+        Automatically populated in __init_subclass__ by scanning Final[int] class annotations.
+
+    ASN.1 examples:
         Status ::= BIT STRING { read(0), write(1), execute(2) }
         Bits ::= BIT STRING { flag0(0), flag1(1), flag2(2) } (SIZE(4))
+
+    Usage:
+        class Status(BitStringType):
+            read: Final[int] = 0
+            write: Final[int] = 1
+            execute: Final[int] = 2
     """
-    named_bits: ClassVar[Optional[NamedBitList]] = None  # ← ClassVar!
+    named_bits: ClassVar[Optional[tuple[NamedBit, ...]]] = None  # ClassVar, per-type
     value: BIT_STRING
+
+    def __init_subclass__(cls) -> None:
+        """
+        Build <members> tuple from `Final[int]` class annotations.
+        Ignores ClassVar members.
+        """
+        named_bits: list[NamedBit] = []
+        for identifier, type_ in cls.__annotations__.items():
+            if is_classvar(type_):
+                continue
+            if (
+                hasattr(cls, identifier)
+                and isinstance(position := cls.__dict__[identifier], int)
+            ):
+                named_bits.append(NamedBit(identifier, position))
+        cls.named_bits = tuple(named_bits)
 
     @classmethod
     def validate(cls, value: Any) -> None | Error:
@@ -85,13 +69,13 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     def default(cls) -> Self:
         """Default value: all bits 0"""
         if cls.named_bits:
-            return cls((0,) * len(cls.named_bits.bits))
+            return cls((0,) * (cls.named_bits[-1].position + 1))
         return cls(())
 
     @classmethod
     def from_bin(cls, bin_str: str) -> Self:
         """
-        Создать из двоичной строки: '101' -> (1,0,1)
+        Create from binary string: '101' -> (1,0,1)
         ASN.1 notation: '101'B
         """
         # Remove ASN.1 quotes and B suffix
@@ -108,7 +92,7 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     @classmethod
     def from_hex(cls, hex_str: str, bit_length: Optional[int] = None) -> Self:
         """
-        Создать из шестнадцатеричной строки: 'A5' -> (1,0,1,0,0,1,0,1)
+        Create from hex string: 'A5' -> (1,0,1,0,0,1,0,1)
         ASN.1 notation: 'A5'H
         """
         if hex_str.startswith("'") and hex_str.endswith("'H"):
@@ -126,8 +110,8 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     @classmethod
     def from_int(cls, value: int, length: int) -> Self:
         """
-        Создать из целого числа с заданной длиной:
-        42, 6 -> 101010 (6 бит)
+        Create from integer with given length:
+        42, 6 -> 101010 (6 bits)
         """
         bits: list[int] = []
         for i in range(length - 1, -1, -1):
@@ -137,7 +121,7 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
     @classmethod
     def from_bytes(cls, data: bytes, bit_length: Optional[int] = None) -> Self:
         """
-        Создать из байтов (big-endian, MSB first)
+        Create from bytes (big-endian, MSB first)
         """
         bits: list[int] = []
         for byte in data:
@@ -147,105 +131,102 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return cls(tuple(bits))
 
     @classmethod
+    def from_bits(cls, *bits: int) -> Self:
+        """Create with bits set at given positions: (0, 3, 5) -> bits 0,3,5 = 1, rest 0"""
+        if not bits:
+            return cls.default()
+        max_pos = max(bits)
+        result = [0] * (max_pos + 1)
+        for pos in bits:
+            result[pos] = 1
+        return cls(tuple(result))
+
+    @classmethod
     def empty(cls) -> Self:
-        """Пустая битовая строка"""
+        """Empty bit string"""
         return cls(())
 
     @classmethod
     def zeros(cls, length: int) -> Self:
-        """Битовая строка из всех нулей заданной длины"""
+        """Bit string of all zeros of given length"""
         return cls(tuple([0] * length))
 
     @classmethod
     def ones(cls, length: int) -> Self:
-        """Битовая строка из всех единиц заданной длины"""
+        """Bit string of all ones of given length"""
         return cls(tuple([1] * length))
 
     @property
     def bit_length(self) -> int:
-        """Длина в битах"""
+        """Length in bits"""
         return len(self.value)
 
     @property
     def octet_length(self) -> int:
-        """Длина в октетах (с округлением вверх)"""
+        """Length in octets (rounded up)"""
         return (len(self.value) + 7) // 8
 
     @overload
-    def __getitem__(self, key: int | str) -> int: ...
+    def __getitem__(self, key: int) -> int: ...
 
     @overload
     def __getitem__(self, key: slice) -> Self: ...
 
-    def __getitem__(self, key: int | str | slice) -> int | Self:
+    def __getitem__(self, key: int | slice) -> int | Self:
         """
-        Доступ к битам:
-        - int: bits[0] -> первый бит (LSB0), возвращает int (0/1)
-        - str: bits['read'] -> значение именованного бита, возвращает int (0/1)
-        - slice: bits[1:4] -> срез, возвращает новый BitStringType
+        Bit access:
+        - int: bits[0] -> first bit (LSB0), returns int (0/1)
+        - slice: bits[1:4] -> slice, returns new BitStringType
         """
         if isinstance(key, int):
-            # Доступ по индексу
-            if key < 0 or key >= len(self.value):
+            # Index access
+            if key < 0:
+                raise IndexError(f"Bit index {key} out of range [0, ...]")
+            if key >= len(self.value):
+                # If there is a named_bit with position == key, return 0
+                named_bits = self.named_bits
+                if named_bits and any(nb.position == key for nb in named_bits):
+                    return 0
                 raise IndexError(f"Bit index {key} out of range [0, {len(self.value)-1}]")
             return self.value[key]
-        if isinstance(key, str):
-            # Доступ по имени бита
-            named_bits = self.__class__.named_bits
-            if named_bits is None:
-                raise KeyError(f"Type {self.__class__.__name__} has no named bits")
-            position = named_bits[key]
-            if position >= len(self.value):
-                return 0  # Бит вне длины считается 0
-            return self.value[position]
         if isinstance(key, slice):
-            # Срез битовой строки
+            # Bit string slice
             sliced = self.value[key]
             return self.__class__(sliced)
         raise TypeError(f"Expected int, str or slice, got {type(key)}")
 
-    def __setitem__(self, key: int | str | slice, value: int | bool | Self) -> None:
+    def __setitem__(self, key: int | slice, value: int | bool | Self) -> None:
         """
-        Установка битов:
-        - int: bits[0] = 1 -> установка одного бита
-        - str: bits['read'] = True -> установка именованного бита
-        - slice: bits[1:4] = (1,0,1) -> установка среза
+        Bit assignment:
+        - int: bits[0] = 1 -> set a single bit
+        - slice: bits[1:4] = (1,0,1) -> set a slice
         """
         if isinstance(key, int):
-            # Установка по индексу
-            if key < 0 or key >= len(self.value):
+            # Set by index
+            if key < 0:
+                raise IndexError(f"Bit index {key} out of range [0, ...]")
+            named_bits = self.__class__.named_bits
+            if key >= len(self.value):
+                # Auto-expand if key matches a named_bit position
+                if named_bits and any(nb.position == key for nb in named_bits):
+                    bits = list(self.value)
+                    bits.extend([0] * (key - len(self.value) + 1))
+                    bits[key] = int(value)
+                    self.value = tuple(bits)
+                    return
                 raise IndexError(f"Bit index {key} out of range [0, {len(self.value)-1}]")
             bits = list(self.value)
             bits[key] = int(value)
             self.value = tuple(bits)
-
-        elif isinstance(key, str):
-            # Установка по имени
-            named_bits = self.__class__.named_bits
-            if named_bits is None:
-                raise KeyError(f"Type {self.__class__.__name__} has no named bits")
-
-            position = named_bits[key]
-            if position >= len(self.value):
-                # Расширяем строку
-                bits = list(self.value)
-                bits.extend([0] * (position - len(bits) + 1))
-                bits[position] = int(value)
-                self.value = tuple(bits)
-            else:
-                bits = list(self.value)
-                bits[position] = int(value)
-                self.value = tuple(bits)
-
         elif isinstance(key, slice):
-            # Установка среза
+            # Set a slice
             if isinstance(value, (tuple, list)):
-                # Значение как последовательность битов
+                # Value as a sequence of bits
                 new_bits = list(self.value)
                 new_bits[key] = list(int(v) for v in value)
                 self.value = tuple(new_bits)
             elif isinstance(value, self.__class__):
-                # Значение как другой BitStringType
+                # Value as another BitStringType
                 new_bits = list(self.value)
                 new_bits[key] = list(value.value)
                 self.value = tuple(new_bits)
@@ -255,43 +236,43 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         else:
             raise TypeError(f"Expected int, str or slice, got {type(key)}")
 
-    def get_value(self, identifier: str, default: int = 0) -> int:
-        """Безопасное получение значения именованного бита"""
+    def get_value(self, identifier: int, default: int = 0) -> int:
+        """Safely get a named bit value"""
         try:
             return self[identifier]
         except KeyError:
             return default
 
-    def set(self, identifier: str, value: int = 1) -> None:
-        """Установка именованного бита"""
+    def set(self, identifier: int, value: int = 1) -> None:
+        """Set a named bit"""
         self[identifier] = value
 
-    def clear(self, identifier: str) -> None:
-        """Сброс именованного бита в 0"""
+    def clear(self, identifier: int) -> None:
+        """Clear a named bit to 0"""
         self[identifier] = 0
 
-    def toggle(self, identifier: str) -> None:
-        """Инвертирование именованного бита"""
+    def toggle(self, identifier: int) -> None:
+        """Toggle a named bit"""
         self[identifier] = 1 - self[identifier]
 
-    def has_bit(self, identifier: str) -> bool:
-        """Проверить, установлен ли именованный бит"""
+    def has_bit(self, identifier: int) -> bool:
+        """Check if a named bit is set"""
         return bool(self.get_value(identifier, 0))
 
-    def has_any(self, *identifiers: str) -> bool:
-        """Проверить, установлен ли хотя бы один из указанных битов"""
+    def has_any(self, *identifiers: int) -> bool:
+        """Check if at least one of the specified bits is set"""
         return any(self.has_bit(ident) for ident in identifiers)
 
-    def has_all(self, *identifiers: str) -> bool:
-        """Проверить, установлены ли все указанные биты"""
+    def has_all(self, *identifiers: int) -> bool:
+        """Check if all specified bits are set"""
         return all(self.has_bit(ident) for ident in identifiers)
 
     def to_bin(self) -> str:
-        """Двоичное представление: '1011'"""
+        """Binary representation: '1011'"""
         return "".join(map(str, self.value))
 
     def hex(self) -> str:
-        """Шестнадцатеричное представление: 'A5'"""
+        """Hexadecimal representation: 'A5'"""
         if not self.value:
             return ""
         # Pad to octet boundary
@@ -308,21 +289,21 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return bytes(data).hex().upper()
 
     def __int__(self) -> int:
-        """Целочисленное представление (big-endian)"""
+        """Integer representation (big-endian)"""
         result = 0
         for bit in self.value:
             result = (result << 1) | bit
         return result
 
     def __bytes__(self) -> bytes:
-        """Байтовое представление с выравниванием до октета"""
+        """Byte representation with octet-aligned padding"""
         return bytes.fromhex(self.hex())
 
     def __str__(self) -> str:
-        """ASN.1 notation: '101'B или '{read, write}'"""
+        """ASN.1 notation: '101'B or '{read, write}'"""
         named_bits = self.__class__.named_bits
         if named_bits:
-            # Для NamedBitList показываем установленные имена
+            # Show set bit names
             set_bits: list[str] = []
             for named_bit in named_bits:
                 if named_bit.position < len(self.value) and self.value[named_bit.position]:
@@ -336,13 +317,13 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return f"{self.__class__.__name__}({self.to_bin()!r})"
 
     def __and__(self, other: Self) -> Self:
-        """Побитовое И"""
+        """Bitwise AND"""
         min_len = min(len(self.value), len(other.value))
         result = tuple(self.value[i] & other.value[i] for i in range(min_len))
         return self.__class__(result)
 
     def __or__(self, other: Self) -> Self:
-        """Побитовое ИЛИ"""
+        """Bitwise OR"""
         max_len = max(len(self.value), len(other.value))
         result = [0] * max_len
         for i, bit in enumerate(self.value):
@@ -352,18 +333,18 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return self.__class__(tuple(result))
 
     def __xor__(self, other: Self) -> Self:
-        """Побитовое исключающее ИЛИ"""
+        """Bitwise XOR"""
         min_len = min(len(self.value), len(other.value))
         result = tuple(self.value[i] ^ other.value[i] for i in range(min_len))
         return self.__class__(tuple(result))
 
     def __invert__(self) -> Self:
-        """Побитовое НЕ"""
+        """Bitwise NOT"""
         result = tuple(1 - b for b in self.value)
         return self.__class__(result)
 
     def __lshift__(self, shift: int) -> Self:
-        """Сдвиг влево (добавление нулей справа)"""
+        """Left shift (append zeros on the right)"""
         if shift < 0:
             return self.__rshift__(-shift)
         bits = list(self.value)
@@ -371,7 +352,7 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return self.__class__(tuple(bits))
 
     def __rshift__(self, shift: int) -> Self:
-        """Сдвиг вправо (отбрасывание битов справа)"""
+        """Right shift (discard bits from the right)"""
         if shift < 0:
             return self.__lshift__(-shift)
         if shift >= len(self.value):
@@ -379,46 +360,13 @@ class BitStringType(Simple[BIT_STRING], BuiltinType):
         return self.__class__(self.value[:-shift])
 
     def __add__(self, other: Self) -> Self:
-        """Конкатенация битовых строк"""
+        """Concatenation of bit strings"""
         result = self.value + other.value
         return self.__class__(result)
 
-    def __getslice__(self, start: int, end: int) -> Self:
-        """Срез битовой строки"""
-        return self.__class__(self.value[start:end])
-
-    @classmethod
-    def get_named_bits(cls) -> Optional[NamedBitList]:
-        """Получить список именованных битов для этого типа"""
-        return cls.named_bits
-
-    @property
-    def available_bits(self) -> dict[str, int]:
-        """Словарь доступных именованных битов {имя: позиция}"""
-        named_bits = self.__class__.named_bits
-        if named_bits is None:
-            return {}
-        return {bit.identifier: bit.position for bit in named_bits}
-
-    @property
-    def set_bits(self) -> dict[str, int]:
-        """Словарь установленных именованных битов {имя: позиция}"""
-        named_bits = self.__class__.named_bits
-        if named_bits is None:
-            return {}
-        result = {}
-        for named_bit in named_bits:
-            if named_bit.position < len(self.value) and self.value[named_bit.position]:
-                result[named_bit.identifier] = named_bit.position
-        return result
-
-    @classmethod
-    def get_named_bit(cls, identifier: str) -> Optional[NamedBit]:
-        """Получить NamedBit по имени для этого типа"""
-        if cls.named_bits is None:
-            return None
-        return cls.named_bits.get_bit(identifier)
-
     def __bool__(self) -> bool:
-        """True если есть хотя бы один ненулевой бит"""
+        """True if at least one bit is set (non-zero)"""
         return any(b == 1 for b in self.value)
+
+    def __contains__(self, item: int) -> bool:
+        return bool(self.value[item])

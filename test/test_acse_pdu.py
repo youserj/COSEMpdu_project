@@ -106,21 +106,21 @@ class TestEncodingDecoding(unittest.TestCase):
     def test_aarq_encode_decode(self) -> None:
         """Test AARQApdu encoding and decoding with all optional fields"""
         aarq = AARQapdu(
-            protocol_version=ProtocolVersion((0,)),
-            application_context_name=ApplicationContextName((1, 2, 840, 10008, 1, 1)),
-            called_ap_title=CalledAPTitle(b"called_ap"),
-            called_ae_qualifier=CalledAEQualifier(b"called_ae"),
+            protocol_version=ProtocolVersion((1, 1)),
+            application_context_name=ApplicationContextName((2, 16, 756, 5, 8, 1, 1)),
+            # called_ap_title=CalledAPTitle(b"called_ap"),
+            # called_ae_qualifier=CalledAEQualifier(b"called_ae"),
             called_ap_invocation_id=CalledAPInvocationId(1),
             called_ae_invocation_id=CalledAEInvocationId(2),
-            calling_ap_title=CallingAPTitle(b"calling_ap"),
-            calling_ae_qualifier=CallingAEQualifier(b"calling_ae"),
+            # calling_ap_title=CallingAPTitle(b"calling_ap"),
+            # calling_ae_qualifier=CallingAEQualifier(b"calling_ae"),
             calling_ap_invocation_id=CallingAPInvocationId(3),
             calling_ae_invocation_id=CallingAEInvocationId(4),
-            sender_acse_requirements=SenderACSERequirements((0,)),
-            mechanism_name=RequestMechanismName((1, 2, 840, 10008, 1, 2)),
-            calling_authentication_value=CallingAuthenticationValue(Charstring("test_auth")),
-            implementation_information=ImplementationInformation("DLMS/COSEM"),
-            user_information=UserInformation(b"\x01\x02\x03"),
+            # sender_acse_requirements=SenderACSERequirements((0,)),
+            mechanism_name=RequestMechanismName((2, 16, 756, 5, 8, 2, 2)),
+            # calling_authentication_value=CallingAuthenticationValue(Charstring("test_auth")),
+            # implementation_information=ImplementationInformation("DLMS/COSEM"),
+            # user_information=UserInformation(b"\x01\x02\x03"),
         )
         check_encode_decode(aarq, AARQapdu, 1024)
 

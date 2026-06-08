@@ -1,7 +1,6 @@
 import datetime
 from dataclasses import dataclass
-from types import UnionType
-from typing import Self, ClassVar, TypeAlias, Optional, Union, get_args, cast
+from typing import Self, ClassVar, TypeAlias, Optional, Union
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
 from .byte_buffer import ByteBuffer, put_chain
@@ -9,7 +8,8 @@ from .x680.constrained_type import SizeConstraint, ValueRange
 from .x680.type import NamedType, INTEGER
 from . import x680
 from . import axdr
-from .axdr import ConstrainedIntegerType, ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, NullType0
+from .axdr import ConstrainedIntegerType, ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, NullType0, \
+    BitStringType, ChoiceType, SequenceType, SequenceOfType, put_length
 
 
 class Integer8(ConstrainedIntegerType):
@@ -52,7 +52,7 @@ LN_REFERENCE = ObjectName(0x0007)
 SN_REFERENCE = ObjectName(-1536)  # 0xFA00
 
 
-class TypeDescription(axdr.ChoiceType):  # Forward declaration
+class TypeDescription(ChoiceType):  # Forward declaration
     """TypeDescription"""
     value: "NullData | TypeDescriptionArray | TypeDescriptionStructure | TypeDescriptionBoolean | TypeDescriptionBitString"
     " | TypeDescriptionDoubleLong | TypeDescriptionDoubleLongUnsigned | TypeDescriptionOctetString | TypeDescriptionVisibleString"
@@ -66,7 +66,7 @@ NullData = NullType0
 
 
 @dataclass
-class TypeDescriptionArray(ImplicitTaggedType, axdr.SequenceType):
+class TypeDescriptionArray(ImplicitTaggedType, SequenceType):
     """array [1] IMPLICIT SEQUENCE
     {
         number-of-elements Unsigned16,
@@ -77,7 +77,7 @@ class TypeDescriptionArray(ImplicitTaggedType, axdr.SequenceType):
     type_description: TypeDescription
 
 
-SequenceOfTypeDescription: TypeAlias = axdr.SequenceOfType[TypeDescription]
+SequenceOfTypeDescription: TypeAlias = SequenceOfType[TypeDescription]
 """SEQUENCE OF TypeDescription"""
 
 
@@ -219,10 +219,10 @@ setattr(TypeDescription, "alternatives", {
 })
 
 
-class SequenceOfData[T: ImplicitTaggedType | axdr.ChoiceType](axdr.SequenceOfType[T]): ...  # Forward declaration for recursive types
+class SequenceOfData[T: ImplicitTaggedType | ChoiceType](SequenceOfType[T]): ...  # Forward declaration for recursive types
 
 
-class Array[T: ImplicitTaggedType | axdr.ChoiceType](ImplicitTaggedType, SequenceOfData[T]):
+class Array[T: ImplicitTaggedType | ChoiceType](ImplicitTaggedType, SequenceOfData[T]):
     """array [1] IMPLICIT SEQUENCE OF Data"""
     tag = 1
 
@@ -319,7 +319,7 @@ class Structure(ImplicitTaggedType, x680.SequenceType):
         Returns number of bytes written.
         """
         return put_chain(
-            axdr.put_length(buf, len(self.components)),  # Variable-length encoding (§6.10.2)
+            put_length(buf, len(self.components)),  # Variable-length encoding (§6.10.2)
             self.put_c(buf)
         )
 
@@ -342,7 +342,7 @@ class Boolean(ImplicitTaggedType, BooleanType):
     tag = 3
 
 
-class BitString(ImplicitTaggedType, axdr.BitStringType):
+class BitString(ImplicitTaggedType, BitStringType):
     """bit-string [4] IMPLICIT BIT STRING"""
     tag = 4
 
@@ -408,7 +408,7 @@ class ArrayContents(ImplicitTaggedType, OctetStringType):
 
 
 @dataclass
-class CompactArray(ImplicitTaggedType, axdr.SequenceType):
+class CompactArray(ImplicitTaggedType, SequenceType):
     """compact-array [19] IMPLICIT SEQUENCE
     {
         contents-description TypeDescription,
@@ -611,7 +611,7 @@ class DeltaDoubleLongUnsigned(DoubleLongUnsigned):
     tag = 33
 
 
-class DontCare(ImplicitTaggedType, axdr.NullType):
+class DontCare(ImplicitTaggedType, NullType):
     """dont-care [255] IMPLICIT NULL"""
     tag = 255
 
@@ -624,7 +624,7 @@ ComplexDataType = Union[Array[ImplicitTaggedType], Structure, CompactArray]
 CDT = Union[SimpleDataType, ComplexDataType]
 
 
-class Data(axdr.ChoiceType):
+class Data(ChoiceType):
     value: CDT
 
 
@@ -634,7 +634,7 @@ Data.alternatives[1] = Array[Data]
 setattr(SequenceOfData, "_T", Data)
 
 
-class ExternallyData(axdr.ChoiceType):
+class ExternallyData(ChoiceType):
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> Self | Error:
@@ -657,7 +657,7 @@ class DiscriminatedUnion(Structure):
         }
         }
         """
-    components: ClassVar[tuple[NamedType[Enum], NamedType[axdr.ChoiceType]]]
+    components: ClassVar[tuple[NamedType[Enum], NamedType[ChoiceType]]]
 
     def __init_subclass__(cls) -> None:
         """create <components> from annotations"""

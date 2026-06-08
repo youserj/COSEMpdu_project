@@ -1,3 +1,4 @@
+from typing import Final
 import unittest
 import sys
 import os
@@ -5,7 +6,7 @@ import os
 # Добавляем путь для импорта (замените на ваш реальный путь)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.COSEMpdu.x680.bit_string import BitStringType, NamedBit, NamedBitList
+from src.COSEMpdu.x680.bit_string import BitStringType, NamedBit
 
 
 class TestNamedBit(unittest.TestCase):
@@ -14,8 +15,7 @@ class TestNamedBit(unittest.TestCase):
     def test_create_named_bit(self) -> None:
         """Создание именованного бита"""
         bit = NamedBit("read", 0)
-        self.assertEqual(bit.identifier, "read")
-        self.assertEqual(bit.position, 0)
+        self.assertEqual(bit.position, Status.read)
         self.assertEqual(str(bit), "read(0)")
         self.assertEqual(int(bit), 1)  # 1 << 0 = 1
 
@@ -35,121 +35,20 @@ class TestNamedBit(unittest.TestCase):
             bit.position = 10
 
 
-class TestNamedBitList(unittest.TestCase):
-    """Тесты для NamedBitList"""
-
-    def setUp(self) -> None:
-        class MyNamedBitList(NamedBitList):
-            bits = (
-                NamedBit("read", 0),
-                NamedBit("write", 1),
-                NamedBit("execute", 2)
-            )
-
-        self.named_bits = MyNamedBitList()
-
-    def test_from_dict(self) -> None:
-        """Создание NamedBitList из словаря"""
-        self.assertEqual(len(self.named_bits), 3)
-
-        # Проверяем порядок (должен сохраняться)
-        bits = list(self.named_bits)
-        self.assertEqual(bits[0].identifier, "read")
-        self.assertEqual(bits[0].position, 0)
-        self.assertEqual(bits[1].identifier, "write")
-        self.assertEqual(bits[1].position, 1)
-        self.assertEqual(bits[2].identifier, "execute")
-        self.assertEqual(bits[2].position, 2)
-
-    def test_get_mask(self) -> None:
-        """Получение битовой маски"""
-        mask = self.named_bits.get_mask()
-        self.assertEqual(mask, 0b111)  # биты 0,1,2 = 7
-
-        # Тест с другими битами
-        class NamedBitList1(NamedBitList):
-            bits = (
-                NamedBit("flag0", 0),
-                NamedBit("flag2", 2),
-                NamedBit("flag5", 5),
-            )
-
-        bits2 = NamedBitList1()
-        self.assertEqual(bits2.get_mask(), (1 << 0) | (1 << 2) | (1 << 5))
-
-    def test_get_bit(self) -> None:
-        """Получение NamedBit по имени"""
-        bit = self.named_bits.get_bit("read")
-        self.assertIsNotNone(bit)
-        self.assertEqual(bit.identifier, "read")
-        self.assertEqual(bit.position, 0)
-
-        bit = self.named_bits.get_bit("write")
-        self.assertEqual(bit.position, 1)
-
-        # Несуществующий бит
-        bit = self.named_bits.get_bit("nonexistent")
-        self.assertIsNone(bit)
-
-    def test_getitem(self) -> None:
-        """Доступ по имени через []"""
-        self.assertEqual(self.named_bits["read"], 0)
-        self.assertEqual(self.named_bits["write"], 1)
-        self.assertEqual(self.named_bits["execute"], 2)
-
-        with self.assertRaises(KeyError):
-            _ = self.named_bits["nonexistent"]
-
-    def test_contains(self) -> None:
-        """Проверка наличия имени"""
-        self.assertIn("read", self.named_bits)
-        self.assertIn("write", self.named_bits)
-        self.assertIn("execute", self.named_bits)
-        self.assertNotIn("nonexistent", self.named_bits)
-
-    def test_iter(self) -> None:
-        """Итерация по NamedBitList"""
-        identifiers = [bit.identifier for bit in self.named_bits]
-        self.assertEqual(identifiers, ["read", "write", "execute"])
-
-    def test_len(self) -> None:
-        """Длина списка"""
-        self.assertEqual(len(self.named_bits), 3)
-
-        class N(NamedBitList):
-            bits = tuple()
-        n = N()
-        self.assertEqual(len(n), 0)
-
-    def test_str(self) -> None:
-        """Строковое представление"""
-        self.assertEqual(str(self.named_bits), "{read(0), write(1), execute(2)}")
-
-        class N(NamedBitList):
-            bits = tuple()
-        n = N()
-
-        self.assertEqual(str(n), "{}")
-
-
 # Создаем конкретные типы для тестирования
 class Status(BitStringType):
     """Status ::= BIT STRING { read(0), write(1), execute(2) }"""
-    named_bits = NamedBitList.from_dict({
-        "read": 0,
-        "write": 1,
-        "execute": 2
-    })
+    read: Final[int] = 0
+    write: Final[int] = 1
+    execute: Final[int] = 2
 
 
 class Flags(BitStringType):
     """Flags ::= BIT STRING { flag0(0), flag1(1), flag2(2), flag3(3) }"""
-    named_bits = NamedBitList.from_dict({
-        "flag0": 0,
-        "flag1": 1,
-        "flag2": 2,
-        "flag3": 3
-    })
+    flag0: Final[int] = 0
+    flag1: Final[int] = 1
+    flag2: Final[int] = 2
+    flag3: Final[int] = 3
 
 
 class EmptyBitString(BitStringType):
@@ -318,77 +217,73 @@ class TestBitStringType(unittest.TestCase):
         """Доступ по имени (с именованными битами)"""
         status = Status.from_bin("101")
 
-        self.assertEqual(status["read"], 1)
-        self.assertEqual(status["write"], 0)
-        self.assertEqual(status["execute"], 1)
+        self.assertEqual(status[Status.read], 1)
+        self.assertEqual(status[Status.write], 0)
+        self.assertEqual(status[Status.execute], 1)
 
         # Бит вне длины - считается 0
         status = Status.from_bin("1")  # только read
-        self.assertEqual(status["write"], 0)  # write позиция 1, нет бита
+        self.assertEqual(status[Status.write], 0)  # write позиция 1, нет бита
 
-        # Нет именованных битов
+        # Нет именованных битов — обычный IndexError
         empty = EmptyBitString.from_bin("101")
-        with self.assertRaises(KeyError):
-            _ = empty["read"]
+        with self.assertRaises(IndexError):
+            _ = empty[3]  # out of range
 
     def test_setitem_str_with_named_bits(self) -> None:
         """Установка по имени"""
         status = Status.zeros(3)
 
-        status["read"] = 1
+        status[Status.read] = 1
         self.assertEqual(status.value, (1, 0, 0))
 
-        status["write"] = True
+        status[Status.write] = True
         self.assertEqual(status.value, (1, 1, 0))
 
-        status["execute"] = 1
+        status[Status.execute] = 1
         self.assertEqual(status.value, (1, 1, 1))
 
         # Автоматическое расширение
         status = Status.from_bin("1")  # только бит 0
-        status["execute"] = 1  # бит 2
+        status[Status.execute] = 1  # бит 2
         self.assertEqual(status.bit_length, 3)
         self.assertEqual(status.value, (1, 0, 1))
 
-        # Нет именованных битов
+        # Нет именованных битов — обычный IndexError
         empty = EmptyBitString.zeros(3)
-        with self.assertRaises(KeyError):
-            empty["read"] = 1
+        with self.assertRaises(IndexError):
+            empty[3] = 1  # out of range
 
     def test_get_set_clear_toggle(self) -> None:
         """Методы для работы с именованными битами"""
         status = Status.zeros(3)
 
         # set
-        status.set("read")
-        self.assertEqual(status["read"], 1)
-        status.set("write", 0)
-        self.assertEqual(status["write"], 0)
+        status.set(Status.read)
+        self.assertEqual(status[Status.read], 1)
+        status.set(Status.write, 0)
+        self.assertEqual(status[Status.write], 0)
 
         # clear
-        status.clear("read")
-        self.assertEqual(status["read"], 0)
+        status.clear(Status.read)
+        self.assertEqual(status[Status.read], 0)
 
         # toggle
-        status.toggle("execute")
-        self.assertEqual(status["execute"], 1)
-        status.toggle("execute")
-        self.assertEqual(status["execute"], 0)
+        status.toggle(Status.execute)
+        self.assertEqual(status[Status.execute], 1)
+        status.toggle(Status.execute)
+        self.assertEqual(status[Status.execute], 0)
 
     def test_has_bit_has_any_has_all(self) -> None:
         """Проверки наличия битов"""
         status = Status.from_bin("101")
 
-        self.assertTrue(status.has_bit("read"))
-        self.assertFalse(status.has_bit("write"))
-        self.assertTrue(status.has_bit("execute"))
+        self.assertTrue(status.has_any(Status.read, Status.write))
+        self.assertTrue(status.has_any(Status.write, Status.execute))
+        self.assertFalse(status.has_any(Status.write))
 
-        self.assertTrue(status.has_any("read", "write"))
-        self.assertTrue(status.has_any("write", "execute"))
-        self.assertFalse(status.has_any("write"))
-
-        self.assertTrue(status.has_all("read", "execute"))
-        self.assertFalse(status.has_all("read", "write"))
+        self.assertTrue(status.has_all(Status.read, Status.execute))
+        self.assertFalse(status.has_all(Status.read, Status.write))
         self.assertTrue(status.has_all())  # пустой список = True
 
     # ────────────────────────── ТЕСТЫ ПРЕОБРАЗОВАНИЯ ──────────────────────────
@@ -561,60 +456,6 @@ class TestBitStringType(unittest.TestCase):
         self.assertEqual(bits[3:].value, (1, 0, 1))
         self.assertEqual(bits[1:5:2].value, (0, 1))  # с шагом
 
-    # ────────────────────────── ТЕСТЫ ИНФОРМАЦИИ ОБ ИМЕНАХ ──────────────────────────
-
-    def test_get_named_bits_classmethod(self) -> None:
-        """Получение NamedBitList через метод класса"""
-        named_bits = Status.get_named_bits()
-        self.assertIsNotNone(named_bits)
-        self.assertEqual(len(named_bits), 3)
-        self.assertIn("read", named_bits)
-
-        named_bits = EmptyBitString.get_named_bits()
-        self.assertIsNone(named_bits)
-
-    def test_get_named_bit_classmethod(self) -> None:
-        """Получение NamedBit через метод класса"""
-        bit = Status.get_named_bit("read")
-        self.assertIsNotNone(bit)
-        self.assertEqual(bit.identifier, "read")
-        self.assertEqual(bit.position, 0)
-
-        bit = Status.get_named_bit("nonexistent")
-        self.assertIsNone(bit)
-
-        bit = EmptyBitString.get_named_bit("read")
-        self.assertIsNone(bit)
-
-    def test_available_bits_property(self) -> None:
-        """Словарь доступных именованных битов"""
-        status = Status.from_bin("101")
-        available = status.available_bits
-        self.assertEqual(available, {
-            "read": 0,
-            "write": 1,
-            "execute": 2
-        })
-
-        empty = EmptyBitString.from_bin("101")
-        self.assertEqual(empty.available_bits, {})
-
-    def test_set_bits_property(self) -> None:
-        """Словарь установленных именованных битов"""
-        status = Status.from_bin("101")
-        set_bits = status.set_bits
-        self.assertEqual(set_bits, {
-            "read": 0,
-            "execute": 2
-        })
-
-        status = Status.zeros(3)
-        self.assertEqual(status.set_bits, {})
-
-        # Бит вне диапазона
-        status = Status.from_bin("1")  # только read
-        self.assertEqual(status.set_bits, {"read": 0})
-
 
 class TestInheritance(unittest.TestCase):
     """Тесты наследования BitStringType"""
@@ -625,22 +466,22 @@ class TestInheritance(unittest.TestCase):
         flags = Flags.from_bin("1010")
 
         # Status имеет read/write/execute
-        self.assertEqual(status["read"], 1)
-        self.assertEqual(status["execute"], 1)
+        self.assertEqual(status[Status.read], 1)
+        self.assertEqual(status[Status.execute], 1)
 
         # Flags имеет flag0/flag1/flag2/flag3
-        self.assertEqual(flags["flag0"], 1)
-        self.assertEqual(flags["flag1"], 0)
-        self.assertEqual(flags["flag2"], 1)
-        self.assertEqual(flags["flag3"], 0)
+        self.assertEqual(flags[Flags.flag0], 1)
+        self.assertEqual(flags[Flags.flag1], 0)
+        self.assertEqual(flags[Flags.flag2], 1)
+        self.assertEqual(flags[Flags.flag3], 0)
 
         # Проверяем что у Status нет flag0
-        with self.assertRaises(KeyError):
-            _ = status["flag0"]
+        with self.assertRaises(IndexError):
+            _ = status[4]
 
-        # А у Flags нет read
-        with self.assertRaises(KeyError):
-            _ = flags["read"]
+        # А у Flags нет 5
+        with self.assertRaises(IndexError):
+            _ = flags[5]
 
     def test_classvar_is_shared_per_class(self) -> None:
         """named_bits как ClassVar разделяется на уровне класса"""
@@ -648,7 +489,6 @@ class TestInheritance(unittest.TestCase):
         status2 = Status.from_bin("010")
 
         # Оба экземпляра имеют доступ к тем же именам
-        self.assertEqual(status1.available_bits, status2.available_bits)
         self.assertIs(status1.__class__.named_bits, status2.__class__.named_bits)
 
     def test_operations_preserve_type(self) -> None:
@@ -736,33 +576,31 @@ class TestEdgeCases(unittest.TestCase):
         status = Status.from_bin("1")  # только бит 0
 
         # Чтение - должно вернуть 0
-        self.assertEqual(status["write"], 0)  # бит 1
-        self.assertEqual(status["execute"], 0)  # бит 2
+        self.assertEqual(status[Status.write], 0)  # бит 1
+        self.assertEqual(status[Status.execute], 0)  # бит 2
 
         # Запись - должно расширить строку
-        status["execute"] = 1
+        status[Status.execute] = 1
         self.assertEqual(status.bit_length, 3)
         self.assertEqual(status.value, (1, 0, 1))
 
         # Запись с большим отступом
-        status["write"] = 1
+        status[Status.write] = 1
         self.assertEqual(status.value, (1, 1, 1))
 
     def test_multiple_named_bits_same_position(self) -> None:
         """Два имени на одну позицию (возможно в ASN.1)"""
         class DuplicateBits(BitStringType):
-            named_bits = NamedBitList.from_dict({
-                "first": 0,
-                "second": 0  # тот же бит
-            })
+            first: Final[int] = 0
+            second: Final[int] = 0  # тот же бит
 
         bits = DuplicateBits.from_bin("1")
-        self.assertEqual(bits["first"], 1)
-        self.assertEqual(bits["second"], 1)
+        self.assertEqual(bits[DuplicateBits.first], 1)
+        self.assertEqual(bits[DuplicateBits.second], 1)
 
-        bits["first"] = 0
-        self.assertEqual(bits["first"], 0)
-        self.assertEqual(bits["second"], 0)
+        bits[DuplicateBits.first] = 0
+        self.assertEqual(bits[DuplicateBits.first], 0)
+        self.assertEqual(bits[DuplicateBits.second], 0)
 
     def test_preserve_value_on_operations(self) -> None:
         """Операции не изменяют исходный объект"""

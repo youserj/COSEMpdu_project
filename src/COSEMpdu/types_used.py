@@ -38,7 +38,7 @@ class DataAccessResult(EnumeratedType):
 
 class dataAccessResult(ImplicitTaggedType, DataAccessResult):
     """data-access-result [1] IMPLICIT Data-Access-Result"""
-    tag = 1
+    tag: ClassVar[int] = 1
 
 
 class ActionResult(EnumeratedType):

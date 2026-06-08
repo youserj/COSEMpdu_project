@@ -130,20 +130,16 @@ class TestSizeConstraint(unittest.TestCase):
     def test_fixed_size_contains(self) -> None:
         sc = SizeConstraint(4)
         self.assertTrue(sc.contains(4))
-        with self.assertRaises(ConstraintError, msg="size != 4"):
-            sc.contains(3)
-        with self.assertRaises(ConstraintError, msg="size != 4"):
-            sc.contains(5)
+        self.assertFalse(sc.contains(3))
+        self.assertFalse(sc.contains(5))
 
     def test_range_size_contains(self) -> None:
         sc = SizeConstraint(max_size=10, min_size=2)
         self.assertTrue(sc.contains(2))
         self.assertTrue(sc.contains(10))
         self.assertTrue(sc.contains(5))
-        with self.assertRaises(ConstraintError, msg="size < min"):
-            sc.contains(1)
-        with self.assertRaises(ConstraintError, msg="size > max"):
-            sc.contains(11)
+        self.assertFalse(sc.contains(1))
+        self.assertFalse(sc.contains(11))
 
     def test_str_fixed(self) -> None:
         sc = SizeConstraint(4)
@@ -308,8 +304,7 @@ class TestConstrainedBitStringType(unittest.TestCase):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(8)
             exception_spec = None
 
-        with self.assertRaises(ConstraintError):
-            BS8((1, 0, 1))
+        self.assertEqual(len(BS8((1, 0, 1)).value), 8)
 
     def test_fixed_length_set(self) -> None:
         class BS8(ConstrainedBitStringType):

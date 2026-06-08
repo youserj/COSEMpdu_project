@@ -1,5 +1,5 @@
 from .tag import Tag, UniversalClassTagAssignments, Class
-from .bit_string import BitStringType, NamedBitList, NamedBit
+from .bit_string import BitStringType, NamedBit
 from .boolean_type import BooleanType
 from .enumerated_type import EnumeratedType, EnumerationMember
 from .choice_type import ChoiceType
@@ -23,7 +23,6 @@ __all__ = [
     "UniversalClassTagAssignments",
     "Class",
     "BitStringType",
-    "NamedBitList",
     "NamedBit",
     "BooleanType",
     "GraphicString",

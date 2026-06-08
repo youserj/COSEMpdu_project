@@ -71,7 +71,8 @@ from src.COSEMpdu.apdu import (
     serviceError, OperationNotPossible,
     # key_info
     KeyInfo, KeyId, IdentifiedKey,
-    Conformance
+    Conformance,
+    XDLMS_APDU
 )
 from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName
 from src.COSEMpdu.types_used import (
@@ -113,15 +114,15 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_initiate_request_tag_1(self) -> None:
         """Test InitialRequest1 encode/decode (tag 1)"""
-        apdu_obj = InitialRequest(
+        apdu_obj = XDLMS_APDU(InitialRequest(
             dedicated_key=None,
             response_allowed=BooleanType.parse(True),
             proposed_quality_of_service=None,
             proposed_dlms_version_number=Unsigned8(1),
-            proposed_conformance=Conformance.default(),
+            proposed_conformance=Conformance.from_int(63, 24),
             client_max_receive_pdu_size=Unsigned16(134)
-        )
-        decoded = self._check_encode_decode(apdu_obj, InitialRequest)
+        ))
+        decoded = self._check_encode_decode(apdu_obj, XDLMS_APDU)
         self.assertEqual(decoded, apdu_obj)
 
     def test_initiate_response_tag_8(self) -> None:

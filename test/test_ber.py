@@ -4,14 +4,13 @@ Tests cover all type implementations in ber.py
 """
 import unittest
 from dataclasses import dataclass
-from typing import Optional, override, Self
+from typing import Optional, Final
 from StructResult.result import Error, NULL
 from src.COSEMpdu.x680.type import InitError
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length, TagError
-from src.COSEMpdu.x680 import NamedType, DefaultNamedType, NamedBit, NamedBitList
+from src.COSEMpdu.x680 import DefaultNamedType, NamedBit
 from src.COSEMpdu.ber import (
-    ImplicitTaggedType,
     ExplicitTaggedType,
     BitStringType,
     BooleanType,
@@ -404,18 +403,11 @@ class TestBitStringType2(unittest.TestCase):
         self.assertEqual(bitstring.value, expected)
 
     def setUp(self) -> None:
-        self.StatusBits = NamedBitList(
-            bits=(
-                NamedBit("read", 0),
-                NamedBit("write", 1),
-                NamedBit("execute", 2),
-                )
-        )
-
 
         class PermissionType(BitStringType):
-            named_bits = self.StatusBits
-            value: tuple[int, ...]
+            read: Final[int] = 0
+            write: Final[int] = 1
+            execute: Final[int] = 2
 
         self.PermissionType = PermissionType
 
@@ -437,61 +429,6 @@ class TestBitStringType2(unittest.TestCase):
     # Named Bits Tests
     # =====================================================================
 
-    def test_named_bits_definition(self) -> None:
-        """Test NamedBit and NamedBitList definition"""
-
-        self.assertEqual(len(self.StatusBits.bits), 3)
-        self.assertEqual(self.StatusBits.bits[0].identifier, "read")
-        self.assertEqual(self.StatusBits.bits[0].position, 0)
-        self.assertEqual(self.StatusBits.bits[1].identifier, "write")
-        self.assertEqual(self.StatusBits.bits[1].position, 1)
-        self.assertEqual(self.StatusBits.bits[2].identifier, "execute")
-        self.assertEqual(self.StatusBits.bits[2].position, 2)
-
-    def test_named_bits_mask(self) -> None:
-        """Test NamedBitList get_mask method"""
-
-        # Mask should be 0b111 = 7
-        self.assertEqual(self.StatusBits.get_mask(), 0b111)
-
-    def test_named_bits_get_bit(self) -> None:
-        """Test NamedBitList get_bit method"""
-
-        # Get bit by name
-        read_bit = self.StatusBits.get_bit("read")
-        self.assertIsNotNone(read_bit)
-        self.assertEqual(read_bit.position, 0)
-
-        # Non-existent bit
-        none_bit = self.StatusBits.get_bit("delete")
-        self.assertIsNone(none_bit)
-
-    def test_named_bits_contains(self) -> None:
-        """Test NamedBitList __contains__ method"""
-
-        self.assertIn("read", self.StatusBits)
-        self.assertIn("write", self.StatusBits)
-        self.assertIn("execute", self.StatusBits)
-        self.assertNotIn("delete", self.StatusBits)
-
-    def test_named_bits_getitem(self) -> None:
-        """Test NamedBitList __getitem__ method"""
-
-        self.assertEqual(self.StatusBits["read"], 0)
-        self.assertEqual(self.StatusBits["write"], 1)
-        self.assertEqual(self.StatusBits["execute"], 2)
-
-        with self.assertRaises(KeyError):
-            _ = self.StatusBits["delete"]
-
-    def test_named_bits_str(self) -> None:
-        """Test NamedBitList __str__ method"""
-
-        str_repr = str(self.StatusBits)
-        self.assertIn("read(0)", str_repr)
-        self.assertIn("write(1)", str_repr)
-        self.assertIn("execute(2)", str_repr)
-
     def test_bitstring_with_named_bits_class(self) -> None:
         """Test BitStringType subclass with named_bits ClassVar"""
 
@@ -506,9 +443,9 @@ class TestBitStringType2(unittest.TestCase):
         permission = self.PermissionType((1, 0, 1))
 
         # Access by name
-        self.assertEqual(permission["read"], 1)
-        self.assertEqual(permission["write"], 0)
-        self.assertEqual(permission["execute"], 1)
+        self.assertEqual(permission[self.PermissionType.read], 1)
+        self.assertEqual(permission[self.PermissionType.write], 0)
+        self.assertEqual(permission[self.PermissionType.execute], 1)
 
     def test_bitstring_named_bits_set_by_name(self) -> None:
         """Test BitStringType set bits by name"""
@@ -517,18 +454,18 @@ class TestBitStringType2(unittest.TestCase):
         permission = self.PermissionType((0, 0, 0))
 
         # Set bit by name
-        permission["read"] = 1
+        permission[self.PermissionType.read] = 1
         self.assertEqual(permission.value, (1, 0, 0))
 
-        permission["execute"] = 1
+        permission[self.PermissionType.execute] = 1
         self.assertEqual(permission.value, (1, 0, 1))
 
         # Clear bit by name
-        permission.clear("read")
+        permission.clear(self.PermissionType.read)
         self.assertEqual(permission.value, (0, 0, 1))
 
         # Toggle bit by name
-        permission.toggle("write")
+        permission.toggle(self.PermissionType.write)
         self.assertEqual(permission.value, (0, 1, 1))
 
     def test_bitstring_named_bits_has_bit(self) -> None:
@@ -537,72 +474,18 @@ class TestBitStringType2(unittest.TestCase):
         # read=1, write=0, execute=1
         permission = self.PermissionType((1, 0, 1))
 
-        # Test has_bit
-        self.assertTrue(permission.has_bit("read"))
-        self.assertFalse(permission.has_bit("write"))
-        self.assertTrue(permission.has_bit("execute"))
-
         # Test has_any
-        self.assertTrue(permission.has_any("read", "write"))
-        self.assertTrue(permission.has_any("read", "execute"))
-        self.assertFalse(permission.has_any("write", "delete"))
+        self.assertTrue(permission.has_any(self.PermissionType.read, self.PermissionType.write))
+        self.assertTrue(permission.has_any(self.PermissionType.read, self.PermissionType.execute))
 
         # Test has_all
-        self.assertTrue(permission.has_all("read", "execute"))
-        self.assertFalse(permission.has_all("read", "write"))
-        self.assertFalse(permission.has_all("read", "write", "execute"))
-
-    def test_bitstring_named_bits_set_bits_property(self) -> None:
-        """Test BitStringType set_bits property"""
-
-        # read=1, write=0, execute=1
-        permission = self.PermissionType((1, 0, 1))
-
-        set_bits = permission.set_bits
-        self.assertIn("read", set_bits)
-        self.assertIn("execute", set_bits)
-        self.assertNotIn("write", set_bits)
-        self.assertEqual(set_bits["read"], 0)
-        self.assertEqual(set_bits["execute"], 2)
-
-    def test_bitstring_named_bits_available_bits_property(self) -> None:
-        """Test BitStringType available_bits property"""
-
-        permission = self.PermissionType((1, 0, 1))
-
-        available = permission.available_bits
-        self.assertEqual(len(available), 3)
-        self.assertEqual(available["read"], 0)
-        self.assertEqual(available["write"], 1)
-        self.assertEqual(available["execute"], 2)
-
-    def test_bitstring_named_bits_str_representation(self) -> None:
-        """Test BitStringType __str__ with named bits"""
-
-        # read=1, write=0, execute=1
-        permission = self.PermissionType((1, 0, 1))
-
-        str_repr = str(permission)
-        self.assertIn("read", str_repr)
-        self.assertIn("execute", str_repr)
-        self.assertNotIn("write", str_repr)
+        self.assertTrue(permission.has_all(self.PermissionType.read, self.PermissionType.execute))
+        self.assertFalse(permission.has_all(self.PermissionType.read, self.PermissionType.write))
+        self.assertFalse(permission.has_all(self.PermissionType.read, self.PermissionType.write, self.PermissionType.execute))
 
         # All zeros
         permission_zero = self.PermissionType((0, 0, 0))
         self.assertEqual(str(permission_zero), "{}")
-
-    def test_bitstring_named_bits_get_value(self) -> None:
-        """Test BitStringType get_value with default"""
-
-        permission = self.PermissionType((1, 0, 1))
-
-        # Get existing bit
-        self.assertEqual(permission.get_value("read"), 1)
-        self.assertEqual(permission.get_value("write"), 0)
-
-        # Get non-existing bit with default
-        self.assertEqual(permission.get_value("delete", default=0), 0)
-        self.assertEqual(permission.get_value("delete", default=1), 1)
 
     def test_bitstring_named_bits_set_method(self) -> None:
         """Test BitStringType set method"""
@@ -610,15 +493,15 @@ class TestBitStringType2(unittest.TestCase):
         permission = self.PermissionType((0, 0, 0))
 
         # Set bit to 1
-        permission.set("read")
+        permission.set(self.PermissionType.read)
         self.assertEqual(permission.value, (1, 0, 0))
 
         # Set bit to 0
-        permission.set("read", value=0)
+        permission.set(self.PermissionType.read, value=0)
         self.assertEqual(permission.value, (0, 0, 0))
 
         # Set bit to 1
-        permission.set("read", value=1)
+        permission.set(self.PermissionType.read, value=1)
         self.assertEqual(permission.value, (1, 0, 0))
 
     def test_bitstring_named_bits_ber_encode_decode(self) -> None:
@@ -639,9 +522,9 @@ class TestBitStringType2(unittest.TestCase):
 
         # Verify
         self.assertEqual(decoded.value, original.value)
-        self.assertEqual(decoded["read"], 1)
-        self.assertEqual(decoded["write"], 0)
-        self.assertEqual(decoded["execute"], 1)
+        self.assertEqual(decoded[self.PermissionType.read], 1)
+        self.assertEqual(decoded[self.PermissionType.write], 0)
+        self.assertEqual(decoded[self.PermissionType.execute], 1)
 
     def test_bitstring_named_bits_bitwise_operations(self) -> None:
         """Test BitStringType with named_bits bitwise operations"""
@@ -666,62 +549,21 @@ class TestBitStringType2(unittest.TestCase):
         perm_not = ~perm1
         self.assertEqual(perm_not.value, (0, 1, 0))
 
-    def test_bitstring_named_bits_without_named_bits(self) -> None:
-        """Test BitStringType without named_bits raises KeyError"""
-        class PlainBitString(BitStringType):
-            named_bits = None
-            value: tuple[int, ...]
-
-        bitstring = PlainBitString((1, 0, 1))
-
-        # Access by name should raise KeyError
-        with self.assertRaises(KeyError):
-            _ = bitstring["read"]
-
-        # set by name should raise KeyError
-        with self.assertRaises(KeyError):
-            bitstring["read"] = 1
-
-        # available_bits should be empty
-        self.assertEqual(bitstring.available_bits, {})
-
-        # set_bits should be empty
-        self.assertEqual(bitstring.set_bits, {})
-
     def test_bitstring_named_bits_out_of_range(self) -> None:
         """Test BitStringType named bit access beyond value length"""
-        StatusBits = NamedBitList(bits=(
-                NamedBit("read", 0),
-                NamedBit("write", 1),
-                NamedBit("execute", 2),
-                NamedBit("delete", 10),  # Beyond typical length
-            ))
-
         class PermissionType(BitStringType):
-            named_bits = StatusBits
-            value: tuple[int, ...]
+            read: Final[int] = 0
+            write: Final[int] = 1
+            execute: Final[int] = 2
+            delete: Final[int] = 10
 
         # Short value
         permission = PermissionType((1, 0, 1))
 
-        # Access bit beyond length should return 0
-        self.assertEqual(permission.get_value("delete"), 0)
-
         # Set bit beyond length should extend the value
-        permission["delete"] = 1
+        permission[PermissionType.delete] = 1
         self.assertEqual(len(permission.value), 11)
-        self.assertEqual(permission.value[10], 1)
-
-    def test_bitstring_named_bits_iteration(self) -> None:
-        """Test NamedBitList iteration"""
-
-        status_bits = self.StatusBits
-        bit_list = list(status_bits)
-
-        self.assertEqual(len(bit_list), 3)
-        self.assertEqual(bit_list[0].identifier, "read")
-        self.assertEqual(bit_list[1].identifier, "write")
-        self.assertEqual(bit_list[2].identifier, "execute")
+        self.assertEqual(permission.value[PermissionType.delete], 1)
 
     def test_bitstring_named_bits_int_conversion(self) -> None:
         """Test NamedBit __int__ method"""
@@ -822,11 +664,11 @@ class TestEnumeratedType(unittest.TestCase):
         self.assertEqual(bytes(buf)[1], 2)  # Length = 2 (needs sign bit)
 
 
-class Integer0(ImplicitTaggedType, IntegerType):
+class Integer0(IntegerType):
     tag = Tag(0, class_=Class.CONTEXT_SPECIFIC)
 
 
-class OctetString1(ImplicitTaggedType, OctetStringType):
+class OctetString1(OctetStringType):
     tag = Tag(1, class_=Class.CONTEXT_SPECIFIC)
 
 
@@ -1740,7 +1582,7 @@ class TestTaggedType(unittest.TestCase):
     def test_implicit_tagged_integer_encode(self) -> None:
         """IMPLICIT tagged INTEGER [2] INTEGER - tag replaces base type's tag"""
         # Define concrete TaggedType subclass (configuration at class level)
-        class ImplicitInteger(ImplicitTaggedType, IntegerType):
+        class ImplicitInteger(IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
 
         # Create instance with value
@@ -1755,7 +1597,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_implicit_tagged_integer_decode(self) -> None:
         """Decode IMPLICIT tagged INTEGER"""
-        class ImplicitInteger(ImplicitTaggedType, IntegerType):
+        class ImplicitInteger(IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
 
         buf = ByteBuffer.wrap(b"\x82\x01\x2a")
@@ -1787,7 +1629,7 @@ class TestTaggedType(unittest.TestCase):
     def test_implicit_tagged_boolean_encode(self) -> None:
         """IMPLICIT tagged BOOLEAN [0] BOOLEAN"""
 
-        class ImplicitBoolean(ImplicitTaggedType, BooleanType):
+        class ImplicitBoolean(BooleanType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
 
         tagged = ImplicitBoolean(True)
@@ -1831,7 +1673,7 @@ class TestTaggedType(unittest.TestCase):
 
         for class_, number, constructed, expected_tag in test_cases:
             with self.subTest(class_=class_, number=number):
-                class TestTagged(ImplicitTaggedType, IntegerType):
+                class TestTagged(IntegerType):
                     tag = Tag(number, class_, constructed=constructed)
 
                 tagged = TestTagged(0)
@@ -1842,7 +1684,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_high_tag_number_encode(self) -> None:
         """Test tagged type with high tag number (>= 31)"""
-        class HighTag(ImplicitTaggedType, IntegerType):
+        class HighTag(IntegerType):
             tag = Tag(100, Class.CONTEXT_SPECIFIC)
 
         tagged = HighTag(42)
@@ -1860,7 +1702,7 @@ class TestTaggedType(unittest.TestCase):
 
         for val in test_values:
             with self.subTest(value=val):
-                class ImplicitInt(ImplicitTaggedType, IntegerType):
+                class ImplicitInt(IntegerType):
                     tag = Tag(5, Class.CONTEXT_SPECIFIC)
 
                 original = ImplicitInt(val)
@@ -1896,7 +1738,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_number(self) -> None:
         """Test tag validation raises on tag number mismatch"""
-        class TaggedInt(ImplicitTaggedType, IntegerType):
+        class TaggedInt(IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
 
         # Encode with tag 5
@@ -1907,7 +1749,7 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
 
         # Decode with wrong tag number (6 instead of 5)
-        class WrongTag(ImplicitTaggedType, IntegerType):
+        class WrongTag(IntegerType):
             tag = Tag(6, Class.CONTEXT_SPECIFIC)
 
         if isinstance(decoded := WrongTag.get(buf), Error):
@@ -1917,7 +1759,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_tag_validation_error_class(self) -> None:
         """Test tag validation raises on tag class mismatch"""
-        class TaggedInt(ImplicitTaggedType, IntegerType):
+        class TaggedInt(IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
 
         # Encode with CONTEXT_SPECIFIC
@@ -1928,7 +1770,7 @@ class TestTaggedType(unittest.TestCase):
         buf.set_pos(0)
 
         # Decode with APPLICATION class
-        class WrongClass(ImplicitTaggedType, IntegerType):
+        class WrongClass(IntegerType):
             tag = Tag(5, Class.APPLICATION)
 
         if isinstance(decoded := WrongClass.get(buf), Error):
@@ -1938,7 +1780,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_get_contents_implicit(self) -> None:
         """Test get_contents for IMPLICIT tagged type (CHOICE alternative)"""
-        class ImplicitInt(ImplicitTaggedType, IntegerType):
+        class ImplicitInt(IntegerType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
 
         # First validate and consume the outer tag
@@ -1971,7 +1813,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_put_contents_implicit(self) -> None:
         """Test put_contents for IMPLICIT tagged type"""
-        class ImplicitInt(ImplicitTaggedType, IntegerType):
+        class ImplicitInt(IntegerType):
             tag = Tag(2, Class.CONTEXT_SPECIFIC)
 
         tagged = ImplicitInt(42)
@@ -2000,7 +1842,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_length_calculation(self) -> None:
         """Test __len__ for tagged types"""
-        class ImplicitInt(ImplicitTaggedType, IntegerType):
+        class ImplicitInt(IntegerType):
             tag = Tag(5, Class.CONTEXT_SPECIFIC)
 
         tagged = ImplicitInt(42)
@@ -2017,7 +1859,7 @@ class TestTaggedType(unittest.TestCase):
 
     def test_ber_explicit_application_tag(self) -> None:
         """Test ASN.1 explicit tag [APPLICATION 5] - always BER format"""
-        class ApplicationTagged(ImplicitTaggedType, IntegerType):
+        class ApplicationTagged(IntegerType):
             tag = Tag(5, Class.APPLICATION, constructed=True)
 
         tagged = ApplicationTagged(42)
@@ -2032,7 +1874,7 @@ class TestTaggedType(unittest.TestCase):
     def test_nested_tagged_types(self) -> None:
         """Test nested tagged types"""
         # Inner: [0] INTEGER
-        class InnerTagged(ImplicitTaggedType, IntegerType):
+        class InnerTagged(IntegerType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
 
         # Outer: [1] EXPLICIT [0] INTEGER
