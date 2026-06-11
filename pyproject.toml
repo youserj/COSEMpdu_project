@@ -16,7 +16,7 @@ authors = [
 dependencies = [
     "StructResult>=0.9.9",
 ]
-description="cosem-pdu"
+description = "DLMS/COSEM PDU encoder/decoder with ASN.1 types, A-XDR and BER encoding rules (IEC 61334-6, X.680, X.690)"
 readme = "README.md"
 requires-python = ">=3.12"
 keywords=['dlms', 'asn.1', 'a-xdr', 'ber', 'pdu', 'coder']
