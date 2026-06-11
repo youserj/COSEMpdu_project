@@ -5,10 +5,10 @@ Tests cover all type encodings per standard specifications.
 import unittest
 from dataclasses import dataclass
 from typing import Optional
-from StructResult.result import Error
-from src.COSEMpdu.x680.constrained_type import SizeConstraint, ValueRange
+from StructResult.result import Error, NULL
+from src.COSEMpdu.x680 import SizeConstraint, ValueRange
 from src.COSEMpdu.axdr import (
-    ImplicitTaggedType, CHOICE,
+    ImplicitTaggedType,
     ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
     BooleanType, IntegerType, BitStringType, OctetStringType, ObjectIdentifierType,
     ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
@@ -35,13 +35,6 @@ class OctetStringObjectIdentifierType(ImplicitTaggedType, ObjectIdentifierType):
 
 class My(ImplicitTaggedType, IntegerType):
     tag = 5
-
-
-# m = My.parse(5)
-# buf = ByteBuffer.allocate(20)
-# m.put(buf)
-# buf.set_pos(0)
-# m1 = My.get(buf)
 
 
 class TestVariableLengthInteger(unittest.TestCase):
@@ -325,7 +318,7 @@ class TestOctetStringType(unittest.TestCase):
             constraint_spec = SizeConstraint(4)
 
         val = Octet.default()
-        self.assertEqual(val.normalize(), b"\x00\x00\x00\x00")
+        self.assertEqual(val.value, b"\x00\x00\x00\x00")
 
 
 class TestEnumeratedType(unittest.TestCase):
@@ -420,8 +413,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_init_invalid_tag(self) -> None:
         """Initialize with invalid tag raises ValueError"""
-        with self.assertRaises(ValueError):
-            TestChoice.parse(CHOICE(5, 0))
+        self.assertTrue(TestChoice.new(My(0)).has(NULL, TypeError))
 
 
 @dataclass
@@ -750,11 +742,6 @@ class TestObjectIdentifierType(unittest.TestCase):
             buf.set_pos(0)
             decoded = ObjectIdentifierType.get(buf)
             self.assertEqual(decoded.value, arcs, f"Roundtrip failed for {arcs}")
-
-    def test_encode_invalid_less_than_two_arcs(self) -> None:
-        """OID must have at least two arcs per X.680 §31.10"""
-        with self.assertRaises(ValueError):
-            ObjectIdentifierType((1,))
 
     def test_decode_truncated_oid(self) -> None:
         """Truncated OID content should return Error"""

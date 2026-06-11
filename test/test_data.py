@@ -9,17 +9,14 @@ Standards:
 from typing import Any, Final, TypeAlias
 from dataclasses import dataclass
 import unittest
-from StructResult.result import Error
-from src.COSEMpdu.x680.type import CHOICE
+from StructResult.result import Error, NULL
+from src.COSEMpdu.x680 import ConstraintError
 from src.COSEMpdu.byte_buffer import ByteBuffer
-from src.COSEMpdu.x680.constrained_type import ConstraintError
 from src.COSEMpdu.data import (
     # TypeDescription types
-    NamedType,
     ExternallyData,
     DiscriminatedUnion,
     OctetStringType,
-    OctetStringTypeSize8,
     SequenceOfData,
     TypeDescription,
     TypeDescriptionArray,
@@ -81,12 +78,15 @@ class RestrictionByEntry(Structure):
 
 class TestSequence(unittest.TestCase):
     def test_Sequence(self) -> None:
-        r1 = RestrictionByEntry.parse((1, 2))
+        r1 = RestrictionByEntry(
+            DoubleLongUnsigned(1),
+            DoubleLongUnsigned(2)
+        )
         buf = ByteBuffer.allocate(20)
         r1.put(buf)
         buf.set_pos(0)
         r2 = RestrictionByEntry.get(buf)
-        self.assertEqual(r1.normalize(), r2.normalize())
+        self.assertEqual(r1, r2)
         buf.set_pos(0)
         data = Data.get(buf)
         print(data)
@@ -269,7 +269,7 @@ class TestDataInteger(unittest.TestCase):
     def test_encode_decode_positive(self) -> None:
         """Test integer positive value encoding/decoding"""
         original = Data(Integer(127))
-        i = Integer.parse(1)
+        i = Integer(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -439,7 +439,6 @@ class TestDataUtf8String(unittest.TestCase):
 
     def test_encode_decode(self) -> None:
         """Test utf8-string encoding/decoding"""
-        z = Data.parse(axdr.CHOICE(5, 1))
         original = Data(Utf8String("Привет"))
         buf = ByteBuffer.allocate(20)
         original.put(buf)
@@ -474,15 +473,14 @@ class TestDataEnum(unittest.TestCase):
             ONE: Final = 1
             TWO: Final = 2
 
-        print(MyEnum.parse(1) == MyEnum.parse(1))
-        original = MyEnum.parse(42)
+        original = MyEnum(42)
         self.assertTrue(int(original), 42)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
         decoded = Data.get(buf)
         self.assertIsInstance(decoded.value, Enum)
-        self.assertEqual(decoded.normalize(), CHOICE(22, 42))
+        self.assertEqual(decoded, Data(Enum(42)))
 
 
 class TestDataFloat32(unittest.TestCase):
@@ -532,8 +530,7 @@ class TestDataDateTime(unittest.TestCase):
 
     def test_encode_decode_invalid_length(self) -> None:
         """Test date-time invalid length raises error"""
-        with self.assertRaises(ConstraintError):
-            Data(DateTime(b"\x00" * 11))  # Only 11 bytes
+        self.assertTrue(Data.new(DateTime.new(b"\x00" * 11)).has(NULL, ConstraintError))
 
 
 class TestDataDate(unittest.TestCase):
@@ -553,8 +550,7 @@ class TestDataDate(unittest.TestCase):
 
     def test_encode_decode_invalid_length(self) -> None:
         """Test date invalid length raises error"""
-        with self.assertRaises(ConstraintError):
-            Data(Date(b"\x00" * 4))  # Only 4 bytes
+        self.assertTrue(Data.new(Date.new(b"\x00" * 4)).has(NULL, ConstraintError))  # Only 4 bytes
 
 
 class TestDataTime(unittest.TestCase):
@@ -565,7 +561,7 @@ class TestDataTime(unittest.TestCase):
         # DLMS time format: 4 bytes
         time_bytes = b"\x0C\x00\x00\x00"
         original = Data(Time(time_bytes))
-        self.assertEqual(Time.fromisoformat(original.value.isoformat()).normalize(), time_bytes)
+        self.assertEqual(Time.fromisoformat(original.value.isoformat()).value, time_bytes)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -575,8 +571,7 @@ class TestDataTime(unittest.TestCase):
 
     def test_encode_decode_invalid_length(self) -> None:
         """Test time invalid length raises error"""
-        with self.assertRaises(ConstraintError):
-            Data(Time(b"\x00" * 3))  # Only 3 bytes
+        self.assertTrue(Data.new(Time.new(b"\x00" * 3)).has(NULL, ConstraintError))  # Only 3 bytes
 
 
 class TestDataArray(unittest.TestCase):
@@ -595,7 +590,7 @@ class TestDataArray(unittest.TestCase):
     def test_encode_decode_with_elements(self) -> None:
         """Test array with elements encoding/decoding"""
         MyArray = Array[Integer]
-        original = MyArray.parse((1, 2, 3))
+        original = MyArray([Integer(1), Integer(2), Integer(3)])
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
@@ -646,7 +641,6 @@ class TestDataCompactArray(unittest.TestCase):
         ))
         z = original.value.get_array()
         y = CompactArray.from_array(z)
-        y.normalize()
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
@@ -966,7 +960,7 @@ class TestDataOctetImplicit(unittest.TestCase):
             value: OctetStringObjectIdentifierType | Unsigned
 
         buf = ByteBuffer.allocate(20)
-        iddata = IdentifierData.parse(CHOICE(9, (2, 16, 0x2f4, 5, 8, 1, 1)))
+        iddata = IdentifierData(OctetStringObjectIdentifierType((2, 16, 0x2f4, 5, 8, 1, 1)))
         iddata.put(buf)
         buf.set_pos(0)
         self.assertEqual(IdentifierData.get(buf), iddata)
@@ -1003,7 +997,6 @@ class TestExternallyData_(unittest.TestCase):
     """Tests for ExternallyData[T]"""
 
     def test_get_always_returns_error(self) -> None:
-        """ExternallyData cannot be parsed standalone; it requires a selector."""
         buf = ByteBuffer.allocate(10)
         result = TestExternallyData.get(buf)
 
@@ -1058,8 +1051,6 @@ class TestDiscriminatedUnion_(unittest.TestCase):
             TestSelector(0),
             TestExternallyData(NullData())
         )
-        original1 = TestDiscriminatedUnion.parse((0, CHOICE(0, None)))
-
 
         buf = ByteBuffer.allocate(20)
         original.put(buf)
@@ -1067,7 +1058,7 @@ class TestDiscriminatedUnion_(unittest.TestCase):
 
         decoded = TestDiscriminatedUnion.get(buf)
         self.assertFalse(isinstance(decoded, Error))
-        self.assertEqual(decoded.normalize(), original.normalize())
+        self.assertEqual(decoded, original)
 
     def test_roundtrip_boolean(self) -> None:
         """Full encode -> decode cycle for selector=3 (boolean)."""

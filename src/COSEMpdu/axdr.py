@@ -20,7 +20,7 @@ Standards:
 from typing import ClassVar, Self, Optional, cast, TypeAlias, Annotated, Protocol, runtime_checkable, Iterator, get_args
 from StructResult.result import ValueOrError, Error
 from . import x690
-from .x680.type import OptionalNamedType, DefaultNamedType, INTEGER, SEQUENCE_OF, CHOICE
+from .x680 import OptionalNamedType, DefaultNamedType, INTEGER, SEQUENCE_OF
 from . import x680
 from .byte_buffer import ByteBuffer, put_chain
 
@@ -78,7 +78,7 @@ def get_length(buf: ByteBuffer) -> ValueOrError[int]:
     return buf.get_uint(num_bytes)
 
 
-class Type(x680.Type, Protocol):
+class Type(x680.Type):
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """Decode with Length + Contents"""
@@ -88,11 +88,16 @@ class Type(x680.Type, Protocol):
         """Encode with Length + Contents"""
         return self.put_lc(buf)
 
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]: ...
+
+    @classmethod
+    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]: ...
+
 
 TagNumber: TypeAlias = Annotated[int, "0-255"]
 
 
-class ImplicitTaggedType(Type, Protocol):
+class ImplicitTaggedType(Type):
     """
     Mixin for COSEM Data types with tag-prefixed A-XDR encoding
     (IEC 61334-6 §6.7).
@@ -168,7 +173,7 @@ class BooleanType(Type, x680.BooleanType):
         # Single octet, no tag/length
         if isinstance(content := buf.get_u8(), Error):
             return content
-        return cls(content != 0)
+        return cls.new(content != 0)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -221,7 +226,7 @@ class IntegerType(Type, x680.IntegerType):
             return first
         if not (first & 0x80):
             # Short form: 0-127
-            return cls(first)
+            return cls.new(first)
         # Long form: length octet + value octets
         num_bytes = first & 0x7F
         return cls.get_c(buf, num_bytes)
@@ -232,7 +237,7 @@ class IntegerType(Type, x680.IntegerType):
             return content
         # Decode as two's complement
         value = int.from_bytes(content, byteorder="big", signed=True)
-        return cls(value)
+        return cls.new(value)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Variable-length encoding"""
@@ -277,7 +282,7 @@ class BitStringType(Type, x680.BitStringType):
         if isinstance(num_bits := get_length(buf), Error):
             return num_bits
         if num_bits == 0:
-            return cls(())
+            return cls.new(())
         return cls.get_c(buf, num_bits)
 
     @classmethod
@@ -290,7 +295,7 @@ class BitStringType(Type, x680.BitStringType):
             for i in range(8):
                 bits.append(1 if (byte & (1 << (7 - i))) else 0)
         bits = bits[:length]  # Trim to exact bit length
-        return cls(tuple(bits))
+        return cls.new(tuple(bits))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         n = len(self.value)
@@ -345,8 +350,6 @@ class OctetStringType(Type, x680.OctetStringType):
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         if isinstance(num_octets := get_length(buf), Error):
             return num_octets
-        if num_octets == 0:
-            return cls(b"")
         return cls.get_c(buf, num_octets)
 
     @classmethod
@@ -354,7 +357,7 @@ class OctetStringType(Type, x680.OctetStringType):
         """decode content"""
         if isinstance(data := buf.read(length), Error):
             return data
-        return cls(bytes(data))
+        return cls.new(bytes(data))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         return put_chain(
@@ -373,11 +376,11 @@ class VisibleString(Type, x680.VisibleString):
         # Variable-length encoding (§6.5.2) only
         if isinstance(num_octets := get_length(buf), Error):
             return num_octets
-        if num_octets == 0:
-            return cls("")
+        # if num_octets == 0:
+        #     return cls("")
         if isinstance(data := buf.read(num_octets), Error):
             return data
-        return cls(data.decode(encoding="ascii"))
+        return cls.new(data.decode(encoding="ascii"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         return put_chain(
@@ -398,11 +401,11 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         if isinstance(num_octets := get_length(buf), Error):
             return num_octets
-        if num_octets == 0:
-            return cls("")
+        # if num_octets == 0:
+        #     return cls("")
         if isinstance(data := buf.read(num_octets), Error):
             return data
-        return cls(data.decode(encoding="utf-8"))
+        return cls.new(data.decode(encoding="utf-8"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         return put_chain(
@@ -423,8 +426,7 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 Alternatives: TypeAlias = dict[int, "ImplicitTaggedType | ChoiceType"]
 
 
-@runtime_checkable
-class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
+class ChoiceType(Type, x680.ChoiceType[Type]):
     """
     CHOICE with A-XDR encoding/decoding (IEC 61334-6 §6.6)
 
@@ -456,15 +458,6 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
             cls.alternatives = {type_.tag: type_ for type_ in get_args(values)}
 
     @classmethod
-    def parse(cls, value: CHOICE) -> Self:
-        if (t_ := cls.alternatives.get(value.select)) is not None:
-            return cls(t_.parse(value.value))
-        raise ValueError("not find type in choice")
-
-    def normalize(self) -> CHOICE:
-        return CHOICE(self.value.tag, self.value.normalize())
-
-    @classmethod
     def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
         """
         Decode CHOICE from A-XDR (IEC 61334-6 §6.6)
@@ -473,6 +466,10 @@ class ChoiceType(Type, x680.ChoiceType[Type], Protocol):
         """
         if isinstance(tag := buf.get_u8(), Error):
             return tag
+        return cls.get_c(buf, tag)
+
+    @classmethod
+    def get_c(cls, buf: ByteBuffer, tag: int) -> ValueOrError[Self]:
         if (t_ := cls.alternatives.get(tag)) is None:
             return Error.from_e(ValueError(f"{tag} not in alternatives: {", ".join((t_.__name__ for t_ in cls.alternatives.values()))}"))
         if isinstance(value := t_.get_lc(buf), Error):
@@ -611,7 +608,7 @@ class EnumeratedType(Type, x680.EnumeratedType):
         # Single octet, no tag/length
         if isinstance(index := buf.get_u8(), Error):
             return index
-        return cls(index)
+        return cls.new(index)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -800,7 +797,7 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
                 if not (octet & 0x80):
                     break
             arcs.append(arc_value)
-        return cls(tuple(arcs))
+        return cls.new(tuple(arcs))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         content = bytearray()
@@ -838,7 +835,7 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
             return length
         if isinstance(data := buf.read(length), Error):
             return data
-        return cls(data.decode("ascii"))
+        return cls.new(data.decode("ascii"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         data = self.value.encode("ascii")
@@ -865,14 +862,14 @@ class ConstrainedIntegerType(x680.ConstrainedIntegerType, IntegerType):
         Returns instance and advances buffer position.
         """
         if isinstance(cls.fixed_length, int):
-            if cls.fixed_length == 0:
-                return cls(0)
+            # if cls.fixed_length == 0:
+            #     return cls.new(0)
             if isinstance(content := buf.read(cls.fixed_length), Error):
                 return content
             # Decode as unsigned for non-negative, signed for negative ranges
             # DLMS typically uses unsigned for constrained types
             value = int.from_bytes(content, byteorder="big", signed=cls.signed)
-            return cls(value)
+            return cls.new(value)
         return super().get_lc(buf)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
@@ -912,6 +909,7 @@ class ConstrainedOctetStringType(x680.ConstrainedOctetString, OctetStringType):
 
 
 class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
+
     def __init_subclass__(cls) -> None:
         cls._init_subclass()
         return super().__init_subclass__()

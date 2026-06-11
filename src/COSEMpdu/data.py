@@ -4,8 +4,8 @@ from typing import Self, ClassVar, TypeAlias, Optional, Union
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
 from .byte_buffer import ByteBuffer, put_chain
-from .x680.constrained_type import SizeConstraint, ValueRange
-from .x680.type import NamedType, INTEGER
+from .x680 import SizeConstraint, ValueRange
+from .x680 import NamedType
 from . import x680
 from . import axdr
 from .axdr import ConstrainedIntegerType, ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, NullType0, \
@@ -219,10 +219,10 @@ setattr(TypeDescription, "alternatives", {
 })
 
 
-class SequenceOfData[T: ImplicitTaggedType | ChoiceType](SequenceOfType[T]): ...  # Forward declaration for recursive types
+class SequenceOfData(SequenceOfType[ChoiceType]): ...  # temporary ChoiceType declaration, Forward declaration for recursive types
 
 
-class Array[T: ImplicitTaggedType | ChoiceType](ImplicitTaggedType, SequenceOfData[T]):
+class Array[T: ImplicitTaggedType | ChoiceType](ImplicitTaggedType, SequenceOfType[T]):
     """array [1] IMPLICIT SEQUENCE OF Data"""
     tag = 1
 
@@ -325,16 +325,6 @@ class Structure(ImplicitTaggedType, x680.SequenceType):
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
         return put_chain(*(getattr(self, comp.identifier).put(buf) for comp in self.components))
-
-
-class DigitalMixin[T: Unsigned8 | Unsigned16 | Unsigned32 | Unsigned64 | Integer8 | Integer16 | Integer32 | Integer64]:
-    value: T
-
-    def __int__(self) -> int:
-        return self.value.value.value
-
-    def normalize(self) -> INTEGER:
-        return self.value.normalize()
 
 
 class Boolean(ImplicitTaggedType, BooleanType):
@@ -458,51 +448,6 @@ class Long64Unsigned(ImplicitTaggedType, Unsigned64):
     tag = 21
 
 
-class EnumMixin:
-    enumeration_item: ClassVar[dict[int, str]]
-    value: Unsigned8
-
-    def normalize(self) -> INTEGER:
-        return self.value.normalize()
-
-    def __init_subclass__(cls) -> None:
-        ret = {}
-        for name in cls.__annotations__:
-            if name.isupper():
-                ret[cls.__dict__[name]] = name
-        cls.enumeration_item = ret
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, int):
-            return self.normalize() == other
-        if isinstance(other, self.__class__):
-            return self.normalize() == other.normalize()
-        return False
-
-    def __str__(self) -> str:
-        value = self.normalize()
-        return f"({value}){self.enumeration_item.get(value, "")}"
-
-
-class BitMixin:
-    enumeration_item: ClassVar[dict[int, str]]
-    value: Unsigned8
-
-    def normalize(self) -> INTEGER:
-        return self.value.normalize()
-
-    def __str__(self) -> str:
-        value = self.normalize()
-        values: list[str] = []
-        for (k, v) in self.enumeration_item.items():
-            if k & value:
-                values.append(v)
-        return f"({value}){" | ".join(values)}"
-
-    def __contains__(self, item: INTEGER) -> bool:
-        return bool(item & self.normalize())
-
-
 class Enum(ImplicitTaggedType, Unsigned8):
     """enum [22] IMPLICIT Unsigned8"""
     tag = 22
@@ -565,11 +510,11 @@ class Time(ImplicitTaggedType, OctetStringTypeSize4):
     def fromisoformat(cls, value: str) -> Self:
         """Construct a time from a string in one of the ISO 8601 formats."""
         data = datetime.time.fromisoformat(value)
-        return cls.parse(bytes((data.hour, data.minute, data.second, data.microsecond // 10_000)))
+        return cls(bytes((data.hour, data.minute, data.second, data.microsecond // 10_000)))
 
     def to_time(self) -> datetime.time:
         """ return python time. Used 00 instead 'NOT SPECIFIED'  """
-        hour, minute, second, hundredths = self.normalize()
+        hour, minute, second, hundredths = self.value
         return datetime.time(
             hour=hour if hour != 0xff else 0,
             minute=minute if minute != 0xff else 0,
@@ -646,7 +591,7 @@ class DiscriminatedUnion(Structure):
         key_info_element ::= structure
         {
         key_info_type: enum:
-        (0) identified_key,d        -- used with identified_key_info_options
+        (0) identified_key,        -- used with identified_key_info_options
         (1) wrapped_key,            -- used with wrapped_key_info_options
         (2) agreed_key              -- used with agreed_key_info_options
         key_info_options: CHOICE
@@ -656,6 +601,42 @@ class DiscriminatedUnion(Structure):
         agreed_key_info_options
         }
         }
+
+        Python subclass example::
+
+            class KeyInfoType(Enum):
+                '''selector enum for key_info_element'''
+                identified_key: Final = 0
+                wrapped_key: Final = 1
+                agreed_key: Final = 2
+
+            class IdentifiedKeyInfoOptions(ImplicitTaggedType, OctetStringType):
+                '''identified_key_info_options [0] IMPLICIT OCTET STRING'''
+                tag = 0
+
+            class WrappedKeyInfoOptions(ImplicitTaggedType, OctetStringType):
+                '''wrapped_key_info_options [1] IMPLICIT OCTET STRING'''
+                tag = 1
+
+            class AgreedKeyInfoOptions(ImplicitTaggedType, NullType):
+                '''agreed_key_info_options [2] IMPLICIT NULL'''
+                tag = 2
+
+            class KeyInfoOptions(ExternallyData):
+                '''CHOICE wrapper for key_info_options'''
+                value: IdentifiedKeyInfoOptions | WrappedKeyInfoOptions | AgreedKeyInfoOptions
+
+            KeyInfoOptions.alternatives = {
+                0: IdentifiedKeyInfoOptions,
+                1: WrappedKeyInfoOptions,
+                2: AgreedKeyInfoOptions,
+            }
+
+            @dataclass
+            class KeyInfoElement(DiscriminatedUnion):
+                '''key_info_element as a DiscriminatedUnion'''
+                selector: KeyInfoType
+                payload: KeyInfoOptions
         """
     components: ClassVar[tuple[NamedType[Enum], NamedType[ChoiceType]]]
 

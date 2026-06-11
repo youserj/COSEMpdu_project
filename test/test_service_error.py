@@ -9,7 +9,7 @@ Standards:
 
 import unittest
 from StructResult.result import Error, NULL
-from src.COSEMpdu.service_error import (
+from src.COSEMpdu.apdu import (
     # Error types
     ConfirmedServiceError, ApplicationReference,
     HardwareResource, VDEStateError,
@@ -198,7 +198,7 @@ class TestServiceErrorChoice(unittest.TestCase):
 
     def test_encode_decode_application_reference(self) -> None:
         """Test application-reference alternative (tag 0)"""
-        original = ServiceError(ApplicationReference(2))
+        original = ServiceError(ApplicationReference(ApplicationReference.APPLICATION_UNREACHABLE))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)

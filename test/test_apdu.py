@@ -72,10 +72,8 @@ from src.COSEMpdu.apdu import (
     # key_info
     KeyInfo, KeyId, IdentifiedKey,
     Conformance,
-    XDLMS_APDU
-)
-from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName
-from src.COSEMpdu.types_used import (
+    XDLMS_APDU,
+    # SEQUENCE/CHOICE building blocks (moved from types_used)
     InvokeIdAndPriority, LongInvokeIdAndPriority, ListOfData,
     ListOfAccessResponseSpecification, ListOfAccessRequestSpecification,
     CosemAttributeDescriptor, CosemMethodDescriptor,
@@ -84,8 +82,9 @@ from src.COSEMpdu.types_used import (
     CosemObjectMethodId,
     ActionResponseWithOptionalData, ActionResult,
     AccessRequestBody, AccessResponseBody,
+    InitiateError, Initiate,
 )
-from src.COSEMpdu.service_error import InitiateError, Initiate
+from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName
 
 
 class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
@@ -95,17 +94,16 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         """Set up test fixtures"""
         self.maxDiff = None
         self.cosem_attribute_descriptor = CosemAttributeDescriptor(
-            class_id=CosemClassId.parse(1),
-            instance_id=CosemObjectInstanceId.parse(bytes(6)),
-            attribute_id=CosemObjectAttributeId.parse(1))
+            class_id=CosemClassId(1),
+            instance_id=CosemObjectInstanceId(bytes(6)),
+            attribute_id=CosemObjectAttributeId(1))
         self.cosem_method_descriptor = CosemMethodDescriptor(
-            class_id=CosemClassId.parse(3),
-            instance_id=CosemObjectInstanceId.parse(bytes(6)),
-            method_id=CosemObjectMethodId.parse(2))
+            class_id=CosemClassId(3),
+            instance_id=CosemObjectInstanceId(bytes(6)),
+            method_id=CosemObjectMethodId(2))
 
     def _check_encode_decode(self, value: Any, type_cls: type[Any], buffer_size: int = 1024) -> Any:
         """Helper: encode value to buffer, decode back, assert not None, return decoded."""
-        value.normalize()
         return _shared_check_encode_decode(value, type_cls, buffer_size)
 
     # =========================================================================
@@ -116,7 +114,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         """Test InitialRequest1 encode/decode (tag 1)"""
         apdu_obj = XDLMS_APDU(InitialRequest(
             dedicated_key=None,
-            response_allowed=BooleanType.parse(True),
+            response_allowed=BooleanType(True),
             proposed_quality_of_service=None,
             proposed_dlms_version_number=Unsigned8(1),
             proposed_conformance=Conformance.from_int(63, 24),
@@ -139,8 +137,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_read_request_tag_5(self) -> None:
         """Test ReadRequest5 encode/decode (tag 5)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
-        apdu_obj = ReadRequest([VariableAccessSpecification(VariableName(16))])
+        apdu_obj = ReadRequest([apdu.VariableAccessSpecification(apdu.VariableName(16))])
         decoded = self._check_encode_decode(apdu_obj, ReadRequest)
         self.assertEqual(decoded, apdu_obj)
 
@@ -153,10 +150,8 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_write_request_tag_6(self) -> None:
         """Test WriteRequest6 encode/decode (tag 6)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
-        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
         apdu_obj = WriteRequest(
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            variable_access_specification=apdu.SequenceOfVariableAccessSpecification([apdu.VariableAccessSpecification(apdu.VariableName(16))]),
             list_of_data=SequenceOfData([Data(Unsigned(50))])
         )
         decoded = self._check_encode_decode(apdu_obj, WriteRequest)
@@ -170,7 +165,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_confirmed_service_error_tag_14(self) -> None:
         """Test ConfirmedServiceError14 encode/decode (tag 14)"""
-        apdu_obj = confirmedServiceError(InitiateError(Initiate.parse(2)))  # incompatible-conformance
+        apdu_obj = confirmedServiceError(InitiateError(Initiate(Initiate.INCOMPATIBLE_CONFORMANCE)))  # incompatible-conformance
         decoded = self._check_encode_decode(apdu_obj, confirmedServiceError)
         self.assertEqual(decoded, apdu_obj)
 
@@ -179,7 +174,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         apdu_obj = DataNotification(
             long_invoke_id_and_priority=LongInvokeIdAndPriority.from_bits(1),
             date_time=OctetStringType(bytes(12)),
-            data_value=Data(Unsigned.parse(1))
+            data_value=Data(Unsigned(1))
         )
         decoded = self._check_encode_decode(apdu_obj, DataNotification)
         self.assertEqual(decoded, apdu_obj)
@@ -195,10 +190,8 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_unconfirmed_write_request_tag_22(self) -> None:
         """Test UnconfirmedWriteRequest22 encode/decode (tag 22)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
-        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
         apdu_obj = UnconfirmedWriteRequest(
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            variable_access_specification=apdu.SequenceOfVariableAccessSpecification([apdu.VariableAccessSpecification(apdu.VariableName(16))]),
             list_of_data=SequenceOfData([Data(Unsigned(50))])
         )
         decoded = self._check_encode_decode(apdu_obj, UnconfirmedWriteRequest)
@@ -206,10 +199,8 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
 
     def test_information_report_request_tag_24(self) -> None:
         """Test InformationReportRequest24 encode/decode (tag 24)"""
-        from src.COSEMpdu.types_used import VariableAccessSpecification, VariableName
-        from src.COSEMpdu.apdu import SequenceOfVariableAccessSpecification
         apdu_obj = informationReportRequest(
-            variable_access_specification=SequenceOfVariableAccessSpecification([VariableAccessSpecification(VariableName(16))]),
+            variable_access_specification=apdu.SequenceOfVariableAccessSpecification([apdu.VariableAccessSpecification(apdu.VariableName(16))]),
             list_of_data=SequenceOfData([Data(Unsigned(50))]),
             current_time=None
         )
@@ -245,11 +236,11 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         set_request_obj = SetRequest(SetRequestNormal(
             invoke_id_and_priority=InvokeIdAndPriority(1),
             cosem_attribute_descriptor=CosemAttributeDescriptor(
-                class_id=CosemClassId.parse(1),
-                instance_id=CosemObjectInstanceId.parse(b"\x00\x00\x00\x00\x00\x00"),
-                attribute_id=CosemObjectAttributeId.parse(1)
+                class_id=CosemClassId(1),
+                instance_id=CosemObjectInstanceId(b"\x00\x00\x00\x00\x00\x00"),
+                attribute_id=CosemObjectAttributeId(1)
             ),
-            value=Data(Unsigned.parse(50)),
+            value=Data(Unsigned(50)),
             access_selection=None
         ))
         decoded = self._check_encode_decode(set_request_obj, SetRequest)
@@ -260,7 +251,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         from src.COSEMpdu.apdu import dataAccessResult
         set_response_obj = SetResponse(SetResponseNormal(
             invoke_id_and_priority=InvokeIdAndPriority(1),
-            result=GetDataResult(dataAccessResult(0))
+            result=GetDataResult(dataAccessResult(dataAccessResult.SUCCESS))
         ))
         decoded = self._check_encode_decode(set_response_obj, SetResponse)
         self.assertEqual(decoded, set_response_obj)
@@ -280,7 +271,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         action_response_obj = ActionResponse(ActionResponseNormal(
             invoke_id_and_priority=InvokeIdAndPriority(1),
             single_response=ActionResponseWithOptionalData(
-                result=ActionResult(0),
+                result=ActionResult(ActionResult.SUCCESS),
                 return_parameters=None
             )
         ))

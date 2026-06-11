@@ -1,9 +1,8 @@
 # src/COSEMpdu/x690/bit_string.py
 from typing import ClassVar, Self, cast, Optional, Protocol, get_args
 from StructResult.result import ValueOrError, Error
-from .x680.type import SEQUENCE_OF, OBJECT_IDENTIFIER, CHOICE
+from .x680 import SEQUENCE_OF, OBJECT_IDENTIFIER, UniversalClassTagAssignments, ConstraintError
 from . import x680
-from .x680 import UniversalClassTagAssignments
 from .byte_buffer import ByteBuffer, put_chain
 from .x690 import Tag, Length, TagError
 
@@ -16,7 +15,7 @@ def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
     )
 
 
-class ExplicitTaggedType(x680.Type, Protocol):
+class ExplicitTaggedType(x680.Type):
     """
     EXPLICIT tagged type for BER encoding (X.690 §8.14).
 
@@ -150,7 +149,7 @@ class ExplicitTaggedType(x680.Type, Protocol):
         return buf.get_pos() - start_pos
 
 
-class ImplicitTaggedType(x680.Type, Protocol):
+class ImplicitTaggedType(x680.Type):
     """
     IMPLICIT โ�� pure tag substitution for BER (X.690 ยง8.14.1).
 
@@ -225,7 +224,7 @@ class BitStringType(ImplicitTaggedType, x680.BitStringType):
             return Error.from_e(ValueError("Indefinite length form not supported for BIT STRING primitive"))
         # Empty bitstring: length = 0
         if length.value == 0:
-            return cls(())
+            return cls.new(())
         # First octet: unused bits count (0-7)
         if isinstance(unused_bits := buf.get_u8(), Error):
             return unused_bits
@@ -246,7 +245,7 @@ class BitStringType(ImplicitTaggedType, x680.BitStringType):
         # Remove unused trailing bits
         if unused_bits > 0:
             bits = bits[:-unused_bits]
-        return cls(tuple(bits))
+        return cls.new(tuple(bits))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -306,7 +305,7 @@ class BooleanType(ImplicitTaggedType, x680.BooleanType):
             return Error.from_e(ValueError(f"BOOLEAN length must be 1, got {length.value}"))
         if isinstance(content := buf.get_u8(), Error):
             return content
-        return cls(content != 0)
+        return cls.new(content != 0)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -348,10 +347,10 @@ class GraphicString(ImplicitTaggedType, x680.GraphicString):
         if length.value < 0:
             return Error.from_e(ValueError("Indefinite length form not supported for GRAPHIC STRING primitive"))
         if length.value == 0:
-            return cls("")
+            return cls.new("")
         if isinstance(value := buf.read(length.value), Error):
             return value
-        return cls(bytes(value).decode("ascii", errors="replace"))  # GRAPHIC STRING is ISO 8859-1, but we'll decode as ASCII for display
+        return cls.new(bytes(value).decode("ascii", errors="replace"))  # GRAPHIC STRING is ISO 8859-1, but we'll decode as ASCII for display
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -408,16 +407,6 @@ class ChoiceType(x680.ChoiceType[TaggedType]):
     def __init_subclass__(cls) -> None:
         if not hasattr(cls, "alternatives"):
             cls.alternatives = {(type_.tag2 if hasattr(type_, "tag2") else type_.tag).class_number: type_ for type_ in get_args(cls.__annotations__["value"])}
-
-    @classmethod
-    def parse(cls, value: CHOICE) -> Self:
-        if (t_ := cls.alternatives.get(value.select)) is not None:
-            return cls(t_.parse(value.value))
-        raise ValueError("not find type in choice")
-
-    def normalize(self) -> CHOICE:
-        tag = self.value.tag2 if hasattr(self.value, "tag2") else self.value.tag
-        return CHOICE(tag.class_number, self.value.normalize())
 
     @classmethod
     def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
@@ -495,7 +484,7 @@ class EnumeratedType(ImplicitTaggedType, x680.EnumeratedType):
         # Convert to signed if high bit is set
         if index & (1 << (length.value * 8 - 1)):
             index -= (1 << (length.value * 8))
-        return cls(index)
+        return cls.new(index)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -568,7 +557,7 @@ class IntegerType(ImplicitTaggedType, x680.IntegerType):
         if isinstance(content := buf.read(length.value), Error):
             return content
         value = int.from_bytes(content, byteorder="big", signed=True)
-        return cls(value)
+        return cls.new(value)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -721,7 +710,7 @@ class ObjectIdentifierType(ImplicitTaggedType, x680.ObjectIdentifierType):
                 if not (octet & 0x80):
                     break
             arcs.append(arc_value)
-        return cls(tuple(arcs))
+        return cls.new(tuple(arcs))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -794,11 +783,11 @@ class OctetStringType(ImplicitTaggedType, x680.OctetStringType):
         if length.value < 0:
             return Error.from_e(ValueError("Indefinite length form not supported for OCTET STRING primitive"))
         # Read octets directly (no unused_bits like BIT STRING)
-        if length.value == 0:
-            return cls(b"")
+        # if length.value == 0:
+        #     return cls.new(b"")
         if isinstance(data := buf.read(length.value), Error):
             return data
-        return cls(bytes(data))
+        return cls.new(bytes(data))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -1006,7 +995,7 @@ class GeneralizedTime(ImplicitTaggedType, x680.GeneralizedTime):
         if isinstance(value := buf.read(length.value), Error):
             return value
         data = bytes(value).decode("ascii")
-        return cls(data)
+        return cls.new(data)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode GeneralizedTime to BER VisibleString"""

@@ -2,9 +2,10 @@
 Unit tests for types_used.py - DLMS/COSEM xDLMS Data Transfer Services Types
 """
 import unittest
-from StructResult.result import Error
-from src.COSEMpdu.x680.type import CHOICE
-from src.COSEMpdu.types_used import (
+from dataclasses import dataclass
+from StructResult.result import Error, NULL
+from src.COSEMpdu.x680 import ConstraintError
+from src.COSEMpdu.apdu import (
     VariableName, ParameterizedAccess, ReadDataBlockAccess, WriteDataBlockAccess,
     TaggedData, dataAccessResult,
     # ENUMERATED Types
@@ -30,7 +31,7 @@ from src.COSEMpdu.types_used import (
     # Access Response Types
     AccessResponseGet, AccessResponseBody,
 )
-from src.COSEMpdu.axdr import IntegerType, BooleanType, OctetStringType
+from src.COSEMpdu.axdr import IntegerType, BooleanType, OctetStringType, ChoiceType, ImplicitTaggedType
 from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString, Integer8, Unsigned16, Unsigned32, ObjectName, Unsigned8
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
@@ -185,21 +186,21 @@ class TestSelectiveAccessDescriptor(unittest.TestCase):
 
     def test_from_components(self) -> None:
         """Test from_components constructor"""
+
+        @dataclass
         class MySelective(SelectiveAccessDescriptor):
             selector_parameters = {1: Integer, 2: Unsigned, 3: Integer}
 
-
-        z = MySelective.parse((3, 100))  # Valid selector and parameter
-
-
-        descriptor = MySelective(
+        descriptor = MySelective.new(
             access_selector=Unsigned8(1),
-            access_parameters=Integer(100)
+            access_parameters=Data(Integer(100))
         )
         buf = ByteBuffer.allocate(50)
         descriptor.put(buf)
-        self.assertEqual(descriptor.access_selector.normalize(), 1)
-        self.assertEqual(descriptor.access_parameters.normalize(), 100)
+        buf.set_pos(0)
+        decoded = MySelective.get(buf)
+        self.assertEqual(decoded.access_selector, Unsigned8(1))
+        self.assertEqual(decoded.access_parameters, Data(Integer(100)))
 
 
 class TestInvokeIdAndPriority(unittest.TestCase):
@@ -283,7 +284,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
 
         buf.set_pos(0)
         decoded = VariableAccessSpecification.get(buf)
-        self.assertEqual(decoded.normalize(), CHOICE(2, 16))
+        self.assertEqual(decoded.value, VariableName(16))
 
     def test_parameterized_access(self) -> None:
         """Test parameterized-access [4] alternative"""
@@ -326,9 +327,11 @@ class TestVariableAccessSpecification(unittest.TestCase):
         buf.set_pos(0)
         if isinstance(decoded := VariableAccessSpecification.get(buf), Error):
             self.fail()
+        if not isinstance(decoded.value, ReadDataBlockAccess):
+            self.fail()
         self.assertTrue(decoded.value.last_block.value)
         self.assertEqual(decoded.value.block_number.value, 1)
-        self.assertEqual(decoded.value.raw_data.normalize(), b"\x01\x02\x03\x04")
+        self.assertEqual(decoded.value.raw_data.value, b"\x01\x02\x03\x04")
 
     def test_write_data_block_access(self) -> None:
         """Test write-data-block-access [7] alternative"""
@@ -662,8 +665,8 @@ class TestEdgeCases(unittest.TestCase):
     def test_cosem_object_instance_id_wrong_size(self) -> None:
         """Test CosemObjectInstanceId with wrong size"""
         # Should be SIZE(6)
-        with self.assertRaises(Exception):
-            CosemObjectInstanceId(b"\x00\x00\x01")  # Only 3 bytes
+        self.assertTrue(CosemObjectInstanceId.new(b"\x00\x00\x01").has(NULL, ConstraintError))
+
 
     def test_data_access_result_invalid_value(self) -> None:
         """Test DataAccessResult with invalid enumeration value"""

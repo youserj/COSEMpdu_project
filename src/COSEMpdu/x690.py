@@ -1,12 +1,28 @@
 from dataclasses import dataclass
-from typing import Self
+from typing import Self, Protocol
 from StructResult.result import ValueOrError, Error, Fallible, OK
 from . import x680
-from .x680.type import EDTLV
 from .byte_buffer import ByteBuffer
 
 
 class TagError(Exception): ...
+
+
+class EDTLV(Protocol):
+    @classmethod
+    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+        """
+        Decode with full TLV (Tag + Length + Contents).
+        MUST validate tag before decoding.
+        """
+        ...
+
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """
+        Encode with full TLV (Tag + Length + Contents).
+        Returns number of bytes written.
+        """
+        ...
 
 
 @dataclass

@@ -6,33 +6,34 @@ import os
 # Добавляем путь для импорта (замените на ваш реальный путь)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.COSEMpdu.x680.bit_string import BitStringType, NamedBit
+from src.COSEMpdu.x680 import NamedValue
+from src.COSEMpdu.ber import BitStringType
 
 
-class TestNamedBit(unittest.TestCase):
-    """Тесты для NamedBit"""
+class TestNamedValue(unittest.TestCase):
+    """Тесты для NamedValue"""
 
-    def test_create_named_bit(self) -> None:
-        """Создание именованного бита"""
-        bit = NamedBit("read", 0)
-        self.assertEqual(bit.position, Status.read)
+    def test_create_named_value(self) -> None:
+        """Создание именованного значения"""
+        bit = NamedValue("read", 0)
+        self.assertEqual(bit.value, Status.read)
         self.assertEqual(str(bit), "read(0)")
         self.assertEqual(int(bit), 1)  # 1 << 0 = 1
 
-        bit2 = NamedBit("write", 1)
+        bit2 = NamedValue("write", 1)
         self.assertEqual(str(bit2), "write(1)")
         self.assertEqual(int(bit2), 2)  # 1 << 1 = 2
 
-        bit3 = NamedBit("execute", 2)
+        bit3 = NamedValue("execute", 2)
         self.assertEqual(int(bit3), 4)  # 1 << 2 = 4
 
-    def test_named_bit_immutable(self) -> None:
-        """NamedBit должен быть неизменяемым (frozen)"""
-        bit = NamedBit("test", 5)
+    def test_named_value_immutable(self) -> None:
+        """NamedValue должен быть неизменяемым (frozen)"""
+        bit = NamedValue("test", 5)
         with self.assertRaises(AttributeError):
             bit.identifier = "new"
         with self.assertRaises(AttributeError):
-            bit.position = 10
+            bit.value = 10
 
 
 # Создаем конкретные типы для тестирования
@@ -489,7 +490,7 @@ class TestInheritance(unittest.TestCase):
         status2 = Status.from_bin("010")
 
         # Оба экземпляра имеют доступ к тем же именам
-        self.assertIs(status1.__class__.named_bits, status2.__class__.named_bits)
+        self.assertIs(status1.__class__.members, status2.__class__.members)
 
     def test_operations_preserve_type(self) -> None:
         """Битовые операции сохраняют тип"""

@@ -11,21 +11,12 @@ Covers:
 import sys
 import unittest
 from typing import ClassVar
-from StructResult.result import Error
+from StructResult.result import Error, NULL
 
 sys.path.insert(0, "src")
 
 from COSEMpdu.byte_buffer import ByteBuffer
-from COSEMpdu.ber import IntegerType as BERIntegerType
-from COSEMpdu.x680.integer_type import IntegerType, NamedNumber, NamedNumberList
-from COSEMpdu.x680.constrained_type import (
-    # ConstrainedType,
-    ConstraintError,
-    ConstraintSpec,
-    SingleValue,
-    SizeConstraint,
-    ValueRange,
-)
+from COSEMpdu.x680 import ConstraintError, ConstraintSpec, SingleValue, SizeConstraint, ValueRange
 from COSEMpdu.axdr import ConstrainedIntegerType, ConstrainedBitStringType, ConstrainedSequenceOfType, ConstrainedOctetStringType, IntegerType
 
 # from COSEMpdu.x680.bit_string_type import BitStringType
@@ -182,7 +173,7 @@ class TestConstrainedTypeSafety(unittest.TestCase):
             exception_spec = None
 
         # BER-encode 200 as a two's-complement integer (0x00 0xc8)
-        ber_int = BERIntegerType(200)
+        ber_int = IntegerType(200)
         buf = ByteBuffer.wrap(b"")
         ber_int.put(buf)
         encoded = bytes(buf)
@@ -229,13 +220,11 @@ class TestConstrainedIntegerType(unittest.TestCase):
 
     def test_invalid_value_below(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
-        with self.assertRaises(ConstraintError):
-            T(-1)
+        self.assertTrue(T.new(-1).has(NULL, ConstraintError))
 
     def test_invalid_value_above(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
-        with self.assertRaises(ConstraintError):
-            T(256)
+        self.assertTrue(T.new(256).has(NULL, ConstraintError))
 
     def test_boundary_lower(self) -> None:
         T = make_constrained_integer("_U8", ValueRange(0, 255))
@@ -272,17 +261,11 @@ class TestConstrainedIntegerType(unittest.TestCase):
     def test_str_uses_named_numbers(self) -> None:
         """If named_numbers is defined, str() returns identifier."""
         class Result(make_constrained_integer("_R", ValueRange(0, 1))):
-            named_numbers = NamedNumberList((
-                NamedNumber("success", 0),
-                NamedNumber("failure", 1),
-            ))
+            Success: int = 0
+            Failure: int = 1
 
-        # Not calling _init_subclass on existing cls – need to bypass
-        # the factory's _init_subclass by directly using ConstrainedIntegerType
-        # Let's just verify that IntegerType.str works for named_numbers
-        # This test exercises the IntegerType.__str__ path – which is inherited
         obj = Result(0)
-        self.assertEqual(str(obj), "success")
+        self.assertEqual(obj.value, Result.Success)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -304,7 +287,7 @@ class TestConstrainedBitStringType(unittest.TestCase):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(8)
             exception_spec = None
 
-        self.assertEqual(len(BS8((1, 0, 1)).value), 8)
+        self.assertTrue(BS8.new((1, 0, 1)).has(NULL, ConstraintError))
 
     def test_fixed_length_set(self) -> None:
         class BS8(ConstrainedBitStringType):
@@ -360,8 +343,7 @@ class TestConstrainedOctetString(unittest.TestCase):
             constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(4)
             exception_spec = None
 
-        with self.assertRaises(ConstraintError):
-            OS4(b"\x01\x02")
+        self.assertTrue(OS4.new(b"\x01\x02").has(NULL, ConstraintError))
 
     def test_fixed_length_set(self) -> None:
         class OS4(ConstrainedOctetStringType):

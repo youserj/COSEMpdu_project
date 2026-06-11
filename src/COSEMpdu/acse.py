@@ -6,8 +6,7 @@ Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COS
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Final
 from . import x690
-from .x680 import NamedNumberList, NamedNumber
-from .x680.tag import Class
+from .x680 import Class
 from .ber import GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, ChoiceType, ObjectIdentifierType
 
 
@@ -69,43 +68,37 @@ class UserInformation(ExplicitTaggedType, OctetStringType):
 class Result(ExplicitTaggedType, IntegerType):
     """result [2] Association-result"""
     tag2: ClassVar[x690.Tag] = x690.Tag(2, Class.CONTEXT_SPECIFIC, True)
-    named_numbers = NamedNumberList((
-        NamedNumber("accepted", 0),
-        NamedNumber("rejected-permanent", 1),
-        NamedNumber("rejected-transient", 2),
-    ))
+    ACCEPTED: int = 0
+    REJECTED_PERMANENT: int = 1
+    REJECTED_TRANSIENT: int = 2
 
 
 class ACSEServiceUser(ExplicitTaggedType, IntegerType):
     """acse-service-user [1] INTEGER"""
     tag2: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC, True)
-    named_numbers = NamedNumberList((
-        NamedNumber("null", 0),
-        NamedNumber("no-reason-given", 1),
-        NamedNumber("application-context-name-not-supported", 2),
-        NamedNumber("calling-AP-title-not-recognized", 3),
-        NamedNumber("calling-AP-invocation-identifier-not-recognized", 4),
-        NamedNumber("calling-AE-qualifier-not-recognized", 5),
-        NamedNumber("calling-AE-invocation-identifier-not-recognized", 6),
-        NamedNumber("called-AP-title-not-recognized", 7),
-        NamedNumber("called-AP-invocation-identifier-not-recognized", 8),
-        NamedNumber("called-AE-qualifier-not-recognized", 9),
-        NamedNumber("called-AE-invocation-identifier-not-recognized", 10),
-        NamedNumber("authentication-mechanism-name-not-recognised", 11),
-        NamedNumber("authentication-mechanism-name-required", 12),
-        NamedNumber("authentication-failure", 13),
-        NamedNumber("authentication-required", 14),
-    ))
+    NULL: int = 0
+    NO_REASON_GIVEN: int = 1
+    APPLICATION_CONTEXT_NAME_NOT_SUPPORTED: int = 2
+    CALLING_AP_TITLE_NOT_RECOGNIZED: int = 3
+    CALLING_AP_INVOCATION_IDENTIFIER_NOT_RECOGNIZED: int = 4
+    CALLING_AE_QUALIFIER_NOT_RECOGNIZED: int = 5
+    CALLING_AE_INVOCATION_IDENTIFIER_NOT_RECOGNIZED: int = 6
+    CALLED_AP_TITLE_NOT_RECOGNIZED: int = 7
+    CALLED_AP_INVOCATION_IDENTIFIER_NOT_RECOGNIZED: int = 8
+    CALLED_AE_QUALIFIER_NOT_RECOGNIZED: int = 9
+    CALLED_AE_INVOCATION_IDENTIFIER_NOT_RECOGNIZED: int = 10
+    AUTHENTICATION_MECHANISM_NAME_NOT_RECOGNISED: int = 11
+    AUTHENTICATION_MECHANISM_NAME_REQUIRED: int = 12
+    AUTHENTICATION_FAILURE: int = 13
+    AUTHENTICATION_REQUIRED: int = 14
 
 
 class ACSEServiceProvider(ExplicitTaggedType, IntegerType):
     """acse-service-provider [2] INTEGER"""
     tag2: ClassVar[x690.Tag] = x690.Tag(2, Class.CONTEXT_SPECIFIC, True)
-    named_numbers = NamedNumberList((
-        NamedNumber("null", 0),
-        NamedNumber("no-reason-given", 1),
-        NamedNumber("no-common-acse-version", 2),
-    ))
+    NULL: int = 0
+    NO_REASON_GIVEN: int = 1
+    NO_COMMON_ACSE_VERSION: int = 2
 
 
 class ResultSourceDiagnostic(ExplicitTaggedType, ChoiceType):
@@ -117,21 +110,17 @@ class ResultSourceDiagnostic(ExplicitTaggedType, ChoiceType):
 class RequestReason(IntegerType):
     """reason [0] IMPLICIT Release-request-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
-    named_numbers = NamedNumberList((
-        NamedNumber("normal", 0),
-        NamedNumber("urgent", 1),
-        NamedNumber("user-defined", 30),
-    ))
+    NORMAL: int = 0
+    URGENT: int = 1
+    USER_DEFINED: int = 30
 
 
 class ResponseReason(IntegerType):
     """reason [0] IMPLICIT Release-response-reason"""
     tag: ClassVar[x690.Tag] = x690.Tag(0, Class.CONTEXT_SPECIFIC)
-    named_numbers = NamedNumberList((
-        NamedNumber("normal", 0),
-        NamedNumber("not-finished", 1),
-        NamedNumber("user-defined", 30),
-    ))
+    NORMAL: int = 0
+    NOT_FINISHED: int = 1
+    USER_DEFINED: int = 30
 
 
 class ProtocolVersion(BitStringType):
@@ -163,12 +152,12 @@ class CallingAEQualifier(ExplicitTaggedType, AEQualifier):
     tag2: ClassVar[x690.Tag] = x690.Tag(7, Class.CONTEXT_SPECIFIC, True)
 
 
-class CalledAPInvocationId(ExplicitTaggedType, APInvocationIdentifier):
+class CalledAPInvocationId(APInvocationIdentifier, ExplicitTaggedType):
     """called-AP-invocation-id [4] AP-invocation-identifier"""
     tag2: ClassVar[x690.Tag] = x690.Tag(4, Class.CONTEXT_SPECIFIC, True)
 
 
-class CallingAPInvocationId(ExplicitTaggedType, APInvocationIdentifier):
+class CallingAPInvocationId(APInvocationIdentifier, ExplicitTaggedType):
     """calling-AP-invocation-id [8] AP-invocation-identifier"""
     tag2: ClassVar[x690.Tag] = x690.Tag(8, Class.CONTEXT_SPECIFIC, True)
 
@@ -195,7 +184,7 @@ class RequestMechanismName(MechanismName):
 
 class CallingAuthenticationValue(ExplicitTaggedType, AuthenticationValue):
     """calling-authentication-value [12] EXPLICIT Authentication-value"""
-    tag2: ClassVar[x690.Tag] = x690.Tag(12, Class.CONTEXT_SPECIFIC, True)
+    tag2: ClassVar[x690.Tag] = x690.Tag(12, Class.CONTEXT_SPECIFIC, constructed=True)
 
 
 class AARQapdu(SequenceType):

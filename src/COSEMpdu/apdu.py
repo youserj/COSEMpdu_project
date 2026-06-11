@@ -3,44 +3,470 @@ COSEM PDU Types Implementation
 Based on COSEMpdu_GB83.txt (Green Book 8.3)
 Implements A-XDR encoding/decoding according to IEC 61334-6
 """
-from typing import ClassVar, Final, Optional, TypeAlias, Union
+from typing import Final, Optional, Self, Literal, ClassVar, TypeAlias, Union
 from dataclasses import dataclass
+from StructResult.result import ValueOrError, Error
+from .x680 import InitError
 from .data import Data, SequenceOfData, ObjectName, Unsigned16, Unsigned8, Unsigned32, Integer8
 from .axdr import (
-    EnumeratedType, OctetStringType, SequenceType, SequenceOfType,
-    ChoiceType, NullType, GeneralizedTime, NullType0, ImplicitTaggedType, BooleanType
+    ConstrainedOctetStringType, OctetStringType, SequenceOfType, EnumeratedType, SequenceType,
+    BooleanType, ChoiceType, NullType, GeneralizedTime, NullType0, ImplicitTaggedType
 )
-from .types_used import (
-    TaggedData,
-    CosemAttributeDescriptor,
-    CosemAttributeDescriptorWithSelection,
-    CosemMethodDescriptor,
-    InvokeIdAndPriority,
-    SelectiveAccessDescriptor,
-    VariableAccessSpecification,
-    dataAccessResult,
-    DataBlockResult,
-    LongInvokeIdAndPriority,
-    GetDataResult,
-    DataBlockG,
-    DataBlockSA,
-    DataAccessResult,
-    ActionResponseWithOptionalData,
-    AccessRequestBody,
-    AccessResponseBody
-)
-from .service_error import ConfirmedServiceError
 from . import ber
 from . import x690
-from .x680 import tag, ConstraintSpec
-from .x680.constrained_type import SizeConstraint
+from .x680 import Class, ConstraintSpec, SizeConstraint
+
+
+# =============================================================================
+# ENUMERATED Types (A-XDR: encoded as fixed-length unsigned integer in 1 byte)
+# =============================================================================
+
+
+class DataAccessResult(EnumeratedType):
+    """Data-Access-Result"""
+    SUCCESS: Final[int] = 0
+    HARDWARE_FAULT: Final[int] = 1
+    TEMPORARY_FAILURE: Final[int] = 2
+    READ_WRITE_DENIED: Final[int] = 3
+    OBJECT_UNDEFINED: Final[int] = 4
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 9
+    OBJECT_UNAVAILABLE: Final[int] = 11
+    TYPE_UNMATCHED: Final[int] = 12
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 13
+    DATA_BLOCK_UNAVAILABLE: Final[int] = 14
+    LONG_GET_ABORTED: Final[int] = 15
+    NO_LONG_GET_IN_PROGRESS: Final[int] = 16
+    LONG_SET_ABORTED: Final[int] = 17
+    NO_LONG_SET_IN_PROGRESS: Final[int] = 18
+    DATA_BLOCK_NUMBER_INVALID: Final[int] = 19
+    OTHER_REASON: Final[int] = 250
+
+
+class dataAccessResult(ImplicitTaggedType, DataAccessResult):
+    """data-access-result [1] IMPLICIT Data-Access-Result"""
+    tag: ClassVar[int] = 1
+
+
+class ActionResult(EnumeratedType):
+    """Action-Result"""
+    SUCCESS: Final[int] = 0
+    HARDWARE_FAULT: Final[int] = 1
+    TEMPORARY_FAILURE: Final[int] = 2
+    READ_WRITE_DENIED: Final[int] = 3
+    OBJECT_UNDEFINED: Final[int] = 4
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 9
+    OBJECT_UNAVAILABLE: Final[int] = 11
+    TYPE_UNMATCHED: Final[int] = 12
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 13
+    DATA_BLOCK_UNAVAILABLE: Final[int] = 14
+    LONG_ACTION_ABORTED: Final[int] = 15
+    NO_LONG_ACTION_IN_PROGRESS: Final[int] = 16
+    OTHER_REASON: Final[int] = 250
+
+
+# =============================================================================
+# Basic Types (from COSEMpdu_GB83.txt)
+# =============================================================================
+
+
+class CosemClassId(Unsigned16):
+    """Cosem-Class-Id"""
+
+
+class CosemObjectInstanceId(ConstrainedOctetStringType):
+    """Cosem-Object-Instance-Id"""
+    constraint_spec = SizeConstraint(6)
+
+
+class CosemObjectAttributeId(Integer8):
+    """Cosem-Object-Attribute-Id"""
+
+
+class CosemObjectMethodId(Integer8):
+    """Cosem-Object-Method-Id"""
+
+
+# =============================================================================
+# SEQUENCE Types for xDLMS Data Transfer Services
+# =============================================================================
+
+
+@dataclass
+class CosemAttributeDescriptor(SequenceType):
+    """Cosem-Attribute-Descriptor"""
+    class_id: CosemClassId
+    instance_id: CosemObjectInstanceId
+    attribute_id: CosemObjectAttributeId
+
+
+@dataclass
+class CosemMethodDescriptor(SequenceType):
+    """Cosem-Method-Descriptor"""
+    class_id: CosemClassId
+    instance_id: CosemObjectInstanceId
+    method_id: CosemObjectMethodId
+
+
+@dataclass
+class SelectiveAccessDescriptor(SequenceType):
+    """Selective-Access-Descriptor"""
+    access_selector: Unsigned8
+    access_parameters: Data
+    selector_parameters: ClassVar[dict[int, type[ImplicitTaggedType]]] = {}
+
+    @classmethod
+    def new(cls, access_selector: Unsigned8, access_parameters: Data) -> Self | Error:
+        if (expected_type := cls.selector_parameters.get(int(access_selector))) is None:
+            return Error.from_e(InitError(f"Unknown access-selector value: {access_selector}"))
+        if not isinstance(access_parameters.value, expected_type):
+            return Error.from_e(InitError(f"Expected access-parameters type {expected_type.__name__} for selector {access_selector}, got {type(access_parameters).__name__}"))
+        return cls(access_selector, access_parameters)
+
+
+@dataclass
+class CosemAttributeDescriptorWithSelection(SequenceType):
+    """Cosem-Attribute-Descriptor-With-Selection"""
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: Optional[SelectiveAccessDescriptor] = None
+
+
+# =============================================================================
+# Variable-Access-Specification CHOICE
+# =============================================================================
+
+
+class VariableName(ImplicitTaggedType, ObjectName):
+    """variable-name [2] IMPLICIT ObjectName"""
+    tag = 2
+
+
+@dataclass
+class ParameterizedAccess(ImplicitTaggedType, SequenceType):
+    """parameterized-access [4] IMPLICIT Parameterized-Access"""
+    tag: ClassVar[int] = 4
+    variable_name: ObjectName
+    selector: Unsigned8
+    parameter: Data
+
+
+@dataclass
+class BlockNumberAccess(ImplicitTaggedType, SequenceType):
+    """block-number-access [5] IMPLICIT Block-Number-Access"""
+    tag: ClassVar[int] = 5
+    block_number: Unsigned16
+
+
+@dataclass
+class ReadDataBlockAccess(ImplicitTaggedType, SequenceType):
+    """read-data-block-access [6] IMPLICIT Read-Data-Block-Access"""
+    tag: ClassVar[int] = 6
+    last_block: BooleanType
+    block_number: Unsigned16
+    raw_data: OctetStringType
+
+
+@dataclass
+class WriteDataBlockAccess(ImplicitTaggedType, SequenceType):
+    """write-data-block-access [7] IMPLICIT Write-Data-Block-Access"""
+    tag: ClassVar[int] = 7
+    last_block: BooleanType
+    block_number: Unsigned16
+
+
+class VariableAccessSpecification(ChoiceType):
+    """Variable-Access-Specification"""
+    value: VariableName | ParameterizedAccess | BlockNumberAccess | ReadDataBlockAccess | WriteDataBlockAccess
+
+
+# =============================================================================
+# Invoke-Id-And-Priority Types
+# =============================================================================
+
+
+class InvokeIdAndPriority(Unsigned8):
+    """Invoke-Id-And-Priority"""
+
+    @classmethod
+    def from_bits(
+        cls,
+        invoke_id: int,
+        service_class: Literal["confirmed", "unconfirmed"] = "confirmed",
+        priority: Literal["high", "normal"] = "normal"
+    ) -> Self:
+        """Create from individual bit fields"""
+        if not (0 <= invoke_id <= 15):
+            raise ValueError(f"invoke_id must be 0-15, got {invoke_id}")
+        value = (invoke_id << 4) | (1 if service_class == "confirmed" else 0) << 1 | (1 if priority == "high" else 0)
+        return cls(value & 0xFF)
+
+    @property
+    def invoke_id(self) -> int:
+        """Extract invoke-id (bits 0-3)"""
+        return (self.value >> 4) & 0x0F
+
+    def is_confirmed(self) -> bool:
+        """Check service-class bit (bit 6)"""
+        return bool((self.value >> 1) & 0x01)
+
+    def is_high_priority(self) -> bool:
+        """Check priority bit (bit 7)"""
+        return bool(self.value & 0x01)
+
+
+class LongInvokeIdAndPriority(Unsigned32):
+    """Long-Invoke-Id-And-Priority"""
+
+    @classmethod
+    def from_bits(
+        cls,
+        long_invoke_id: int,
+        self_descriptive: Literal["Not-Self", "Self"] = "Not-Self",
+        processing_option: Literal["Continue", "Break"] = "Continue",
+        service_class: Literal["confirmed", "unconfirmed"] = "confirmed",
+        priority: Literal["high", "normal"] = "normal"
+    ) -> Self:
+        """Create from individual bit fields"""
+        if not (0 <= long_invoke_id <= 0xFFFFFF):
+            raise ValueError(f"long_invoke_id must be 0-0xFFFFFF, got {long_invoke_id}")
+        value = (
+            (long_invoke_id << 8) |
+            (1 if self_descriptive == "Self" else 0) << 3 |
+            (1 if processing_option == "Break" else 0) << 2 |
+            (1 if service_class == "confirmed" else 0) << 1 |
+            (1 if priority == "high" else 0)
+        )
+        return cls(value & 0xFFFFFFFF)
+
+    @property
+    def long_invoke_id(self) -> int:
+        """Extract long-invoke-id (bits 0-23)"""
+        return (self.value >> 8) & 0xFFFFFF
+
+    def is_self_descriptive(self) -> bool:
+        """Check self-descriptive bit (bit 28)"""
+        return bool((self.value >> 3) & 0x01)
+
+    def is_break_on_error(self) -> bool:
+        """Check processing-option bit (bit 29)"""
+        return bool((self.value >> 2) & 0x01)
+
+    def is_confirmed(self) -> bool:
+        """Check service-class bit (bit 30)"""
+        return bool((self.value >> 1) & 0x01)
+
+    def is_high_priority(self) -> bool:
+        """Check priority bit (bit 31)"""
+        return bool(self.value & 0x01)
+
+
+# =============================================================================
+# Get-Data-Result CHOICE
+# =============================================================================
+
+
+class TaggedData(ImplicitTaggedType, Data):
+    """data [0] Data"""
+    tag = 0
+
+
+class GetDataResult(ChoiceType):
+    """Get-Data-Result"""
+    value: TaggedData | dataAccessResult
+
+
+# =============================================================================
+# Data Block Types
+# =============================================================================
+
+
+@dataclass
+class DataBlockResult(SequenceType):
+    """Data-Block-Result"""
+    last_block: BooleanType
+    block_number: Unsigned16
+    raw_data: OctetStringType
+
+
+class RawData(ImplicitTaggedType, OctetStringType):
+    """raw-data [0] IMPLICIT OCTET STRING"""
+    tag = 0
+
+
+class DataBlockGResult(ChoiceType):
+    """
+    DataBlock-G.result CHOICE:
+    {
+        raw-data                       [0] IMPLICIT OCTET STRING,
+        data-access-result             [1] IMPLICIT Data-Access-Result
+    }
+    """
+    value: RawData | dataAccessResult
+
+
+@dataclass
+class DataBlockG(SequenceType):
+    """DataBlock-G"""
+    last_block: BooleanType
+    block_number: Unsigned32
+    result: DataBlockGResult
+
+
+@dataclass
+class DataBlockSA(SequenceType):
+    """DataBlock-SA"""
+    last_block: BooleanType
+    block_number: Unsigned32
+    raw_data: OctetStringType
+
+
+# =============================================================================
+# Action Response Types
+# =============================================================================
+
+
+@dataclass
+class ActionResponseWithOptionalData(SequenceType):
+    """Action-Response-With-Optional-Data"""
+    result: ActionResult
+    return_parameters: Optional[GetDataResult] = None
+
+
+# =============================================================================
+# Notification Types
+# =============================================================================
+
+
+@dataclass
+class NotificationBody(SequenceType):
+    """Notification-Body"""
+    data_value: Data
+
+
+# =============================================================================
+# List Types (SEQUENCE OF)
+# =============================================================================
+
+
+ListOfData: TypeAlias = SequenceOfType[Data]
+"""List-Of-Data"""
+
+
+# =============================================================================
+# Access Request Types
+# =============================================================================
+
+@dataclass
+class AccessRequestGet(ImplicitTaggedType, SequenceType):
+    """access-request-get"""
+    tag: ClassVar[int] = 1
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+
+
+@dataclass
+class AccessRequestSet(ImplicitTaggedType, SequenceType):
+    """access-request-set"""
+    tag: ClassVar[int] = 2
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+
+
+@dataclass
+class AccessRequestAction(ImplicitTaggedType, SequenceType):
+    """access-request-action"""
+    tag: ClassVar[int] = 3
+    cosem_method_descriptor: CosemMethodDescriptor
+
+
+@dataclass
+class AccessRequestGetWithSelection(ImplicitTaggedType, SequenceType):
+    """access-request-get-with-selection"""
+    tag: ClassVar[int] = 4
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
+
+
+@dataclass
+class AccessRequestSetWithSelection(ImplicitTaggedType, SequenceType):
+    """access-request-set-with-selection"""
+    tag: ClassVar[int] = 5
+    cosem_attribute_descriptor: CosemAttributeDescriptor
+    access_selection: SelectiveAccessDescriptor
+
+
+class AccessRequestSpecification(ChoiceType):
+    """Access-Request-Specification"""
+    value: AccessRequestGet | AccessRequestSet | AccessRequestAction | AccessRequestGetWithSelection | AccessRequestSetWithSelection
+
+
+ListOfAccessRequestSpecification = SequenceOfType[AccessRequestSpecification]
+"""List-Of-Access-Request-Specification"""
+
+
+class accessRequestSpecification(ImplicitTaggedType, ListOfAccessRequestSpecification):
+    """access-request-specification"""
+    tag: ClassVar[int] = 0
+
+
+@dataclass
+class AccessRequestBody(SequenceType):
+    """Access-Request-Body"""
+    access_request_specification: ListOfAccessRequestSpecification
+    access_request_list_of_data: ListOfData
+
+
+# =============================================================================
+# Access Response Types
+# =============================================================================
+
+
+@dataclass
+class AccessResponseGet(ImplicitTaggedType, SequenceType):
+    """access-response-get"""
+    tag: ClassVar[int] = 1
+    result: dataAccessResult
+
+
+@dataclass
+class AccessResponseSet(ImplicitTaggedType, SequenceType):
+    """access-response-set"""
+    tag: ClassVar[int] = 2
+    result: dataAccessResult
+
+
+@dataclass
+class AccessResponseAction(ImplicitTaggedType, SequenceType):
+    """access-response-action"""
+    tag: ClassVar[int] = 3
+    result: ActionResult
+
+
+class AccessResponseSpecification(ChoiceType):
+    """Access-Response-Specification"""
+    value: AccessResponseGet | AccessResponseSet | AccessResponseAction
+
+
+ListOfAccessResponseSpecification = SequenceOfType[AccessResponseSpecification]
+"""List-Of-Access-Response-Specification"""
+
+
+class AccessResponseBody(SequenceType):
+    """Access-Response-Body"""
+    access_request_specification: Optional[accessRequestSpecification] = None  # OPTIONAL — before mandatory
+    access_response_list_of_data: ListOfData
+    access_response_specification: ListOfAccessResponseSpecification
+
+    def __init__(self, access_response_list_of_data: ListOfData,
+                 access_response_specification: ListOfAccessResponseSpecification,
+                 access_request_specification: Optional[accessRequestSpecification] = None) -> None:
+        self.access_response_list_of_data = access_response_list_of_data
+        self.access_response_specification = access_response_specification
+        self.access_request_specification = access_request_specification
 
 
 class Conformance(ber.ConstrainedBitStringType):
     """Conformance ::= [APPLICATION 31] IMPLICIT BIT STRING"""
     tag: ClassVar[x690.Tag] = x690.Tag(
         class_number=31,
-        class_=tag.Class.APPLICATION
+        class_=Class.APPLICATION
     )
     constraint_spec: ClassVar[ConstraintSpec] = SizeConstraint(24)
     RESERVED_ZERO: Final[int] = 0
@@ -187,6 +613,220 @@ WriteResponseChoice.SUCCESS = WriteResponseChoice(NullType0(None))
 class WriteResponse(ImplicitTaggedType, SequenceOfType[WriteResponseChoice]):
     """writeResponse [13] IMPLICIT WriteResponse"""
     tag = 13
+
+
+class ApplicationReference(ImplicitTaggedType, EnumeratedType):
+    """application-reference [0] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 0
+    OTHER: Final[int] = 0
+    TIME_ELAPSED: Final[int] = 1
+    APPLICATION_UNREACHABLE: Final[int] = 2
+    APPLICATION_REFERENCE_INVALID: Final[int] = 3
+    APPLICATION_CONTEXT_UNSUPPORTED: Final[int] = 4
+    PROVIDER_COMMUNICATION_ERROR: Final[int] = 5
+    DECIPHERING_ERROR: Final[int] = 6
+
+
+class HardwareResource(ImplicitTaggedType, EnumeratedType):
+    """hardware-resource [1] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 1
+    OTHER: Final[int] = 0
+    MEMORY_UNAVAILABLE: Final[int] = 1
+    PROCESSOR_RESOURCE_UNAVAILABLE: Final[int] = 2
+    MASS_STORAGE_UNAVAILABLE: Final[int] = 3
+    OTHER_RESOURCE_UNAVAILABLE: Final[int] = 4
+
+
+class VDEStateError(ImplicitTaggedType, EnumeratedType):
+    """vde-state-error [2] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 2
+    OTHER: Final[int] = 0
+    NO_DLMS_CONTEXT: Final[int] = 1
+    LOADING_DATA_SET: Final[int] = 2
+    STATUS_NOCHANGE: Final[int] = 3
+    STATUS_INOPERABLE: Final[int] = 4
+
+
+class Service(ImplicitTaggedType, EnumeratedType):
+    """service [3] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 3
+    OTHER: Final[int] = 0
+    PDU_SIZE: Final[int] = 1
+    SERVICE_UNSUPPORTED: Final[int] = 2
+
+
+class Definition(ImplicitTaggedType, EnumeratedType):
+    """definition [4] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 4
+    OTHER: Final[int] = 0
+    OBJECT_UNDEFINED: Final[int] = 1
+    OBJECT_CLASS_INCONSISTENT: Final[int] = 2
+    OBJECT_ATTRIBUTE_INCONSISTENT: Final[int] = 3
+
+
+class Access(ImplicitTaggedType, EnumeratedType):
+    """access [5] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 5
+    OTHER: Final[int] = 0
+    SCOPE_OF_ACCESS_VIOLATED: Final[int] = 1
+    OBJECT_ACCESS_VIOLATED: Final[int] = 2
+    HARDWARE_FAULT: Final[int] = 3
+    OBJECT_UNAVAILABLE: Final[int] = 4
+
+
+class Initiate(ImplicitTaggedType, EnumeratedType):
+    """initiate [6] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 6
+    OTHER: Final[int] = 0
+    DLMS_VERSION_TOO_LOW: Final[int] = 1
+    INCOMPATIBLE_CONFORMANCE: Final[int] = 2
+    PDU_SIZE_TOO_SHORT: Final[int] = 3
+    REFUSED_BY_THE_VDE_HANDLER: Final[int] = 4
+
+
+class LoadDataSet(ImplicitTaggedType, EnumeratedType):
+    """load-data-set [7] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 7
+    OTHER: Final[int] = 0
+    PRIMITIVE_OUT_OF_SEQUENCE: Final[int] = 1
+    NOT_LOADABLE: Final[int] = 2
+    DATASET_SIZE_TOO_LARGE: Final[int] = 3
+    NOT_AWAITED_SEGMENT: Final[int] = 4
+    INTERPRETATION_FAILURE: Final[int] = 5
+    STORAGE_FAILURE: Final[int] = 6
+    DATA_SET_NOT_READY: Final[int] = 7
+
+
+class Task(ImplicitTaggedType, EnumeratedType):
+    """task [9] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 9
+    OTHER: Final[int] = 0
+    NO_REMOTE_CONTROL: Final[int] = 1
+    TI_STOPPED: Final[int] = 2
+    TI_RUNNING: Final[int] = 3
+    TI_UNUSABLE: Final[int] = 4
+
+
+class Changescope(ImplicitTaggedType, EnumeratedType):
+    """change-scope [8] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 8
+
+
+class Other(ImplicitTaggedType, EnumeratedType):
+    """other [10] IMPLICIT ENUMERATED"""
+    tag: ClassVar[int] = 10
+
+
+class ServiceError(ChoiceType):
+    """ServiceError"""
+    value: Union[
+        ApplicationReference, HardwareResource, VDEStateError, Service, Definition,
+        Access, Initiate, LoadDataSet, Changescope, Task, Other]
+
+
+class InitiateError(ImplicitTaggedType, ServiceError):
+    """[1] ServiceError"""
+    tag: ClassVar[int] = 1
+
+
+class GetStatus(ImplicitTaggedType, ServiceError):
+    """[2] ServiceError"""
+    tag: ClassVar[int] = 2
+
+
+class GetNameList(ImplicitTaggedType, ServiceError):
+    """[3] ServiceError"""
+    tag: ClassVar[int] = 3
+
+
+class GetVariableAttribute(ImplicitTaggedType, ServiceError):
+    """[4] ServiceError"""
+    tag: ClassVar[int] = 4
+
+
+class Read(ImplicitTaggedType, ServiceError):
+    """[5] ServiceError"""
+    tag: ClassVar[int] = 5
+
+
+class Write(ImplicitTaggedType, ServiceError):
+    """[6] ServiceError"""
+    tag: ClassVar[int] = 6
+
+
+class GetDataSetAttribute(ImplicitTaggedType, ServiceError):
+    """[7] ServiceError"""
+    tag: ClassVar[int] = 7
+
+
+class GetTIAttribute(ImplicitTaggedType, ServiceError):
+    """[8] ServiceError"""
+    tag: ClassVar[int] = 8
+
+
+class ChangeScope(ImplicitTaggedType, ServiceError):
+    """[9] ServiceError"""
+    tag: ClassVar[int] = 9
+
+
+class Start(ImplicitTaggedType, ServiceError):
+    """[10] ServiceError"""
+    tag: ClassVar[int] = 10
+
+
+class Stop(ImplicitTaggedType, ServiceError):
+    """[11] ServiceError"""
+    tag: ClassVar[int] = 11
+
+
+class Resume(ImplicitTaggedType, ServiceError):
+    """[12] ServiceError"""
+    tag: ClassVar[int] = 12
+
+
+class MakeUsable(ImplicitTaggedType, ServiceError):
+    """[13] ServiceError"""
+    tag: ClassVar[int] = 13
+
+
+class InitiateLoad(ImplicitTaggedType, ServiceError):
+    """[14] ServiceError"""
+    tag: ClassVar[int] = 14
+
+
+class LoadSegment(ImplicitTaggedType, ServiceError):
+    """[15] ServiceError"""
+    tag: ClassVar[int] = 15
+
+
+class TerminateLoad(ImplicitTaggedType, ServiceError):
+    """[16] ServiceError"""
+    tag: ClassVar[int] = 16
+
+
+class InitiateUpLoad(ImplicitTaggedType, ServiceError):
+    """[17] ServiceError"""
+    tag: ClassVar[int] = 17
+
+
+class UpLoadSegment(ImplicitTaggedType, ServiceError):
+    """[18] ServiceError"""
+    tag: ClassVar[int] = 18
+
+
+class TerminateUpLoad(ImplicitTaggedType, ServiceError):
+    """[19] ServiceError"""
+    tag: ClassVar[int] = 19
+
+
+class ConfirmedServiceError(ChoiceType):
+    """ConfirmedServiceError"""
+    value: Union[
+        InitiateError, GetStatus, GetNameList, GetVariableAttribute, Read, Write,
+        GetDataSetAttribute, GetTIAttribute, ChangeScope, Start, Stop, Resume,
+        MakeUsable, InitiateLoad, LoadSegment, TerminateLoad, InitiateUpLoad,
+        UpLoadSegment, TerminateUpLoad
+    ]
 
 
 class confirmedServiceError(ImplicitTaggedType, ConfirmedServiceError):
@@ -786,15 +1426,15 @@ class BlockControl(Unsigned8):
 
     def window_bits(self) -> int:
         """Extract window bits (0-5)"""
-        return self.value.value & 0x3F
+        return self.value & 0x3F
 
     def is_streaming(self) -> bool:
         """Check if streaming bit (6) is set"""
-        return bool(self.value.value & 0x40)
+        return bool(self.value & 0x40)
 
     def is_last_block(self) -> bool:
         """Check if last-block bit (7) is set"""
-        return bool(self.value.value & 0x80)
+        return bool(self.value & 0x80)
 
 
 @dataclass

@@ -6,10 +6,10 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional, Final
 from StructResult.result import Error, NULL
-from src.COSEMpdu.x680.type import InitError
+from src.COSEMpdu.x680 import InitError
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu.x690 import Tag, Length, TagError
-from src.COSEMpdu.x680 import DefaultNamedType, NamedBit
+from src.COSEMpdu.x680 import DefaultNamedType, NamedValue, ConstraintError
 from src.COSEMpdu.ber import (
     ExplicitTaggedType,
     BitStringType,
@@ -568,9 +568,9 @@ class TestBitStringType2(unittest.TestCase):
     def test_bitstring_named_bits_int_conversion(self) -> None:
         """Test NamedBit __int__ method"""
 
-        read_bit = NamedBit("read", 0)
-        write_bit = NamedBit("write", 1)
-        execute_bit = NamedBit("execute", 2)
+        read_bit = NamedValue("read", 0)
+        write_bit = NamedValue("write", 1)
+        execute_bit = NamedValue("execute", 2)
 
         self.assertEqual(int(read_bit), 1 << 0)  # 1
         self.assertEqual(int(write_bit), 1 << 1)  # 2
@@ -681,8 +681,7 @@ class TestChoiceType(unittest.TestCase):
 
     def test_encode_integer_alternative(self) -> None:
         """Encode CHOICE with INTEGER alternative"""
-        choice = TestChoice(Integer0(42),
-        )
+        choice = TestChoice(Integer0(42))
         buf = ByteBuffer.allocate(10)
         if isinstance(_ := choice.put(buf), Error):
             _.unwrap()
@@ -723,7 +722,8 @@ class TestChoiceType(unittest.TestCase):
 
     def test_invalid_selected_tag(self) -> None:
         """Invalid selected_tag in constructor"""
-        TestChoice.validate(BooleanType.default()).has(NULL, InitError)
+        d = TestChoice.new(BooleanType.default())
+        d.has(NULL, InitError)
 
     def test_length_calculation(self) -> None:
         """__len__ should match alternative length"""
@@ -1987,13 +1987,11 @@ class TestObjectIdentifierType(unittest.TestCase):
 
     def test_invalid_first_arc(self) -> None:
         """First arc must be 0, 1, or 2"""
-        with self.assertRaises(ValueError):
-            ObjectIdentifierType((3, 0))
+        self.assertTrue(ObjectIdentifierType.new((3, 0)).has(NULL, ConstraintError))
 
     def test_invalid_second_arc(self) -> None:
         """Second arc must be 0-39 if first arc is 0 or 1"""
-        with self.assertRaises(ValueError):
-            ObjectIdentifierType((1, 40))  # Invalid: 40 > 39
+        self.assertTrue(ObjectIdentifierType.new((1, 40)).has(NULL, ConstraintError))
 
         # Valid for first arc = 2
         oid = ObjectIdentifierType((2, 100))  # Valid
@@ -2001,8 +1999,7 @@ class TestObjectIdentifierType(unittest.TestCase):
 
     def test_minimum_arcs(self) -> None:
         """OID must have at least 2 arcs"""
-        with self.assertRaises(ValueError):
-            ObjectIdentifierType((1,))
+        self.assertTrue(ObjectIdentifierType.new((1,)).has(NULL, ConstraintError))
 
         # Valid with 2 arcs
         oid = ObjectIdentifierType((1, 0))
@@ -2010,8 +2007,7 @@ class TestObjectIdentifierType(unittest.TestCase):
 
     def test_negative_arc(self) -> None:
         """Arcs must be non-negative"""
-        with self.assertRaises(ValueError):
-            ObjectIdentifierType((1, 0, -1))
+        self.assertTrue(ObjectIdentifierType.new((1, 0, -1)).has(NULL, ConstraintError))
 
     def test_round_trip(self) -> None:
         """Encode then decode should preserve value"""
@@ -2070,7 +2066,7 @@ class TestObjectIdentifierType(unittest.TestCase):
         """Test string representation"""
         oid = ObjectIdentifierType((1, 0, 1))
         self.assertEqual(str(oid), "1.0.1")
-        self.assertEqual(oid.normalize(), (1, 0, 1))
+        self.assertEqual(oid.value, (1, 0, 1))
 
     def test_contents_only_encode(self) -> None:
         """Test put_contents (no tag)"""
@@ -2198,58 +2194,47 @@ class TestGeneralizedTime(unittest.TestCase):
 
     def test_invalid_format_too_short(self) -> None:
         """Test invalid GeneralizedTime - too short"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("2024011512000")  # Missing timezone
+        self.assertTrue(GeneralizedTime.new("2024011512000").has(NULL, ValueError))  # Missing timezone
 
     def test_invalid_format_no_timezone(self) -> None:
         """Test invalid GeneralizedTime - no timezone"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120000")  # Missing Z or ±HHMM
+        self.assertTrue(GeneralizedTime.new("20240115120000").has(NULL, ValueError))  # Missing Z or ±HHMM
 
     def test_invalid_month(self) -> None:
         """Test invalid GeneralizedTime - month out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20241315120000Z")  # Month 13
+        self.assertTrue(GeneralizedTime.new("20241315120000Z").has(NULL, ValueError))  # Month 13
 
     def test_invalid_day(self) -> None:
         """Test invalid GeneralizedTime - day out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240132120000Z")  # Day 32
+        self.assertTrue(GeneralizedTime.new("20240132120000Z").has(NULL, ValueError))  # Day 32
 
     def test_invalid_hour(self) -> None:
         """Test invalid GeneralizedTime - hour out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115240000Z")  # Hour 24
+        self.assertTrue(GeneralizedTime.new("20240115240000Z").has(NULL, ValueError))  # Hour 24
 
     def test_invalid_minute(self) -> None:
         """Test invalid GeneralizedTime - minute out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115126000Z")  # Minute 60
+        self.assertTrue(GeneralizedTime.new("20240115126000Z").has(NULL, ValueError))  # Minute 60
 
     def test_invalid_second(self) -> None:
         """Test invalid GeneralizedTime - second out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120061Z")  # Second 61
+        self.assertTrue(GeneralizedTime.new("20240115120061Z").has(NULL, ValueError))  # Second 61
 
     def test_invalid_fractional_seconds(self) -> None:
         """Test invalid GeneralizedTime - non-numeric fractional seconds"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120000.aZ")
+        self.assertTrue(GeneralizedTime.new("20240115120000.aZ").has(NULL, ValueError))
 
     def test_invalid_timezone_format(self) -> None:
         """Test invalid GeneralizedTime - malformed timezone"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120000+030")  # Too short
+        self.assertTrue(GeneralizedTime.new("20240115120000+030").has(NULL, ValueError))  # Too short
 
     def test_invalid_timezone_hour(self) -> None:
         """Test invalid GeneralizedTime - timezone hour out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120000+2400")  # Hour 24
+        self.assertTrue(GeneralizedTime.new("20240115120000+2400").has(NULL, ValueError))  # Hour 24
 
     def test_invalid_timezone_minute(self) -> None:
         """Test invalid GeneralizedTime - timezone minute out of range"""
-        with self.assertRaises(ValueError):
-            GeneralizedTime("20240115120000+0360")  # Minute 60
+        self.assertTrue(GeneralizedTime.new("20240115120000+0360").has(NULL, ValueError))  # Minute 60
 
     def test_contents_only_encode(self) -> None:
         """Test put_contents (no tag)"""
@@ -2343,14 +2328,12 @@ class TestGeneralizedTime(unittest.TestCase):
     def test_indefinite_length_not_supported(self) -> None:
         """Test indefinite length not supported"""
         buf = ByteBuffer.wrap(b"\x18\x80")  # Indefinite length
-        with self.assertRaises(ValueError):
-            GeneralizedTime.get(buf)
+        self.assertTrue(GeneralizedTime.get(buf).has(NULL, ValueError))
 
     def test_zero_length_not_supported(self) -> None:
         """Test zero length not supported"""
         buf = ByteBuffer.wrap(b"\x18\x00")  # Zero length
-        with self.assertRaises(ValueError):
-            GeneralizedTime.get(buf)
+        self.assertTrue(GeneralizedTime.get(buf).has(NULL, ValueError))
 
     def test_negative_timezone(self) -> None:
         """Test GeneralizedTime with negative timezone offset"""
