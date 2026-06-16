@@ -73,7 +73,7 @@ type INTEGER = int
 type REAL = float
 type STRING = str
 type BIT_STRING = tuple[int, ...]
-type BOOLEAN = bool
+type BOOLEAN = int
 type NULL = None
 type OCTET_STRING = bytes
 type OBJECT_IDENTIFIER = tuple[int, ...]
@@ -615,7 +615,7 @@ class BitStringType(Members, Simple[BIT_STRING], BuiltinType):
                 named_bits = self.members
                 if named_bits and any(nb.value == key for nb in named_bits):
                     return 0
-                raise IndexError(f"Bit index {key} out of range [0, {len(self.value)-1}]")
+                raise IndexError(f"Bit index {key} out of range [0, {len(self.value) - 1}]")
             return self.value[key]
         if isinstance(key, slice):
             # Bit string slice
@@ -808,7 +808,7 @@ class BitStringType(Members, Simple[BIT_STRING], BuiltinType):
 class BooleanType(Simple[BOOLEAN], BuiltinType):
     """
     BOOLEAN type (X.680 §17)
-    NATIVE REPRESENTATION: bool
+    NATIVE REPRESENTATION: int
     """
     value: BOOLEAN
 
@@ -818,7 +818,7 @@ class BooleanType(Simple[BOOLEAN], BuiltinType):
         return cls(False)  # noqa: FBT003
 
     def __bool__(self) -> bool:
-        return self.value
+        return bool(self.value)
 
     def __str__(self) -> str:
         return "TRUE" if self.value else "FALSE"
@@ -1733,6 +1733,8 @@ class SequenceOfType[T: Type](BuiltinType):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SequenceOfType):
             return False
+        if len(other) != len(self):
+            return False
         return all(v1 == v2 for v1, v2 in zip(self, other))
 
 
@@ -1812,7 +1814,7 @@ class SequenceType(BuiltinType):
     components: ClassVar[tuple[NamedType[Type], ...]]
 
     @classmethod
-    def new(cls, **kwargs) -> ValueOrError[Self]:
+    def new(cls, **kwargs: Any) -> ValueOrError[Self]:
         return cls(**kwargs)
 
     @classmethod
@@ -1940,9 +1942,11 @@ class ValueRange(SubtypeElements):
             >>> ValueRange("A", "Z").contains("a")
             False
         """
-        if isinstance(value, str):
-            if len(value) != 1:
-                raise ValueError("Value must be a single character")
+        if (
+            isinstance(value, str)
+            and len(value) != 1
+        ):
+            raise ValueError("Value must be a single character")
         lower_ok = value >= self.lower_endpoint if self.lower_inclusive else value > self.lower_endpoint
         upper_ok = value <= self.upper_endpoint if self.upper_inclusive else value < self.upper_endpoint
         return lower_ok and upper_ok

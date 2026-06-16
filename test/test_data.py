@@ -6,7 +6,7 @@ Standards:
     - IEC 61334-6 §6.6: CHOICE encoding (A-XDR)
     - IEC 61334-6 §6.4-6.5: BIT STRING, OCTET STRING encoding
 """
-from typing import Any, Final, TypeAlias
+from typing import Final
 from dataclasses import dataclass
 import unittest
 from StructResult.result import Error, NULL
@@ -244,7 +244,7 @@ class TestDataBoolean(unittest.TestCase):
 
     def test_encode_decode_true(self) -> None:
         """Test boolean TRUE encoding/decoding"""
-        original = Data(Boolean(True))
+        original = Data(Boolean(1))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -254,7 +254,7 @@ class TestDataBoolean(unittest.TestCase):
 
     def test_encode_decode_false(self) -> None:
         """Test boolean FALSE encoding/decoding"""
-        original = Data(Boolean(False))
+        original = Data(Boolean(0))
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -269,7 +269,6 @@ class TestDataInteger(unittest.TestCase):
     def test_encode_decode_positive(self) -> None:
         """Test integer positive value encoding/decoding"""
         original = Data(Integer(127))
-        i = Integer(1)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -489,7 +488,6 @@ class TestDataFloat32(unittest.TestCase):
     def test_encode_decode_valid(self) -> None:
         """Test float32 valid 4-byte encoding/decoding"""
         original = Data(Float32.from_float(3.1422341))  # π approx
-        z = float(original.value)
         buf = ByteBuffer.allocate(10)
         original.put(buf)
         buf.set_pos(0)
@@ -619,7 +617,7 @@ class TestDataStructure(unittest.TestCase):
         """Test structure with elements encoding/decoding"""
         original = Data(Structure.from_data(
             Data(Integer(100)),
-            Data(Boolean(True)),
+            Data(Boolean(1)),
             Data(OctetString(b"test"))))
         buf = ByteBuffer.allocate(50)
         original.put(buf)
@@ -641,6 +639,7 @@ class TestDataCompactArray(unittest.TestCase):
         ))
         z = original.value.get_array()
         y = CompactArray.from_array(z)
+        self.assertEqual(y, original.value)
         buf = ByteBuffer.allocate(50)
         original.put(buf)
         buf.set_pos(0)
@@ -697,7 +696,7 @@ class TestDataConvenienceConstructors(unittest.TestCase):
 
     def test_boolean_constructor(self) -> None:
         """Test boolean() constructor"""
-        data = Data(Boolean(True))
+        data = Data(Boolean(1))
         self.assertIsInstance(data.value, Boolean)
         self.assertTrue(data.value.value)
 
@@ -734,7 +733,7 @@ class TestDataConvenienceConstructors(unittest.TestCase):
 
     def test_structure_constructor(self) -> None:
         """Test structure() constructor"""
-        data = Data(Structure.from_data(Data(Integer(1)), Data(Boolean(True))))
+        data = Data(Structure.from_data(Data(Integer(1)), Data(Boolean(1))))
         self.assertIsInstance(data.value, Structure)
         self.assertEqual(len(data.value.components), 2)
 
@@ -781,8 +780,8 @@ class TestDataRoundTrip(unittest.TestCase):
         """Test round-trip for all Data types"""
         test_cases = [
             ("null-data", Data(NullData())),
-            ("boolean-true", Data(Boolean(True))),
-            ("boolean-false", Data(Boolean(False))),
+            ("boolean-true", Data(Boolean(1))),
+            ("boolean-false", Data(Boolean(0))),
             ("integer", Data(Integer(-128))),
             ("unsigned", Data(Unsigned(255))),
             ("long", Data(Long(32767))),
@@ -859,7 +858,7 @@ class TestDataNestedStructures(unittest.TestCase):
 
     def test_nested_structure(self) -> None:
         """Test nested structure encoding/decoding"""
-        inner_struct = Data(Structure.from_data(Data(Integer(10)), Data(Boolean(True))))
+        inner_struct = Data(Structure.from_data(Data(Integer(10)), Data(Boolean(1))))
         outer_struct = Data(Structure.from_data(inner_struct, Data(OctetString(b"test"))))
         buf = ByteBuffer.allocate(100)
         outer_struct.put(buf)
@@ -872,7 +871,7 @@ class TestDataNestedStructures(unittest.TestCase):
         """Test mixed nested array and structure"""
         mixed = Data(Structure.from_data(
             Data(Array([Data(Integer(1)), Data(Integer(2))])),
-            Data(Structure.from_data(Data(Boolean(True)), Data(OctetString(b"data")))),
+            Data(Structure.from_data(Data(Boolean(1)), Data(OctetString(b"data")))),
         ))
         buf = ByteBuffer.allocate(100)
         mixed.put(buf)
@@ -1006,11 +1005,11 @@ class TestExternallyData_(unittest.TestCase):
     def test_selected_property_returns_correct_identifier(self) -> None:
         """selected property should dynamically match the wrapped type's tag."""
         # Test with NullData (tag 0)
-        obj_null = TestExternallyData(NullData(None))
+        obj_null = TestExternallyData(NullData())
         self.assertIsInstance(obj_null.value, NullData)
 
         # Test with Boolean (tag 3)
-        obj_bool = TestExternallyData(Boolean(True))
+        obj_bool = TestExternallyData(Boolean(1))
         self.assertIsInstance(obj_bool.value, Boolean)
 
 
@@ -1064,7 +1063,7 @@ class TestDiscriminatedUnion_(unittest.TestCase):
         """Full encode -> decode cycle for selector=3 (boolean)."""
         original = TestDiscriminatedUnion(
             TestSelector(3),
-            TestExternallyData(Boolean(False))
+            TestExternallyData(Boolean(0))
         )
 
         buf = ByteBuffer.allocate(20)

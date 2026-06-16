@@ -5,7 +5,7 @@ Implements A-XDR encoding/decoding according to IEC 61334-6
 """
 from typing import Final, Optional, Self, Literal, ClassVar, TypeAlias, Union
 from dataclasses import dataclass
-from StructResult.result import ValueOrError, Error
+from StructResult.result import Error
 from .x680 import InitError
 from .data import Data, SequenceOfData, ObjectName, Unsigned16, Unsigned8, Unsigned32, Integer8
 from .axdr import (
@@ -499,7 +499,7 @@ class InitialRequest(ImplicitTaggedType, SequenceType):
     """initiateRequest [1] IMPLICIT InitiateRequest"""
     tag: ClassVar[int] = 1
     dedicated_key: Optional[OctetStringType] = None
-    response_allowed: BooleanType = BooleanType(True)
+    response_allowed: BooleanType = BooleanType(1)
     proposed_quality_of_service: Optional[Integer8] = None
     proposed_dlms_version_number: Unsigned8
     proposed_conformance: Conformance
@@ -512,7 +512,7 @@ class InitialRequest(ImplicitTaggedType, SequenceType):
         proposed_conformance: Conformance,
         client_max_receive_pdu_size: Unsigned16,
         dedicated_key: Optional[OctetStringType] = None,
-        response_allowed: BooleanType = BooleanType(True),
+        response_allowed: BooleanType = BooleanType(1),
         proposed_quality_of_service: Optional[Integer8] = None,
     ) -> None:
         self.dedicated_key = dedicated_key

@@ -13,7 +13,7 @@ from src.COSEMpdu.apdu import (
     # Basic Types
     CosemClassId, CosemObjectInstanceId, CosemObjectAttributeId, CosemObjectMethodId,
     # SEQUENCE Types
-    CosemAttributeDescriptor, CosemMethodDescriptor, SelectiveAccessDescriptor,
+    CosemAttributeDescriptor, SelectiveAccessDescriptor,
     VariableAccessSpecification, GetDataResult, DataBlockGResult,
     AccessRequestSpecification, AccessResponseSpecification,
     # Invoke-Id-And-Priority Types
@@ -31,7 +31,7 @@ from src.COSEMpdu.apdu import (
     # Access Response Types
     AccessResponseGet, AccessResponseBody,
 )
-from src.COSEMpdu.axdr import IntegerType, BooleanType, OctetStringType, ChoiceType, ImplicitTaggedType
+from src.COSEMpdu.axdr import BooleanType, OctetStringType
 from src.COSEMpdu.data import Data, Integer, Unsigned, VisibleString, Integer8, Unsigned16, Unsigned32, ObjectName, Unsigned8
 from src.COSEMpdu.byte_buffer import ByteBuffer
 from src.COSEMpdu import axdr
@@ -316,7 +316,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
     def test_read_data_block_access(self) -> None:
         """Test read-data-block-access [6] alternative"""
         spec = VariableAccessSpecification(ReadDataBlockAccess(
-            last_block=BooleanType(True),
+            last_block=BooleanType(1),
             block_number=Unsigned16(1),
             raw_data=OctetStringType(b"\x01\x02\x03\x04")
         ))
@@ -336,7 +336,7 @@ class TestVariableAccessSpecification(unittest.TestCase):
     def test_write_data_block_access(self) -> None:
         """Test write-data-block-access [7] alternative"""
         spec = VariableAccessSpecification(WriteDataBlockAccess(
-            last_block=BooleanType(False),
+            last_block=BooleanType(0),
             block_number=Unsigned16(5)
         ))
 
@@ -382,7 +382,7 @@ class TestDataBlockTypes(unittest.TestCase):
     def test_data_block_result(self) -> None:
         """Test Data-Block-Result SEQUENCE"""
         block = DataBlockResult(
-            axdr.BooleanType(True),
+            axdr.BooleanType(1),
             Unsigned16(1),
             axdr.OctetStringType(b"\x01\x02\x03")
         )
@@ -399,7 +399,7 @@ class TestDataBlockTypes(unittest.TestCase):
     def test_data_block_g(self) -> None:
         """Test DataBlock-G SEQUENCE"""
         block = DataBlockG(
-            axdr.BooleanType(True),
+            axdr.BooleanType(1),
             Unsigned32(1),
             DataBlockGResult(RawData(b"\x01\x02\x03\x04"))
         )
@@ -416,7 +416,7 @@ class TestDataBlockTypes(unittest.TestCase):
     def test_data_block_sa(self) -> None:
         """Test DataBlock-SA SEQUENCE"""
         block = DataBlockSA(
-            axdr.BooleanType(False),
+            axdr.BooleanType(0),
             Unsigned32(5),
             axdr.OctetStringType(b"\xab\xcd\xef")
         )
@@ -667,7 +667,6 @@ class TestEdgeCases(unittest.TestCase):
         # Should be SIZE(6)
         self.assertTrue(CosemObjectInstanceId.new(b"\x00\x00\x01").has(NULL, ConstraintError))
 
-
     def test_data_access_result_invalid_value(self) -> None:
         """Test DataAccessResult with invalid enumeration value"""
         # Valid values are 0-19 and 250
@@ -701,7 +700,7 @@ class TestRoundTrip(unittest.TestCase):
     def test_variable_access_specification_roundtrip(self) -> None:
         """Test full round-trip for VariableAccessSpecification"""
         original = VariableAccessSpecification(ReadDataBlockAccess(
-            last_block=BooleanType(True),
+            last_block=BooleanType(1),
             block_number=Unsigned16(10),
             raw_data=OctetStringType(b"\x01\x02\x03\x04\x05")
         ))

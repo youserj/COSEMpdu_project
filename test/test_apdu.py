@@ -114,7 +114,7 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         """Test InitialRequest1 encode/decode (tag 1)"""
         apdu_obj = XDLMS_APDU(InitialRequest(
             dedicated_key=None,
-            response_allowed=BooleanType(True),
+            response_allowed=BooleanType(1),
             proposed_quality_of_service=None,
             proposed_dlms_version_number=Unsigned8(1),
             proposed_conformance=Conformance.from_int(63, 24),

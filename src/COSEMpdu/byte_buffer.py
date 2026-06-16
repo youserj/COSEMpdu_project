@@ -1,4 +1,4 @@
-from typing import Self, Optional, Protocol
+from typing import Self, Optional, Protocol, TypeAlias
 from StructResult.result import ValueOrError, Fallible, Error, OK
 
 
@@ -210,6 +210,9 @@ class ByteBuffer(_ByteBuffer[bytearray]):
             self.buf[pos + step + i] = self.buf[pos + i]
         # Return next position after shifted data
         return pos + length + step
+
+
+ReadableByteBuffer: TypeAlias = ByteBuffer | ByteBufferFrozen
 
 
 def put_chain(*res: ValueOrError[int]) -> ValueOrError[int]:

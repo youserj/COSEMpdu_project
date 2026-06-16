@@ -2,20 +2,47 @@ from dataclasses import dataclass
 from typing import Self, Protocol
 from StructResult.result import ValueOrError, Error, Fallible, OK
 from . import x680
-from .byte_buffer import ByteBuffer
+from .byte_buffer import ByteBuffer, ReadableByteBuffer
 
 
 class TagError(Exception): ...
 
 
-class EDTLV(Protocol):
+class ED(Protocol):
+    """
+    Generic protocol interface for encoding/decoding (Encode/Decode).
+
+    Not tied to any specific wire format — implementations may or may not
+    use TLV structure.
+
+    Implementations MUST:
+    - In `get()`: decode from buffer and return the decoded instance.
+    - In `put()`: encode to buffer and return the number of bytes written.
+    """
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
-        Decode with full TLV (Tag + Length + Contents).
-        MUST validate tag before decoding.
+        Decode from buffer and return the decoded instance.
         """
         ...
+
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """
+        Encode to buffer and return the number of bytes written.
+        """
+        ...
+
+
+class EDTLV(ED, Protocol):
+    """
+    Protocol interface for BER/X.690 TLV (Tag-Length-Value) encoding/decoding.
+
+    Adds Length+Contents (LC) methods for cases where the tag is already
+    known/validated and only Length + Contents need to be processed.
+
+    - `get()` / `put()`: inherited from `ED`, operate on full TLV.
+    - `get_lc()` / `put_lc()`: decode/encode Length + Contents without the tag.
+    """
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -24,9 +51,24 @@ class EDTLV(Protocol):
         """
         ...
 
+    @classmethod
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
+        """
+        Decode Length + Contents without the tag.
+        Use when the tag is already known/validated.
+        """
+        ...
+
+    def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
+        """
+        Encode Length + Contents without the tag.
+        Use when the tag is already known/validated.
+        """
+        ...
+
 
 @dataclass
-class Length(EDTLV):
+class Length(ED):
     """
     Length component (X.690 §8.1.3)
     value:
@@ -50,7 +92,7 @@ class Length(EDTLV):
         return 1 + num_value_bytes
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode length per X.690 §8.1.3
         Returns:
@@ -61,11 +103,11 @@ class Length(EDTLV):
             return first
         if not (first & 0x80):  # Short form: bits 7-1 = length
             return cls(first)
-        length_of_length = first & 0x7F
-        if length_of_length == 0:  # Indefinite form marker (0x80)
+        length = first & 0x7F
+        if length == 0:  # Indefinite form marker (0x80)
             return cls(-1)
         # Long definite form: read "length_of_length" bytes as big-endian integer
-        if isinstance(value := buf.get_uint(length_of_length), Error):
+        if isinstance(value := buf.get_uint(length), Error):
             return value
         return cls(value)
 
@@ -105,7 +147,7 @@ def put_length(buf: ByteBuffer, value: int) -> ValueOrError[int]:
 
 
 @dataclass
-class Tag(EDTLV, x680.Tag):
+class Tag(ED, x680.Tag):
     """
     Tag component with BER-specific constructed flag (X.690 §8.1.2)
     Extends x680.Tag with encoding-time metadata
@@ -113,7 +155,7 @@ class Tag(EDTLV, x680.Tag):
     # class_number: int
     constructed: bool = False  # Bit 6 per X.690 §8.1.2.5
 
-    def validate(self, buf: ByteBuffer) -> Fallible:
+    def validate(self, buf: ReadableByteBuffer) -> Fallible:
         pos = buf.get_pos()
         if isinstance(tag := self.get(buf), Error):
             return tag
@@ -128,7 +170,7 @@ class Tag(EDTLV, x680.Tag):
         return OK
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """Decode tag per X.690 §8.1.2 (advances buffer position)"""
         if isinstance(first := buf.get_u8(), Error):
             return first
@@ -149,10 +191,9 @@ class Tag(EDTLV, x680.Tag):
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode tag per X.690 §8.1.2 (minimal octets, sets constructed bit)"""
         # Initial octet components
-        initial = self.class_
+        initial = int(self.class_)
         if self.constructed:
             initial |= 0x20
-
         if self.class_number < 0x1F:
             # Low-tag-number form (X.690 §8.1.2.2)
             return buf.put_u8(initial | self.class_number)

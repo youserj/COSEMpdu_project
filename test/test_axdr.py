@@ -92,7 +92,7 @@ class TestBooleanType(unittest.TestCase):
         buf = ByteBuffer.allocate(1)
         written = val.put(buf)
         self.assertEqual(written, 1)
-        self.assertEqual(bytes(buf), b"\xFF")
+        self.assertEqual(bytes(buf), b"\x01")
 
     def test_decode_false(self) -> None:
         """Decode FALSE from 0x00"""
@@ -424,9 +424,9 @@ class TestSeq(SequenceType):
 
 class TestSeq2(SequenceType):
     a: IntegerType
-    b: BooleanType = BooleanType(False)
+    b: BooleanType = BooleanType(0)
 
-    def __init__(self, a: IntegerType, b: BooleanType = BooleanType(False)) -> None:
+    def __init__(self, a: IntegerType, b: BooleanType = BooleanType(0)) -> None:
         self.a = a
         self.b = b
 
@@ -442,21 +442,21 @@ class TestSequenceType(unittest.TestCase):
 
     def test_encode_no_optional(self) -> None:
         """SEQUENCE without OPTIONAL encodes components consecutively (§6.9)"""
-        val = TestSeq3(IntegerType(10), BooleanType(True))
+        val = TestSeq3(IntegerType(10), BooleanType(1))
         buf = ByteBuffer.allocate(3)
         written = val.put(buf)
         # a=10 (0x0A), b=TRUE (0xFF)
         self.assertEqual(written, 2)
-        self.assertEqual(bytes(buf)[:2], b"\x0A\xFF")
+        self.assertEqual(bytes(buf)[:2], b"\x0A\x01")
 
     def test_encode_with_optional_present(self) -> None:
         """SEQUENCE with OPTIONAL present encodes presence flag=1"""
 
-        val = TestSeq(IntegerType(value=10), BooleanType(value=True))
+        val = TestSeq(IntegerType(value=10), BooleanType(1))
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         self.assertEqual(written, 3)
-        self.assertEqual(bytes(buf)[:3], b"\x0A\x01\xFF")
+        self.assertEqual(bytes(buf)[:3], b"\x0A\x01\x01")
 
     def test_encode_with_optional_absent(self) -> None:
         """SEQUENCE with OPTIONAL absent encodes presence flag=0"""
@@ -471,7 +471,7 @@ class TestSequenceType(unittest.TestCase):
     def test_encode_with_default_present(self) -> None:
         """SEQUENCE with DEFAULT present encodes presence flag=1"""
 
-        val = TestSeq2(IntegerType(10), BooleanType(True))
+        val = TestSeq2(IntegerType(10), BooleanType(1))
         buf = ByteBuffer.allocate(4)
         written = val.put(buf)
         # presence=1, a=10, b=TRUE
@@ -620,7 +620,7 @@ class TestIntegration(unittest.TestCase):
         written = val.put(buf)
         # flag=1, choice_tag=0, choice_value=42
         self.assertEqual(written, 3)
-        self.assertEqual(bytes(buf)[:3], b"\xFF\x00\x2A")
+        self.assertEqual(bytes(buf)[:3], b"\x01\x00\x2A")
 
     def test_sequence_of_choice(self) -> None:
         """Test SEQUENCE OF CHOICE (DLMS service list pattern)"""

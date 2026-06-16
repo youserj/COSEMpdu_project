@@ -29,7 +29,7 @@ from COSEMpdu.axdr import ConstrainedIntegerType, ConstrainedBitStringType, Cons
 # Helper: dynamically build a ConstrainedIntegerType subclass
 # ═══════════════════════════════════════════════════════════════
 
-def make_constrained_integer(class_name: str, constraint_spec: ConstraintSpec):
+def make_constrained_integer(class_name: str, constraint_spec: ConstraintSpec) -> ConstrainedIntegerType:
     """Create a new ConstrainedIntegerType subclass with the given constraint."""
     return type(
         class_name,
@@ -181,7 +181,7 @@ class TestConstrainedTypeSafety(unittest.TestCase):
         # Decode with ConstrainedIntegerType — ConstrainedType.get_lc()
         # wraps ConstrainedIntegerType.__init__ which raises ConstraintError
         # inside get_lc's try/except → returns Error
-        from StructResult.result import ValueOrError, Error
+        from StructResult.result import Error
 
         buf2 = ByteBuffer.wrap(encoded)
         result = SmallInt.get(buf2)

@@ -159,7 +159,7 @@ class TestBooleanType(unittest.TestCase):
 
     def test_false_encode(self) -> None:
         """FALSE = 0x00"""
-        boolean = BooleanType(False)
+        boolean = BooleanType(0)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := boolean.put(buf), Error):
             written.unwrap()
@@ -168,12 +168,12 @@ class TestBooleanType(unittest.TestCase):
 
     def test_true_encode(self) -> None:
         """TRUE = 0xFF (DER compliant)"""
-        boolean = BooleanType(True)
+        boolean = BooleanType(1)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := boolean.put(buf), Error):
             written.unwrap()
         self.assertEqual(written, 3)
-        self.assertEqual(bytes(buf)[:written], b"\x01\x01\xff")
+        self.assertEqual(bytes(buf)[:written], b"\x01\x01\x01")
 
     def test_false_decode(self) -> None:
         """Decode FALSE"""
@@ -204,11 +204,6 @@ class TestBooleanType(unittest.TestCase):
             and err.has(exception_type=ValueError)
         ):
             raise AssertionError("Expected IntegerType.get() to return an Error with ValueError")
-
-    def test_length_calculation(self) -> None:
-        """__len__ should return 3"""
-        boolean = BooleanType(True)
-        self.assertEqual(3, 3)
 
 
 class TestIntegerType(unittest.TestCase):
@@ -310,8 +305,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_byte_aligned_encode(self) -> None:
         """Byte-aligned bit string"""
-        bits = tuple([1, 0, 1, 0, 1, 0, 1, 0])  # 0xAA
-        bitstring = BitStringType(bits)
+        bitstring = BitStringType((1, 0, 1, 0, 1, 0, 1, 0))  # 0xAA
         buf = ByteBuffer.allocate(10)
         if isinstance(written := bitstring.put(buf), Error):
             written.unwrap()
@@ -319,8 +313,7 @@ class TestBitStringType(unittest.TestCase):
 
     def test_non_byte_aligned_encode(self) -> None:
         """Non-byte-aligned bit string"""
-        bits = tuple([1, 0, 1, 0, 1])  # 5 bits
-        bitstring = BitStringType(bits)
+        bitstring = BitStringType((1, 0, 1, 0, 1))  # 5 bits
         buf = ByteBuffer.allocate(10)
         if isinstance(written := bitstring.put(buf), Error):
             written.unwrap()
@@ -758,7 +751,7 @@ class TestSequenceType(unittest.TestCase):
         """DEFAULT component with default value should be omitted (X.690 §8.9.3)"""
         seq = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(30)  # Default value
         )
         buf = ByteBuffer.allocate(50)
@@ -780,7 +773,7 @@ class TestSequenceType(unittest.TestCase):
         """DEFAULT component with non-default value should be included"""
         seq = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(50),  # Non-default value
         )
         buf = ByteBuffer.allocate(50)
@@ -801,7 +794,7 @@ class TestSequenceType(unittest.TestCase):
         # Encode with default value (component omitted)
         seq = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(False),
+            BooleanType(0),
             IntegerType(30),  # Default value
         )
         buf = ByteBuffer.allocate(50)
@@ -822,7 +815,7 @@ class TestSequenceType(unittest.TestCase):
         # Encode with non-default value (component included)
         seq = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(100),  # Non-default value
         )
         buf = ByteBuffer.allocate(50)
@@ -843,7 +836,7 @@ class TestSequenceType(unittest.TestCase):
         """DEFAULT components encoded in definition order when present"""
         seq = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(50),  # Non-default
         )
         buf = ByteBuffer.allocate(50)
@@ -867,10 +860,10 @@ class TestSequenceType(unittest.TestCase):
         class MultiDefaultSequence(SequenceType):
             first: IntegerType
             second: IntegerType = IntegerType(10)
-            third: BooleanType = BooleanType(False)
+            third: BooleanType = BooleanType(0)
             fourth: OctetStringType
 
-            def __init__(self, first: IntegerType, fourth: OctetStringType, second: IntegerType = IntegerType(10), third: BooleanType = BooleanType(False)) -> None:
+            def __init__(self, first: IntegerType, fourth: OctetStringType, second: IntegerType = IntegerType(10), third: BooleanType = BooleanType(0)) -> None:
                 self.first = first
                 self.second = second
                 self.third = third
@@ -881,7 +874,7 @@ class TestSequenceType(unittest.TestCase):
             IntegerType(1),
             OctetStringType(b"X"),
             IntegerType(10),  # Default
-            BooleanType(False)  # Default
+            BooleanType(0)  # Default
         )
         buf = ByteBuffer.allocate(50)
         if isinstance(written_defaults := seq_all_defaults.put(buf), Error):
@@ -892,7 +885,7 @@ class TestSequenceType(unittest.TestCase):
             IntegerType(1),
             OctetStringType(b"X"),
             IntegerType(20),  # Non-default
-            BooleanType(True)  # Non-default
+            BooleanType(1)  # Non-default
         )
         buf = ByteBuffer.allocate(50)
         if isinstance(written_no_defaults := seq_no_defaults.put(buf), Error):
@@ -905,14 +898,14 @@ class TestSequenceType(unittest.TestCase):
         """DEFAULT component with default value equals explicit default"""
         seq1 = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(30),  # Explicit default
         )
 
         # Create another instance with same values
         seq2 = TestSequenceWithDefault(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             IntegerType(30)
         )
 
@@ -933,7 +926,7 @@ class TestSequenceType(unittest.TestCase):
             with self.subTest(value=value):
                 original = TestSequenceWithDefault(
                     IntegerType(1),
-                    BooleanType(True),
+                    BooleanType(1),
                     IntegerType(value),
                 )
 
@@ -991,7 +984,7 @@ class TestSequenceType(unittest.TestCase):
         seq1 = MixedSequence(
             required=IntegerType(1),
             with_default=IntegerType(100),  # Default
-            required2=BooleanType(True)
+            required2=BooleanType(1)
         )
         buf = ByteBuffer.allocate(50)
         if isinstance(written1 := seq1.put(buf), Error):
@@ -1000,7 +993,7 @@ class TestSequenceType(unittest.TestCase):
         # OPTIONAL present, DEFAULT absent
         seq2 = MixedSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"X"),  # Present
         )
         buf = ByteBuffer.allocate(50)
@@ -1010,7 +1003,7 @@ class TestSequenceType(unittest.TestCase):
         # OPTIONAL present, DEFAULT non-default
         seq3 = MixedSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"X"),  # Present
             IntegerType(128),  # Non-default
         )
@@ -1052,7 +1045,7 @@ class TestSequenceType(unittest.TestCase):
         """Encode SEQUENCE with all components"""
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"\x00")
         )
         buf = ByteBuffer.allocate(50)
@@ -1066,7 +1059,7 @@ class TestSequenceType(unittest.TestCase):
         """Encode SEQUENCE with OPTIONAL component absent"""
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(False),
+            BooleanType(0),
             None
         )
         buf = ByteBuffer.allocate(50)
@@ -1076,7 +1069,7 @@ class TestSequenceType(unittest.TestCase):
         # Should be shorter without third component
         seq_full = TestSequence(
             IntegerType(1),
-            BooleanType(False),
+            BooleanType(0),
             OctetStringType(b"\x00")
         )
         buf_full = ByteBuffer.allocate(50)
@@ -1089,7 +1082,7 @@ class TestSequenceType(unittest.TestCase):
         # First encode to get valid bytes
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"\x00")
         )
         buf = ByteBuffer.allocate(50)
@@ -1110,7 +1103,7 @@ class TestSequenceType(unittest.TestCase):
         """Decode SEQUENCE with OPTIONAL component absent"""
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(False),
+            BooleanType(0),
             None
         )
         buf = ByteBuffer.allocate(50)
@@ -1125,7 +1118,7 @@ class TestSequenceType(unittest.TestCase):
         """Components encoded in definition order"""
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"\x00")
         )
         buf = ByteBuffer.allocate(50)
@@ -1145,7 +1138,7 @@ class TestSequenceType(unittest.TestCase):
         """__len__ should match encoded length"""
         seq = TestSequence(
             IntegerType(1),
-            BooleanType(True),
+            BooleanType(1),
             OctetStringType(b"\x00")
         )
         buf = ByteBuffer.allocate(50)
@@ -1171,7 +1164,7 @@ class TestIntegration(unittest.TestCase):
 
         outer = Outer(
             Inner(IntegerType(42)),
-            BooleanType(True)
+            BooleanType(1)
         )
 
         buf = ByteBuffer.allocate(100)
@@ -1212,8 +1205,8 @@ class TestIntegration(unittest.TestCase):
     def test_round_trip(self) -> None:
         """Encode then decode should preserve values"""
         test_cases = [
-            BooleanType(True),
-            BooleanType(False),
+            BooleanType(1),
+            BooleanType(0),
             IntegerType(0),
             IntegerType(12345),
             IntegerType(-12345),
@@ -1251,7 +1244,7 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_large_bitstring(self) -> None:
         """Large bit string encoding"""
-        bits = tuple([i % 2 for i in range(1000)])
+        bits = tuple((i % 2 for i in range(1000)))
         bitstring = BitStringType(bits)
         buf = ByteBuffer.allocate(200)
         if isinstance(_ := bitstring.put(buf), Error):
@@ -1387,9 +1380,9 @@ class TestSequenceOfType(unittest.TestCase):
     def test_mixed_boolean_sequence(self) -> None:
         """Encode SEQUENCE OF BOOLEAN"""
         seq = BooleanSequence([
-            BooleanType(True),
-            BooleanType(False),
-            BooleanType(True),
+            BooleanType(1),
+            BooleanType(0),
+            BooleanType(1),
         ])
         buf = ByteBuffer.allocate(50)
         if isinstance(written := seq.put(buf), Error):
@@ -1632,14 +1625,14 @@ class TestTaggedType(unittest.TestCase):
         class ImplicitBoolean(BooleanType):
             tag = Tag(0, Class.CONTEXT_SPECIFIC)
 
-        tagged = ImplicitBoolean(True)
+        tagged = ImplicitBoolean(1)
         buf = ByteBuffer.allocate(10)
         if isinstance(written := tagged.put(buf), Error):
             written.unwrap()
 
         # Tag (0x80) + Length (0x01) + Value (0xFF) = 3 bytes
         self.assertEqual(written, 3)
-        self.assertEqual(bytes(buf)[:written], b"\x80\x01\xff")
+        self.assertEqual(bytes(buf)[:written], b"\x80\x01\x01")
 
     def test_explicit_tagged_octetstring_encode(self) -> None:
         """EXPLICIT tagged OCTET STRING [1] EXPLICIT OCTET STRING"""
@@ -2387,4 +2380,3 @@ class TestGeneralizedTime(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

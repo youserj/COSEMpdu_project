@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Self, ClassVar, TypeAlias, Optional, Union
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
-from .byte_buffer import ByteBuffer, put_chain
+from .byte_buffer import ByteBuffer, put_chain, ReadableByteBuffer
 from .x680 import SizeConstraint, ValueRange
 from .x680 import NamedType
 from . import x680
@@ -268,13 +268,13 @@ class Structure(ImplicitTaggedType, x680.SequenceType):
         cls._init_sequence_components()
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         if isinstance(length := get_length(buf), Error):
             return length
         return cls.get_c(buf, length)
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
+    def get_c(cls, buf: ReadableByteBuffer, length: int) -> ValueOrError[Self]:
         """Decode SEQUENCE OF content from a buffer.
 
         Operates in two modes:
@@ -582,7 +582,7 @@ setattr(SequenceOfData, "_T", Data)
 class ExternallyData(ChoiceType):
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> Self | Error:
+    def get(cls, buf: ReadableByteBuffer) -> Self | Error:  # noqa: ARG003
         return Error.from_e(RuntimeError(f"can't get {cls.__name__} separately"))
 
 
@@ -638,7 +638,7 @@ class DiscriminatedUnion(Structure):
                 selector: KeyInfoType
                 payload: KeyInfoOptions
         """
-    components: ClassVar[tuple[NamedType[Enum], NamedType[ChoiceType]]]
+    components: ClassVar[tuple[NamedType[Enum], NamedType[ChoiceType]]]  # type: ignore[assignment]
 
     def __init_subclass__(cls) -> None:
         """create <components> from annotations"""
@@ -647,7 +647,7 @@ class DiscriminatedUnion(Structure):
             raise RuntimeError(f"got {len(cls.components)}, expected 2")
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, length: int) -> ValueOrError[Self]:
+    def get_c(cls, buf: ReadableByteBuffer, length: int) -> ValueOrError[Self]:
         if length != 2:
             return Error.from_e(ValueError(f"Invalid length for {cls.__name__}: expected 2, got {length}"))
         if isinstance(selector := cls.components[0].type_.get(buf), Error):

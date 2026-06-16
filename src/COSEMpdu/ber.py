@@ -1,10 +1,10 @@
 # src/COSEMpdu/x690/bit_string.py
-from typing import ClassVar, Self, cast, Optional, Protocol, get_args
+from typing import ClassVar, Self, cast, Optional, get_args
 from StructResult.result import ValueOrError, Error
-from .x680 import SEQUENCE_OF, OBJECT_IDENTIFIER, UniversalClassTagAssignments, ConstraintError
+from .x680 import SEQUENCE_OF, OBJECT_IDENTIFIER, UniversalClassTagAssignments
 from . import x680
-from .byte_buffer import ByteBuffer, put_chain
-from .x690 import Tag, Length, TagError
+from .byte_buffer import ByteBuffer, put_chain, ReadableByteBuffer
+from .x690 import Tag, Length, TagError, EDTLV
 
 
 def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
@@ -15,7 +15,7 @@ def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
     )
 
 
-class ExplicitTaggedType(x680.Type):
+class ExplicitTaggedType(x680.Type, EDTLV):
     """
     EXPLICIT tagged type for BER encoding (X.690 §8.14).
 
@@ -63,7 +63,7 @@ class ExplicitTaggedType(x680.Type):
     tag2: ClassVar[Tag]
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode EXPLICIT tagged value from BER (X.690 §8.14).
 
@@ -149,7 +149,7 @@ class ExplicitTaggedType(x680.Type):
         return buf.get_pos() - start_pos
 
 
-class ImplicitTaggedType(x680.Type):
+class ImplicitTaggedType(x680.Type, EDTLV):
     """
     IMPLICIT โ�� pure tag substitution for BER (X.690 ยง8.14.1).
 
@@ -175,7 +175,7 @@ class ImplicitTaggedType(x680.Type):
     tag: ClassVar[Tag]
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """Decode with Tag + Length + Contents"""
         if isinstance(err := cls.tag.validate(buf), Error):
             return err
@@ -213,7 +213,7 @@ class BitStringType(ImplicitTaggedType, x680.BitStringType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode BIT STRING from BER (X.690 ยง8.6)
         Returns instance and advances buffer position.
@@ -294,7 +294,7 @@ class BooleanType(ImplicitTaggedType, x680.BooleanType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode BOOLEAN from BER (X.690 ยง8.2)
         Returns instance and advances buffer position.
@@ -305,7 +305,7 @@ class BooleanType(ImplicitTaggedType, x680.BooleanType):
             return Error.from_e(ValueError(f"BOOLEAN length must be 1, got {length.value}"))
         if isinstance(content := buf.get_u8(), Error):
             return content
-        return cls.new(content != 0)
+        return cls.new(content)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -318,7 +318,7 @@ class BooleanType(ImplicitTaggedType, x680.BooleanType):
         """
         return put_chain(
             Length(1).put(buf),
-            buf.put_u8(0xFF if self.value else 0x00)
+            buf.put_u8(self.value)
         )
 
 
@@ -332,7 +332,7 @@ class GraphicString(ImplicitTaggedType, x680.GraphicString):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode GRAPHIC STRING contents only (no tag validation).
 
@@ -409,7 +409,7 @@ class ChoiceType(x680.ChoiceType[TaggedType]):
             cls.alternatives = {(type_.tag2 if hasattr(type_, "tag2") else type_.tag).class_number: type_ for type_ in get_args(cls.__annotations__["value"])}
 
     @classmethod
-    def get(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode CHOICE from BER (X.690 ยง8.13)
         Returns instance with chosen alternative and advances buffer position.
@@ -423,7 +423,7 @@ class ChoiceType(x680.ChoiceType[TaggedType]):
         return cls(value)
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         return cls.get(buf)
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
@@ -467,7 +467,7 @@ class EnumeratedType(ImplicitTaggedType, x680.EnumeratedType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode ENUMERATED from BER (X.690 ยง8.4)
         Returns instance and advances buffer position.
@@ -541,7 +541,7 @@ class IntegerType(ImplicitTaggedType, x680.IntegerType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode INTEGER from BER (X.690 ยง8.3)
         Returns instance and advances buffer position.
@@ -606,7 +606,7 @@ class NullType(ImplicitTaggedType, x680.NullType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode NULL from BER (X.690 ยง8.8)
         Returns instance and advances buffer position.
@@ -671,7 +671,7 @@ class ObjectIdentifierType(ImplicitTaggedType, x680.ObjectIdentifierType):
     value: OBJECT_IDENTIFIER
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode OBJECT IDENTIFIER contents only (no tag validation).
 
@@ -773,7 +773,7 @@ class OctetStringType(ImplicitTaggedType, x680.OctetStringType):
     )
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode OCTET STRING from BER (X.690 ยง8.7)
         Returns instance and advances buffer position.
@@ -827,7 +827,7 @@ class SequenceType(ImplicitTaggedType, x680.SequenceType):
         cls._init_sequence_components()
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode SEQUENCE from BER (X.690 ยง8.9)
         Returns instance and advances buffer position.
@@ -923,7 +923,7 @@ class SequenceOfType[T: TaggedType](ImplicitTaggedType, x680.SequenceOfType[T]):
     _T: ClassVar[type[TaggedType]]
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
         Decode SEQUENCE OF from BER (X.690 ยง8.10)
         Returns instance and advances buffer position.
@@ -988,7 +988,7 @@ class GeneralizedTime(ImplicitTaggedType, x680.GeneralizedTime):
     tag: ClassVar[Tag] = Tag(class_number=UniversalClassTagAssignments.GeneralizedTime, constructed=False)
 
     @classmethod
-    def get_lc(cls, buf: ByteBuffer) -> ValueOrError[Self]:
+    def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """Decode GeneralizedTime from BER VisibleString"""
         if isinstance(length := Length.get(buf), Error):
             return length
