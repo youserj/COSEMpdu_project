@@ -98,6 +98,207 @@ match result:
         print(decoded.application_context_name)  # (2, 16, 756, 5, 8, 1, 1)
 ```
 
+### Basic BER Types (X.690)
+
+Create and encode/decode individual ASN.1 types using Basic Encoding Rules.
+
+```python
+from COSEMpdu.ber import (
+    IntegerType, BooleanType, OctetStringType, NullType,
+    BitStringType, EnumeratedType, ObjectIdentifierType,
+    SequenceType, SequenceOfType, ChoiceType,
+    ExplicitTaggedType, ImplicitTaggedType,
+)
+from COSEMpdu.x680 import Class, UniversalClassTagAssignments, NamedType, OptionalNamedType, DefaultNamedType, NamedValue
+from COSEMpdu.x690 import Tag
+from COSEMpdu.byte_buffer import ByteBuffer
+from StructResult.result import Error
+
+# --- INTEGER ---
+i = IntegerType(42)
+buf = ByteBuffer.allocate(16)
+i.put(buf)
+print(bytes(buf.extract()).hex())  # 02012a  (tag=02, len=01, value=2a)
+result = IntegerType.get(ByteBuffer.wrap(bytes.fromhex("02012a")))
+match result:
+    case Error(): pass
+    case _: print(result.value)  # 42
+
+# --- BOOLEAN ---
+b = BooleanType(True)
+buf = ByteBuffer.allocate(8)
+b.put(buf)
+print(bytes(buf.extract()).hex())  # 0101ff
+
+# --- OCTET STRING ---
+o = OctetStringType(b"hello")
+buf = ByteBuffer.allocate(16)
+o.put(buf)
+print(bytes(buf.extract()).hex())  # 040568656c6c6f
+
+# --- NULL ---
+n = NullType()
+buf = ByteBuffer.allocate(4)
+n.put(buf)
+print(bytes(buf.extract()).hex())  # 0500
+
+# --- BIT STRING (primitive) ---
+bs = BitStringType((1, 0, 1, 0, 0, 0, 0, 0))  # 8 bits
+buf = ByteBuffer.allocate(16)
+bs.put(buf)
+print(bytes(buf.extract()).hex())  # 030200a0  (tag=03, len=02, unused=00, data=a0)
+
+# --- ENUMERATED ---
+class MyEnum(EnumeratedType):
+    OFF: Final[int] = 0
+    ON: Final[int] = 1
+e = MyEnum(1)
+buf = ByteBuffer.allocate(8)
+e.put(buf)
+print(bytes(buf.extract()).hex())  # 0a0101
+
+# --- OBJECT IDENTIFIER ---
+oid = ObjectIdentifierType((1, 2, 840, 10045, 2, 1))
+buf = ByteBuffer.allocate(16)
+oid.put(buf)
+print(bytes(buf.extract()).hex())  # 06082a8648ce3d0201
+
+# --- SEQUENCE (subclass with components) ---
+class MySequence(SequenceType):
+    name: OctetStringType
+    age: IntegerType
+
+seq = MySequence(name=OctetStringType(b"Vasily"), age=IntegerType(35))
+buf = ByteBuffer.allocate(64)
+seq.put(buf)
+print(bytes(buf.extract()).hex())  # 300a0406566173696c79020123
+
+# --- SEQUENCE OF ---
+Strings = SequenceOfType[OctetStringType]
+sof = Strings([OctetStringType(b"one"), OctetStringType(b"two")])
+buf = ByteBuffer.allocate(32)
+sof.put(buf)
+print(bytes(buf.extract()).hex())
+
+# --- CHOICE ---
+class Integer2(IntegerType):
+    tag = Tag(2, class_=Class.CONTEXT_SPECIFIC)
+
+
+class OctetString4(OctetStringType):
+    tag = Tag(4, class_=Class.CONTEXT_SPECIFIC)
+
+
+class MyChoice(ChoiceType):
+    value: IntegerType2 | OctetStringType4
+
+ch = MyChoice(Integer2(99))
+buf = ByteBuffer.allocate(16)
+ch.put(buf)
+print(bytes(buf.extract()).hex())  # 020163
+
+# --- EXPLICIT tagged ---
+class MyExplicitInteger(ExplicitTaggedType, IntegerType):
+    tag2 = Tag(class_number=0, class_=Class.Context, constructed=True)
+x = MyExplicitInteger(5)
+buf = ByteBuffer.allocate(16)
+x.put(buf)
+print(bytes(buf.extract()).hex())  # a003020105
+
+# --- IMPLICIT tagged ---
+class MyImplicitInteger(ImplicitTaggedType, IntegerType):
+    tag = Tag(class_number=1, class_=Class.Context)
+
+y = MyImplicitInteger(10)
+buf = ByteBuffer.allocate(8)
+y.put(buf)
+print(bytes(buf.extract()).hex())  # 81010a
+```
+
+### Basic A-XDR Types (IEC 61334-6)
+
+Create and encode/decode individual DLMS/COSEM types using A-XDR encoding.
+
+```python
+from COSEMpdu.axdr import (
+    BooleanType, IntegerType, OctetStringType, BitStringType,
+    EnumeratedType, VisibleString, Utf8String,
+    SequenceType, ChoiceType, ImplicitTaggedType,
+)
+from COSEMpdu.x680 import NamedType, OptionalNamedType
+from COSEMpdu.byte_buffer import ByteBuffer
+from StructResult.result import Error
+
+# --- INTEGER (variable-length) ---
+i = IntegerType(100)
+buf = ByteBuffer.allocate(8)
+i.put(buf)
+print(bytes(buf.extract()).hex())  # 64  (short form, 0-127)
+
+j = IntegerType(300)
+buf = ByteBuffer.allocate(8)
+j.put(buf)
+print(bytes(buf.extract()).hex())  # 82012c  (long form: len=2, value=012c)
+
+# --- BOOLEAN ---
+b = BooleanType(1)
+buf = ByteBuffer.allocate(4)
+b.put(buf)
+print(bytes(buf.extract()).hex())  # ff
+
+# --- OCTET STRING ---
+o = OctetStringType(b"axdr")
+buf = ByteBuffer.allocate(16)
+o.put(buf)
+print(bytes(buf.extract()).hex())  # 0461786472  (len=4, data)
+
+# --- BIT STRING ---
+bs = BitStringType((1, 0, 1))
+buf = ByteBuffer.allocate(8)
+bs.put(buf)
+print(bytes(buf.extract()).hex())  # 03a0  (length=3 bits, data=a0)
+
+# --- ENUMERATED ---
+e = EnumeratedType(2)
+buf = ByteBuffer.allocate(4)
+e.put(buf)
+print(bytes(buf.extract()).hex())  # 02
+
+# --- VisibleString ---
+vs = VisibleString("meter")
+buf = ByteBuffer.allocate(16)
+vs.put(buf)
+print(bytes(buf.extract()).hex())  # 056d65746572
+
+# --- SEQUENCE ---
+class MySeq(SequenceType):
+    name: OctetStringType
+    count: IntegerType
+
+seq = MySeq(name=OctetStringType(b"dev1"), count=IntegerType(5))
+buf = ByteBuffer.allocate(32)
+seq.put(buf)
+print(bytes(buf.extract()).hex())  # 046465763105
+
+# --- CHOICE ---
+class Integer2(IntegerType):
+    tag = 2
+
+
+class Boolean1(OctetStringType):
+    tag = 1
+
+
+
+class MyAxdrChoice(ChoiceType):
+    value: Boolean1 | Integer2
+
+ch = MyAxdrChoice(Integer2(42))
+buf = ByteBuffer.allocate(8)
+ch.put(buf)
+print(bytes(buf.extract()).hex())  # 022a
+```
+
 ## Supported Standards
 
 | Standard | Description |
