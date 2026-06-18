@@ -321,6 +321,19 @@ print(bytes(buf.extract()).hex())  # 022a
 | `COSEMpdu.acse` | ACSE APDU types (AARQ, AARE, RLRQ, RLRE) |
 | `COSEMpdu.byte_buffer` | Byte-level read/write buffer |
 
+## Documentation
+
+| Document | Module |
+|----------|--------|
+| [X.680 — ASN.1 Types](doc/x680.md) | `COSEMpdu.x680` |
+| [X.690 — BER Primitives](doc/x690.md) | `COSEMpdu.x690` |
+| [BER Type Implementations](doc/ber.md) | `COSEMpdu.ber` |
+| [A-XDR Type Implementations](doc/axdr.md) | `COSEMpdu.axdr` |
+| [COSEM APDU](doc/apdu.md) | `COSEMpdu.apdu` |
+| [ACSE APDU](doc/acse.md) | `COSEMpdu.acse` |
+| [COSEM Data Types](doc/data.md) | `COSEMpdu.data` |
+| [ByteBuffer](doc/byte_buffer.md) | `COSEMpdu.byte_buffer` |
+
 ## Project Links
 
 - **Source code:** [GitHub](https://github.com/youserj/COSEMpdu_project)

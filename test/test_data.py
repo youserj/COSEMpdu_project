@@ -953,7 +953,8 @@ class TestDataRepr(unittest.TestCase):
 
 class TestDataOctetImplicit(unittest.TestCase):
     def test_octetObj(self) -> None:
-        from .test_axdr import OctetStringObjectIdentifierType
+        class OctetStringObjectIdentifierType(axdr.ImplicitTaggedType, axdr.ObjectIdentifierType):
+            tag = 9
 
         class IdentifierData(axdr.ChoiceType):
             value: OctetStringObjectIdentifierType | Unsigned
