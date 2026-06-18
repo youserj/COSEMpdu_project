@@ -744,6 +744,13 @@ class TestSequence(SequenceType):
     third: Optional[OctetStringType]
 
 
+@dataclass
+class TestSequenceFirstOptional(SequenceType):
+    optional_first: Optional[IntegerType]
+    second: BooleanType
+    third: OctetStringType
+
+
 class TestSequenceType(unittest.TestCase):
     """Test SEQUENCE encoding/decoding per X.690 §8.9"""
 
@@ -1030,7 +1037,7 @@ class TestSequenceType(unittest.TestCase):
         """Decode SEQUENCE where only some components are present"""
         # Manually create encoding with only required components
         # SEQUENCE tag + length + INTEGER(1) + BOOLEAN(true)
-        manual_encoding = b"\x30\x08\x02\x01\x01\x01\x01\xff"
+        manual_encoding = b"\x30\x06\x02\x01\x01\x01\x01\xff"
 
         buf = ByteBuffer.wrap(manual_encoding)
         if isinstance(decoded := TestSequenceWithDefault.get(buf), Error):
@@ -1145,6 +1152,133 @@ class TestSequenceType(unittest.TestCase):
         if isinstance(actual_len := seq.put(buf), Error):
             actual_len.unwrap()
         self.assertEqual(11, actual_len)
+
+    def test_encode_first_optional_present(self) -> None:
+        """Encode SEQUENCE where first component (OPTIONAL) is present"""
+        seq = TestSequenceFirstOptional(
+            IntegerType(42),
+            BooleanType(1),
+            OctetStringType(b"AB")
+        )
+        buf = ByteBuffer.allocate(50)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
+
+        # Should contain: SEQUENCE tag + length + INTEGER(42) + BOOLEAN(true) + OCTET STRING(b"AB")
+        # Tag(1) + Length(1) + INTEGER(3) + BOOLEAN(3) + OCTET STRING(4) = 12 bytes
+        self.assertEqual(written, 12)
+        data = bytes(buf)[:written]
+        # Verify all three component tags are present
+        self.assertIn(b"\x02", data)  # INTEGER tag
+        self.assertIn(b"\x01", data)  # BOOLEAN tag
+        self.assertIn(b"\x04", data)  # OCTET STRING tag
+        # Verify component order: INTEGER (0x02) first, then BOOLEAN (0x01), then OCTET STRING (0x04)
+        int_pos = data.find(b"\x02")
+        bool_pos = data.find(b"\x01")
+        octet_pos = data.find(b"\x04")
+        self.assertLess(int_pos, bool_pos)
+        self.assertLess(bool_pos, octet_pos)
+
+    def test_encode_first_optional_absent(self) -> None:
+        """Encode SEQUENCE where first component (OPTIONAL) is absent"""
+        seq = TestSequenceFirstOptional(
+            None,
+            BooleanType(0),
+            OctetStringType(b"AB")
+        )
+        buf = ByteBuffer.allocate(50)
+        if isinstance(written := seq.put(buf), Error):
+            written.unwrap()
+
+        # Should NOT contain INTEGER tag for optional_first
+        # First component tag after SEQUENCE tag should be BOOLEAN (0x01), not INTEGER (0x02)
+        data = bytes(buf)[:written]
+        # After SEQUENCE tag (0x30) and length byte, first TLV tag should be BOOLEAN
+        self.assertEqual(data[2], 0x01)  # BOOLEAN tag is first, not INTEGER
+        # BOOLEAN and OCTET STRING should be present
+        self.assertIn(b"\x04", data)
+        # Encoding should be shorter than with optional present
+        seq_full = TestSequenceFirstOptional(
+            IntegerType(42),
+            BooleanType(0),
+            OctetStringType(b"AB")
+        )
+        buf_full = ByteBuffer.allocate(50)
+        if isinstance(written_full := seq_full.put(buf_full), Error):
+            written_full.unwrap()
+        self.assertLess(written, written_full)
+
+    def test_decode_first_optional_present(self) -> None:
+        """Decode SEQUENCE where first component (OPTIONAL) is present"""
+        seq = TestSequenceFirstOptional(
+            IntegerType(42),
+            BooleanType(1),
+            OctetStringType(b"AB")
+        )
+        buf = ByteBuffer.allocate(50)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
+        buf = ByteBuffer.wrap(bytes(buf))
+
+        if isinstance(decoded := TestSequenceFirstOptional.get(buf), Error):
+            decoded.unwrap()
+        self.assertIsNotNone(decoded.optional_first)
+        self.assertIsNotNone(decoded.second)
+        self.assertIsNotNone(decoded.third)
+        self.assertEqual(decoded.optional_first.value, 42)
+        self.assertTrue(decoded.second.value)
+        self.assertEqual(decoded.third.value, b"AB")
+
+    def test_decode_first_optional_absent(self) -> None:
+        """Decode SEQUENCE where first component (OPTIONAL) is absent"""
+        seq = TestSequenceFirstOptional(
+            None,
+            BooleanType(0),
+            OctetStringType(b"XY")
+        )
+        buf = ByteBuffer.allocate(50)
+        if isinstance(_ := seq.put(buf), Error):
+            _.unwrap()
+        buf = ByteBuffer.wrap(bytes(buf))
+
+        if isinstance(decoded := TestSequenceFirstOptional.get(buf), Error):
+            decoded.unwrap()
+        # Optional first should be None
+        self.assertIsNone(decoded.optional_first)
+        # Required components should be decoded
+        self.assertIsNotNone(decoded.second)
+        self.assertIsNotNone(decoded.third)
+        self.assertFalse(decoded.second.value)
+        self.assertEqual(decoded.third.value, b"XY")
+
+    def test_round_trip_first_optional(self) -> None:
+        """Round-trip encoding/decoding for SEQUENCE with first field OPTIONAL"""
+        test_cases = [
+            # (optional_first, second, third)
+            (IntegerType(100), BooleanType(1), OctetStringType(b"ABC")),
+            (None, BooleanType(0), OctetStringType(b"")),
+            (IntegerType(-1), BooleanType(0), OctetStringType(b"\x00")),
+            (None, BooleanType(1), OctetStringType(b"test")),
+        ]
+
+        for opt_first, second, third in test_cases:
+            with self.subTest(optional_first=opt_first, second=second, third=third):
+                original = TestSequenceFirstOptional(opt_first, second, third)
+                buf = ByteBuffer.allocate(100)
+                if isinstance(_ := original.put(buf), Error):
+                    _.unwrap()
+                buf = ByteBuffer.wrap(bytes(buf))
+
+                if isinstance(decoded := TestSequenceFirstOptional.get(buf), Error):
+                    decoded.unwrap()
+
+                if opt_first is None:
+                    self.assertIsNone(decoded.optional_first)
+                else:
+                    self.assertIsNotNone(decoded.optional_first)
+                    self.assertEqual(decoded.optional_first.value, opt_first.value)
+                self.assertEqual(decoded.second.value, second.value)
+                self.assertEqual(decoded.third.value, third.value)
 
 
 class TestIntegration(unittest.TestCase):

@@ -156,16 +156,11 @@ class Tag(ED, x680.Tag):
     constructed: bool = False  # Bit 6 per X.690 §8.1.2.5
 
     def validate(self, buf: ReadableByteBuffer) -> Fallible:
-        pos = buf.get_pos()
         if isinstance(tag := self.get(buf), Error):
             return tag
         if tag.class_number != self.class_number:
-            if isinstance(err_pos := buf.set_pos(pos), Error):
-                return err_pos
             return Error.from_e(TagError(f"Expected tag {self.class_number}, got {tag.class_number}"))
         if tag.class_ != self.class_:
-            if isinstance(err_pos := buf.set_pos(pos), Error):
-                return err_pos
             return Error.from_e(TagError(f"Expected class {self.class_.name}, got {tag.class_.name}"))
         return OK
 

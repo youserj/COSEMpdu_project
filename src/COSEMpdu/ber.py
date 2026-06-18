@@ -840,21 +840,25 @@ class SequenceType(ImplicitTaggedType, x680.SequenceType):
         start_pos = buf.get_pos()
         components_data: dict[str, Optional[TaggedType]] = {}
         for n_t in cls.components:
-            if buf.get_pos() - start_pos >= length.value:  # Component is absent (OPTIONAL or DEFAULT)
-                components_data[n_t.identifier] = None
-                continue
-            # Decode the component using its own get() method. This handles tag, length, and contents for each component
+            pos = buf.get_pos()
             if isinstance(value := n_t.type_.get(buf), Error):
-                if value.has(exception_type=TagError):
+                if (
+                    value.has(exception_type=TagError)
+                    or start_pos + length.value == pos  # all declared bytes already consumed by prior components
+                ):
                     if isinstance(n_t, x680.OptionalNamedType):
+                        buf.set_pos(pos)
                         value = None
                     elif isinstance(n_t, x680.DefaultNamedType):
+                        buf.set_pos(pos)
                         value = n_t.default
                     else:
-                        return Error.from_e(ValueError(f"can't get {cls.__name__} from {buf}"))
+                        return value
                 else:
-                    return Error.from_e(RuntimeError(f"unknown exception {value}, can't get {cls.__name__} from {buf}"))
+                    return value
             components_data[n_t.identifier] = value
+        if buf.get_pos() - start_pos != length.value:
+            return Error.from_e(ValueError(f"got {buf.get_pos() - start_pos} bytes, expected {length.value}"))
         return cls(**components_data)
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:

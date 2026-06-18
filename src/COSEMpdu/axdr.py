@@ -122,7 +122,7 @@ class ImplicitTaggedType(Type):
         if isinstance(tag_number := buf.get_u8(), Error):
             return tag_number
         if tag_number != cls.tag:
-            return Error.from_e(ValueError(f"expected tag {cls.tag}, got {tag_number}"))
+            return Error.from_e(x690.TagError(f"expected tag {cls.tag}, got {tag_number}"))
         return cls.get_lc(buf)
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
@@ -223,8 +223,8 @@ class IntegerType(Type, x680.IntegerType):
             # Short form: 0-127
             return cls.new(first)
         # Long form: length octet + value octets
-        num_bytes = first & 0x7F
-        return cls.get_c(buf, num_bytes)
+        length = first & 0x7F
+        return cls.get_c(buf, length)
 
     @classmethod
     def get_c(cls, buf: ReadableByteBuffer, length: int) -> ValueOrError[Self]:
@@ -460,7 +460,7 @@ class ChoiceType(Type, x680.ChoiceType[Type]):
         return cls.get_c(buf, tag)
 
     @classmethod
-    def get_c(cls, buf: ByteBuffer, tag: int) -> ValueOrError[Self]:
+    def get_c(cls, buf: ReadableByteBuffer, tag: int) -> ValueOrError[Self]:
         if (t_ := cls.alternatives.get(tag)) is None:
             return Error.from_e(ValueError(f"{tag} not in alternatives: {", ".join((t_.__name__ for t_ in cls.alternatives.values()))}"))
         if isinstance(value := t_.get_lc(buf), Error):
@@ -521,8 +521,7 @@ class SequenceType(Type, x680.SequenceType):
             if isinstance(n_t, (OptionalNamedType, DefaultNamedType)):
                 if isinstance(presence_flag := buf.get_u8(), Error):
                     return presence_flag
-                if presence_flag == 0:
-                    # Component absent
+                if presence_flag == 0:  # Component absent
                     if isinstance(n_t, x680.DefaultNamedType):
                         components_data[n_t.identifier] = n_t.default
                     else:
@@ -853,8 +852,6 @@ class ConstrainedIntegerType(x680.ConstrainedIntegerType, IntegerType):
         Returns instance and advances buffer position.
         """
         if isinstance(cls.fixed_length, int):
-            # if cls.fixed_length == 0:
-            #     return cls.new(0)
             if isinstance(content := buf.read(cls.fixed_length), Error):
                 return content
             # Decode as unsigned for non-negative, signed for negative ranges
