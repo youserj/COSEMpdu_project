@@ -642,7 +642,7 @@ class BitStringType(Members, Simple[BIT_STRING], BuiltinType):
                     bits[key] = int(value)
                     self.value = tuple(bits)
                     return
-                raise IndexError(f"Bit index {key} out of range [0, {len(self.value)-1}]")
+                raise IndexError(f"Bit index {key} out of range [0, {len(self.value) - 1}]")
             bits = list(self.value)
             bits[key] = int(value)
             self.value = tuple(bits)

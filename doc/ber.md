@@ -53,7 +53,7 @@ from COSEMpdu.byte_buffer import ByteBuffer
 
 # Encoding
 buf = ByteBuffer()
-value = IntegerType.new(42)
+value = IntegerType(42)
 value.put(buf)
 
 # Decoding
@@ -73,7 +73,7 @@ class MySeq(SequenceType):
     b: OctetStringType
 
 buf = ByteBuffer()
-seq = MySeq(a=IntegerType.new(1), b=OctetStringType.new(b"hello"))
+seq = MySeq(a=IntegerType(1), b=OctetStringType(b"hello"))
 seq.put(buf)
 ```
 
