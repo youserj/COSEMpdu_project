@@ -11,8 +11,7 @@ from src.COSEMpdu.axdr import (
     ImplicitTaggedType,
     ConstrainedIntegerType, ConstrainedOctetStringType, ConstrainedBitStringType, ConstrainedSequenceOfType,
     BooleanType, IntegerType, BitStringType, OctetStringType, ObjectIdentifierType,
-    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType,
-    _encode_variable_length_integer, get_length
+    ChoiceType, SequenceType, EnumeratedType, NullType, SequenceOfType, get_length
 )
 from src.COSEMpdu.byte_buffer import ByteBuffer
 
@@ -39,19 +38,6 @@ class My(ImplicitTaggedType, IntegerType):
 
 class TestVariableLengthInteger(unittest.TestCase):
     """Test helper functions for variable-length integer encoding (§6.1.2)"""
-
-    def test_encode_short_form(self) -> None:
-        """Values 0-127 encode as single octet (§6.1.2)"""
-        self.assertEqual(_encode_variable_length_integer(0), b"\x00")
-        self.assertEqual(_encode_variable_length_integer(1), b"\x01")
-        self.assertEqual(_encode_variable_length_integer(127), b"\x7F")
-
-    def test_encode_long_form(self) -> None:
-        """Values >127 encode as length octet + value octets (§6.1.2)"""
-        self.assertEqual(_encode_variable_length_integer(128), b"\x81\x80")
-        self.assertEqual(_encode_variable_length_integer(255), b"\x81\xFF")
-        self.assertEqual(_encode_variable_length_integer(256), b"\x82\x01\x00")
-        self.assertEqual(_encode_variable_length_integer(65535), b"\x82\xFF\xFF")
 
     def test_decode_short_form(self) -> None:
         """Decode short form values (0-127)"""

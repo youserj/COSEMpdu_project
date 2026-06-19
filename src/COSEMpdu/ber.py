@@ -3,16 +3,8 @@ from typing import ClassVar, Self, cast, Optional, get_args
 from StructResult.result import ValueOrError, Error
 from .x680 import SEQUENCE_OF, OBJECT_IDENTIFIER, UniversalClassTagAssignments
 from . import x680
-from .byte_buffer import ByteBuffer, put_chain, ReadableByteBuffer
+from .byte_buffer import ByteBuffer, ReadableByteBuffer, U8Putter, RawPutter
 from .x690 import Tag, Length, TagError, EDTLV
-
-
-def put_lc(buf: ByteBuffer, length: int, data: bytes) -> ValueOrError[int]:
-    """common put length and contents to buffer"""
-    return put_chain(
-        Length(length).put(buf),
-        buf.write(data)
-    )
 
 
 class ExplicitTaggedType(x680.Type, EDTLV):
@@ -183,9 +175,9 @@ class ImplicitTaggedType(x680.Type, EDTLV):
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode with Tag + Length + Contents"""
-        return put_chain(
-            self.tag.put(buf),
-            self.put_lc(buf)
+        return buf.put_chain(
+            self.tag.put,
+            self.put_lc
         )
 
 
@@ -262,10 +254,10 @@ class BitStringType(ImplicitTaggedType, x680.BitStringType):
                 if padded[i + j]:
                     byte |= (1 << (7 - j))
             data_bytes.append(byte)
-        return put_chain(
-            Length(1 + len(data_bytes)).put(buf),
-            buf.put_u8(unused_bits),
-            buf.write(bytes(data_bytes))
+        return buf.put_chain(
+            Length(1 + len(data_bytes)).put,
+            U8Putter(unused_bits).put,
+            RawPutter(data_bytes).put
         )
 
 
@@ -316,9 +308,9 @@ class BooleanType(ImplicitTaggedType, x680.BooleanType):
             FALSE โ�� 0x00
             TRUE  โ�� 0xFF (all bits one, DER/CER compliant)
         """
-        return put_chain(
-            Length(1).put(buf),
-            buf.put_u8(self.value)
+        return buf.put_chain(
+            U8Putter(1).put,
+            U8Putter(self.value).put
         )
 
 
@@ -361,7 +353,10 @@ class GraphicString(ImplicitTaggedType, x680.GraphicString):
             - SEQUENCE components in A-XDR (IEC 61334-6 ยง6.9)
         Returns number of bytes written.
         """
-        return put_lc(buf, len(self.value), self.value.encode("ascii", errors="replace"))    # GRAPHIC STRING is ISO 8859-1, but we'll encode as ASCII for simplicity
+        return buf.put_chain(
+            Length(len(self.value)).put,
+            RawPutter(self.value.encode("ascii", errors="replace")).put    # GRAPHIC STRING is ISO 8859-1, but we'll encode as ASCII for simplicity
+        )
 
     def __str__(self) -> str:
         """
@@ -509,7 +504,10 @@ class EnumeratedType(ImplicitTaggedType, x680.EnumeratedType):
 
         # Write: tag + length + content
         content_bytes = value.to_bytes(num_bytes, byteorder="big")
-        return put_lc(buf, num_bytes, content_bytes)
+        return buf.put_chain(
+            Length(num_bytes).put,
+            RawPutter(content_bytes).put
+        )
 
 
 class IntegerType(ImplicitTaggedType, x680.IntegerType):
@@ -579,7 +577,10 @@ class IntegerType(ImplicitTaggedType, x680.IntegerType):
 
             # Convert to two's complement bytes
             content_bytes = self.value.to_bytes(num_bytes, byteorder="big", signed=True)
-        return put_lc(buf, len(content_bytes), content_bytes)
+        return buf.put_chain(
+            Length(len(content_bytes)).put,
+            RawPutter(content_bytes).put
+        )
 
 
 class NullType(ImplicitTaggedType, x680.NullType):
@@ -745,7 +746,10 @@ class ObjectIdentifierType(ImplicitTaggedType, x680.ObjectIdentifierType):
                 for i in range(len(chunks) - 1):
                     chunks[i] |= 0x80
                 content_bytes.extend(chunks)
-        return put_lc(buf, len(content_bytes), bytes(content_bytes))
+        return buf.put_chain(
+            Length(len(content_bytes)).put,
+            RawPutter(content_bytes).put
+        )
 
 
 class OctetStringType(ImplicitTaggedType, x680.OctetStringType):
@@ -798,7 +802,10 @@ class OctetStringType(ImplicitTaggedType, x680.OctetStringType):
             - Direct octet content (no padding)
             - No unused_bits octet (unlike BIT STRING)
         """
-        return put_lc(buf, len(self.value), self.value)
+        return buf.put_chain(
+            Length(len(self.value)).put,
+            RawPutter(self.value).put
+        )
 
 
 class SequenceType(ImplicitTaggedType, x680.SequenceType):
@@ -1004,7 +1011,10 @@ class GeneralizedTime(ImplicitTaggedType, x680.GeneralizedTime):
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """Encode GeneralizedTime to BER VisibleString"""
         data = self.value.encode("ascii")
-        return put_lc(buf, len(data), data)
+        return buf.put_chain(
+            Length(len(data)).put,
+            RawPutter(data).put
+        )
 
 
 class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):

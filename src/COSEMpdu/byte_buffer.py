@@ -1,4 +1,4 @@
-from typing import Self, Optional, Protocol, TypeAlias
+from typing import Self, Optional, Protocol, TypeAlias, Callable
 from StructResult.result import ValueOrError, Fallible, Error, OK
 
 
@@ -155,14 +155,14 @@ class ByteBuffer(_ByteBuffer[bytearray]):
     def wrap(cls, data: bytes | bytearray) -> Self:
         return cls(bytearray(data))
 
-    def write(self, value: bytes) -> ValueOrError[int]:
+    def write(self, value: bytes | bytearray) -> ValueOrError[int]:
         """keep data to position, increase position"""
         if not isinstance(length := self.write_pos(value, self._pos), Error):
             self._pos += length
         return length
 
     def write_pos(self,
-                  value: bytes,
+                  value: bytes | bytearray,
                   pos: int) -> ValueOrError[int]:
         """keep data to position, return length data"""
         length = len(value)
@@ -178,6 +178,38 @@ class ByteBuffer(_ByteBuffer[bytearray]):
         self.buf[self._pos] = value
         self._pos += 1
         return 1
+
+    def put_chain(self, *putters: Callable[["ByteBuffer"], ValueOrError[int]]) -> ValueOrError[int]:
+        """
+        Sequentially apply multiple putter callables to this buffer.
+
+        Each putter receives this ByteBuffer instance and returns either the
+        number of bytes written (int) or an Error. The method short-circuits
+        on the first Error encountered and returns it immediately. Otherwise,
+        returns the total number of bytes written by all putters.
+
+        Args:
+            *putters: One or more callables that accept a ByteBuffer and return
+                      ValueOrError[int] (int = bytes written, Error = failure).
+
+        Returns:
+            ValueOrError[int]: Total bytes written by all putters, or the first
+            Error encountered.
+
+        Example:
+            >>> buf = ByteBuffer.allocate(100)
+            >>> result = buf.put_chain(
+            ...     lambda b: b.put_u8(0x0F),
+            ...     lambda b: b.put_u8(0x1B),
+            ... )
+            >>> result  # OK(2)
+        """
+        count: int = 0
+        for p in putters:
+            if isinstance(r := p(self), Error):
+                return r
+            count += r
+        return count
 
     def frozen(self) -> ByteBufferFrozen:
         """Allocate a new ByteBuffer with a zero-initialized buffer of given size"""
@@ -225,10 +257,25 @@ class ByteBuffer(_ByteBuffer[bytearray]):
 ReadableByteBuffer: TypeAlias = ByteBuffer | ByteBufferFrozen
 
 
-def put_chain(*res: ValueOrError[int]) -> ValueOrError[int]:
-    count: int = 0
-    for r in res:
-        if isinstance(r, Error):
-            return r
-        count += r
-    return count
+class Putter[T: (int, bytes, bytearray)](Protocol):
+    value: T
+
+    def __init__(self, value: T) -> None:
+        self.value = value
+
+    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
+        ...
+
+
+class U8Putter(Putter[int]):
+    __slots__ = ("value",)
+
+    def put(self, buf: ByteBuffer) -> int | Error:
+        return buf.put_u8(self.value)
+
+
+class RawPutter(Putter[bytes | bytearray]):
+    __slots__ = ("value",)
+
+    def put(self, buf: ByteBuffer) -> int | Error:
+        return buf.write(self.value)

@@ -22,42 +22,12 @@ from StructResult.result import ValueOrError, Error
 from . import x690
 from .x680 import OptionalNamedType, DefaultNamedType, INTEGER, SEQUENCE_OF
 from . import x680
-from .byte_buffer import ByteBuffer, put_chain, ReadableByteBuffer
+from .byte_buffer import ByteBuffer, ReadableByteBuffer, U8Putter, RawPutter
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
-def _encode_variable_length_integer(value: int) -> bytes:
-    """
-    Encode integer as variable-length per IEC 61334-6 §6.1.2.
-
-    For values 0-127: single octet (bit 8 = 0)
-    For values >127: length octet (bit 8 = 1) + value octets
-
-    Returns:
-        Encoded bytes
-    """
-    if 0 <= value <= 127:
-        return bytes([value])
-    # Calculate bytes needed for value
-    num_bytes = (value.bit_length() + 7) // 8
-    # Length octet: bit 8 = 1, bits 7-1 = number of value bytes
-    length_octet = 0x80 | num_bytes
-    value_bytes = value.to_bytes(num_bytes, byteorder="big")
-    return bytes([length_octet]) + value_bytes
-
-
-def put_length(buf: ByteBuffer, length: int) -> ValueOrError[int]:
-    if length < 0x80:  # Short definite form
-        return buf.put_u8(length)
-    num_bytes = (length.bit_length() + 7) // 8      # Long definite form: minimal octets for value
-    return put_chain(
-        buf.put_u8(0x80 | num_bytes),
-        buf.write(length.to_bytes(num_bytes, byteorder="big"))
-    )
-
 
 def get_length(buf: ReadableByteBuffer) -> ValueOrError[int]:
     """
@@ -126,9 +96,9 @@ class ImplicitTaggedType(Type):
         return cls.get_lc(buf)
 
     def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(
-            buf.put_u8(self.tag),
-            self.put_lc(buf)
+        return buf.put_chain(
+            U8Putter(self.tag).put,
+            self.put_lc
         )
 
 
@@ -238,8 +208,11 @@ class IntegerType(Type, x680.IntegerType):
         """Variable-length encoding"""
         if 0 <= self.value <= 127:
             return buf.put_u8(self.value)
-        encoded = _encode_variable_length_integer(self.value)
-        return buf.write(encoded)
+        num_bytes = (self.value.bit_length() + 7) // 8  # Calculate bytes needed for value
+        return buf.put_chain(
+            U8Putter(0x80 | num_bytes).put,  # Length octet: bit 8 = 1, bits 7-1 = number of value bytes
+            RawPutter(self.value.to_bytes(num_bytes, byteorder="big")).put
+        )
 
 
 # =============================================================================
@@ -298,10 +271,9 @@ class BitStringType(Type, x680.BitStringType):
             # Length = 0 bits
             return buf.put_u8(0)
         # Encode length (number of BITS)
-        length_bytes = _encode_variable_length_integer(len(self.value))
-        return put_chain(
-            buf.write(length_bytes),
-            self.put_c(buf)
+        return buf.put_chain(
+            x690.Length(len(self.value)).put,
+            self.put_c
         )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
@@ -317,7 +289,7 @@ class BitStringType(Type, x680.BitStringType):
                 if padded[i + j]:
                     byte |= (1 << (7 - j))
             data_bytes.append(byte)
-        return buf.write(bytes(data_bytes))
+        return buf.write(data_bytes)
 
 
 # =============================================================================
@@ -355,9 +327,9 @@ class OctetStringType(Type, x680.OctetStringType):
         return cls.new(bytes(data))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(
-            put_length(buf, len(self.value)),
-            self.put_c(buf)
+        return buf.put_chain(
+            x690.Length(len(self.value)).put,
+            self.put_c
         )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
@@ -376,9 +348,9 @@ class VisibleString(Type, x680.VisibleString):
         return cls.new(data.decode(encoding="ascii"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(
-            put_length(buf, len(self.value)),
-            buf.write(self.value.encode("ascii"))
+        return buf.put_chain(
+            x690.Length(len(self.value)).put,
+            RawPutter(self.value.encode("ascii")).put
         )
 
     def __str__(self) -> str:
@@ -399,9 +371,9 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
         return cls.new(data.decode(encoding="utf-8"))
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(
-            put_length(buf, len(encode := self.value.encode("utf-8"))),
-            buf.write(encode)
+        return buf.put_chain(
+            x690.Length(len(encode := self.value.encode("utf-8"))).put,
+            RawPutter(encode).put
         )
 
     def __str__(self) -> str:
@@ -715,13 +687,13 @@ class SequenceOfType[T: Type](Type, x680.SequenceOfType[T]):
         Returns number of bytes written.
         """
         # Variable-length encoding (§6.10.2)
-        return put_chain(
-            put_length(buf, len(self.value)),
-            self.put_c(buf)
+        return buf.put_chain(
+            x690.Length(len(self.value)).put,
+            self.put_c
         )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(*(comp.put(buf) for comp in self.value))
+        return buf.put_chain(*(comp.put for comp in self.value))
 
     def __iter__(self) -> Iterator[T]:
         for val in self.value:
@@ -811,9 +783,9 @@ class ObjectIdentifierType(Type, x680.ObjectIdentifierType):
                     chunks[i] |= 0x80
                 content.extend(chunks)
         # Write A-XDR variable-length header + BER OID content
-        return put_chain(
-            put_length(buf, len(content)),
-            buf.write(bytes(content))
+        return buf.put_chain(
+            x690.Length(len(content)).put,
+            RawPutter(content).put
         )
 
 
@@ -829,9 +801,9 @@ class GeneralizedTime(Type, x680.GeneralizedTime):
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         data = self.value.encode("ascii")
-        return put_chain(
-            x690.put_length(buf, len(data)),
-            buf.write(data)
+        return buf.put_chain(
+            x690.Length(len(data)).put,
+            RawPutter(data).put
         )
 
 

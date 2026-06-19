@@ -3,13 +3,14 @@ from dataclasses import dataclass
 from typing import Self, ClassVar, TypeAlias, Optional, Union
 from struct import pack, unpack
 from StructResult.result import Error, ValueOrError
-from .byte_buffer import ByteBuffer, put_chain, ReadableByteBuffer
+from .byte_buffer import ByteBuffer, ReadableByteBuffer
+from .x690 import Length
 from .x680 import SizeConstraint, ValueRange
 from .x680 import NamedType
 from . import x680
 from . import axdr
 from .axdr import ConstrainedIntegerType, ConstrainedOctetStringType, OctetStringType, NullType, BooleanType, get_length, ImplicitTaggedType, NullType0, \
-    BitStringType, ChoiceType, SequenceType, SequenceOfType, put_length
+    BitStringType, ChoiceType, SequenceType, SequenceOfType
 
 
 class Integer8(ConstrainedIntegerType):
@@ -318,13 +319,13 @@ class Structure(ImplicitTaggedType, x680.SequenceType):
 
         Returns number of bytes written.
         """
-        return put_chain(
-            put_length(buf, len(self.components)),  # Variable-length encoding (§6.10.2)
-            self.put_c(buf)
+        return buf.put_chain(
+            Length(len(self.components)).put,  # Variable-length encoding (§6.10.2)
+            self.put_c
         )
 
     def put_c(self, buf: ByteBuffer) -> ValueOrError[int]:
-        return put_chain(*(getattr(self, comp.identifier).put(buf) for comp in self.components))
+        return buf.put_chain(*(getattr(self, comp.identifier).put for comp in self.components))
 
 
 class Boolean(ImplicitTaggedType, BooleanType):
