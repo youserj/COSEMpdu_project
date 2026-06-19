@@ -100,8 +100,18 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
         return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
 
     def shift_pos(self, value: int) -> ValueOrError[int]:
-        """shift and return old position"""
-        return self.set_pos(self._pos + value)
+        """shift and return delta"""
+        if 0 <= (index := self._pos + value) < len(self):
+            self._pos = index
+            return value
+        return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
+
+    def reserve(self, value: int) -> ValueOrError[int]:
+        """reserve space to be filled later"""
+        if 0 <= (index := self._pos + value) < len(self):
+            self._pos = index
+            return 0
+        return Error.from_e(BufferError(f"overflow, {self} can't set {index=}"))
 
     def peek(self, length: int = 1) -> ValueOrError[T]:
         return self.read_pos(self._pos, length)

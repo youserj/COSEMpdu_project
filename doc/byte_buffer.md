@@ -140,13 +140,23 @@ Sets a new position with bounds checking. Returns the **delta** (difference betw
 
 #### `shift_pos(value: int) -> ValueOrError[int]`
 
-Shifts the position by `value` (adds to current). Returns the old position.
+Shifts the position by `value` (adds to current). Returns the delta.
 
 | Parameter | Type  | Description |
 |-----------|-------|-------------|
 | `value`   | `int` | Offset      |
 
-**Returns:** `ValueOrError[int]` — old position or `Error`.
+**Returns:** `ValueOrError[int]` — delta (`value`) or `Error`.
+
+#### `reserve(value: int) -> ValueOrError[int]`
+
+Reserves `value` bytes by advancing the position forward. Returns `0`. Useful for reserving space to be filled later (e.g. for a length field whose value is determined after encoding the payload).
+
+| Parameter | Type  | Description |
+|-----------|-------|-------------|
+| `value`   | `int` | Number of bytes to reserve |
+
+**Returns:** `ValueOrError[int]` — `0` on success or `Error`.
 
 #### `slice() -> Self`
 
