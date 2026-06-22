@@ -44,13 +44,6 @@ class EDTLV(ED, Protocol):
     - `get_lc()` / `put_lc()`: decode/encode Length + Contents without the tag.
     """
 
-    def put(self, buf: ByteBuffer) -> ValueOrError[int]:
-        """
-        Encode with full TLV (Tag + Length + Contents).
-        Returns number of bytes written.
-        """
-        ...
-
     @classmethod
     def get_lc(cls, buf: ReadableByteBuffer) -> ValueOrError[Self]:
         """
