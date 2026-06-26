@@ -1,8 +1,15 @@
 import unittest
+from dataclasses import dataclass
+from typing import ClassVar
 from src.COSEMpdu import x690
 from src.COSEMpdu import byte_buffer as buffer
 from src.COSEMpdu.ber import Tag
 from src.COSEMpdu.x680 import Class
+from src.COSEMpdu.x690 import recast
+from src.COSEMpdu.apdu import GetRequestNext, GetRequestNormal, InvokeIdAndPriority
+from src.COSEMpdu.data import Unsigned32, Data, Unsigned
+from src.COSEMpdu.axdr import ImplicitTaggedType, SequenceType
+from StructResult.result import Error
 
 
 class TestType(unittest.TestCase):
@@ -38,3 +45,49 @@ class TestType(unittest.TestCase):
         t2 = Tag.get(buf)
         print(t2)
         self.assertEqual(bytes(buf.buf), b"_\x83\xda\xdbq\x00\x00\x00\x00\x00")
+
+
+@dataclass
+class _CustomGetRequestNext(ImplicitTaggedType, SequenceType):
+    """Кастомный SequenceType с теми же полями, что GetRequestNext, для тестов recast."""
+    tag: ClassVar[int] = 2
+    invoke_id_and_priority: InvokeIdAndPriority
+    block_number: Unsigned32
+
+
+class TestRecast(unittest.TestCase):
+    """Тесты для функции recast (x690.py)."""
+
+    def test_single_type_success(self) -> None:
+        """recast с одним expected — успех, ed = кастомный SequenceType."""
+        ed = _CustomGetRequestNext(InvokeIdAndPriority(1), Unsigned32(42))
+        result = recast(ed, GetRequestNext)
+        self.assertNotIsInstance(result, Error)
+        self.assertEqual(result.block_number.value, 42)
+
+    def test_multi_first_fails_second_wins(self) -> None:
+        """GetRequestNormal (tag 1) падает на байтах GetRequestNext (tag 2), GetRequestNext подходит."""
+        ed = GetRequestNext(InvokeIdAndPriority(1), Unsigned32(42))
+        result = recast(ed, GetRequestNormal, GetRequestNext)
+        self.assertNotIsInstance(result, Error)
+        self.assertEqual(result.block_number.value, 42)
+
+    def test_no_type_matched(self) -> None:
+        """GetRequestNormal не подходит к GetRequestNext → TypeError."""
+        ed = GetRequestNext(InvokeIdAndPriority(1), Unsigned32(42))
+        result = recast(ed, GetRequestNormal)
+        self.assertIsInstance(result, Error)
+        self.assertIn("no expected type matched", str(result.err.exceptions))
+
+    def test_empty_expected(self) -> None:
+        """*expected пуст → RuntimeError."""
+        ed = GetRequestNext(InvokeIdAndPriority(1), Unsigned32(42))
+        result = recast(ed)
+        self.assertIsInstance(result, Error)
+        self.assertIn("recast requires at least one expected type", str(result.err.exceptions))
+
+    def test_from_data_wrapper(self) -> None:
+        """Data(Unsigned(100)) → recast с APDU-типами (все падают)."""
+        result = recast(Data(Unsigned(100)), GetRequestNormal, GetRequestNext)
+        self.assertIsInstance(result, Error)
+        self.assertIn("no expected type matched", str(result.err.exceptions))
