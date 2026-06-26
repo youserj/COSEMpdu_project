@@ -1021,3 +1021,9 @@ class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
     def __init_subclass__(cls) -> None:
         cls._init_subclass()
         return super().__init_subclass__()
+
+
+class ConstrainedOctetStringType(x680.ConstrainedOctetString, OctetStringType):
+    def __init_subclass__(cls) -> None:
+        cls._init_subclass()
+        return super().__init_subclass__()

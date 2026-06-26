@@ -885,6 +885,16 @@ class ConstrainedBitStringType(x680.ConstrainedBitStringType, BitStringType):
             return self.put_c(buf)
         return self.put_lc(buf)
 
+    @classmethod
+    def from_bits(cls, *bits: int) -> Self:
+        """Create with bits set at given positions: (0, 3, 5) -> bits 0,3,5 = 1, rest 0"""
+        if not bits:
+            return cls.default()
+        result = list(cls.default().value) if cls.fixed_length else [0] * (max(bits) + 1)
+        for pos in bits:
+            result[pos] = 1
+        return cls(tuple(result))
+
 
 class ConstrainedSequenceOfType[T: SequenceOfType[Type]](x680.ConstrainedSequenceOfType[T], SequenceOfType[T]):
     @classmethod

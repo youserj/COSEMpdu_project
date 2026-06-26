@@ -37,7 +37,7 @@ sys.path.insert(0, "src")
 
 import unittest
 from typing import Any
-
+from src.COSEMpdu.byte_buffer import ByteBuffer
 from test._utils import check_encode_decode as _shared_check_encode_decode
 from src.COSEMpdu import apdu
 from src.COSEMpdu.axdr import OctetStringType, BooleanType
@@ -84,7 +84,9 @@ from src.COSEMpdu.apdu import (
     AccessRequestBody, AccessResponseBody,
     InitiateError, Initiate,
 )
-from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName
+from src.COSEMpdu.data import Data, Unsigned, SequenceOfData, Unsigned8, Unsigned16, ObjectName, Integer
+from src.COSEMpdu.x690 import ed2ed
+from StructResult.result import Error
 
 
 class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
@@ -245,6 +247,31 @@ class TestXDLMS_APDU_EncodeDecode(unittest.TestCase):
         ))
         decoded = self._check_encode_decode(set_request_obj, SetRequest)
         self.assertEqual(decoded.value, set_request_obj.value)
+
+    def test_set_request_value_is_integer(self) -> None:
+        """Validate Integer round-trip through SetRequestNormal → Data → ed2buf → Integer.get"""
+        req = SetRequestNormal(
+            invoke_id_and_priority=InvokeIdAndPriority(1),
+            cosem_attribute_descriptor=CosemAttributeDescriptor(
+                class_id=CosemClassId(1),
+                instance_id=CosemObjectInstanceId(b"\x00\x00\x00\x00\x00\x00"),
+                attribute_id=CosemObjectAttributeId(1)
+            ),
+            value=Data(Integer(42)),
+            access_selection=None
+        )
+        buf = ByteBuffer.allocate(100)
+        ret = req.put(buf)
+        self.assertNotIsInstance(ret, Error, "SetRequestNormal.put failed")
+        buf.set_pos(0)
+        decoded = SetRequestNormal.get(buf)
+        self.assertNotIsInstance(decoded, Error, f"SetRequestNormal.get failed: {decoded}")
+        assert not isinstance(decoded, Error)
+        # Extract Integer from Data via encode-decode round-trip (ed2ed)
+        integer = ed2ed(decoded.value, Integer)
+        self.assertNotIsInstance(integer, Error, f"ed2ed failed: {integer}")
+        assert not isinstance(integer, Error)
+        self.assertEqual(integer.value, 42)
 
     def test_set_response_normal_tag_197(self) -> None:
         """Test SetResponse (set-response-normal) encode/decode (tag 197)"""

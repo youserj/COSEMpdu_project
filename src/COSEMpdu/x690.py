@@ -33,6 +33,102 @@ class ED(Protocol):
         ...
 
 
+def ed2buf(ed: ED, size: int = 65535) -> ValueOrError[ByteBuffer]:
+    """
+    Encode an ``ED`` object into a buffer and return the extracted buffer.
+
+    The primary use case is obtaining a filled buffer for narrower validation
+    of ``Data`` instances from ``data.py`` (e.g. verifying that an encoded
+    OCTET STRING matches an expected value after encoding).
+
+    Parameters
+    ----------
+    ed : ED
+        Object implementing the ``ED`` protocol (supports ``put``).
+    size : int, optional
+        Initial buffer size in bytes (default ``65535``).
+
+    Returns
+    -------
+    ValueOrError[ByteBuffer]
+        On success — extracted ``ByteBuffer`` containing the encoded data.
+        On encoding failure — ``Error``.
+    """
+    buf = ByteBuffer.allocate(size)
+    if isinstance(ret := ed.put(buf), Error):
+        return ret
+    return buf.extract()
+
+
+def ed2ed[T: ED](ed: ED, expected: type[T], size: int = 65535) -> ValueOrError[T]:
+    """
+    Encode *ed* to a buffer, then decode the buffer as *expected* type.
+
+    This is a convenience composition of :func:`ed2buf` + ``expected.get(buf)``.
+    The primary use case is extracting a concrete type from a generic ``Data``
+    wrapper — encoding a ``Data(Integer(42))`` and decoding the buffer directly
+    as ``Integer`` for validation, without manually managing the intermediate
+    buffer.
+
+    Parameters
+    ----------
+    ed : ED
+        Source object to encode (e.g. a ``Data`` instance wrapping a value).
+    expected : type[T]
+        Target type whose ``get()`` classmethod will decode the buffer.
+        Must implement the ``ED`` protocol.
+    size : int, optional
+        Buffer size in bytes forwarded to :func:`ed2buf` (default ``65535``).
+
+    Returns
+    -------
+    ValueOrError[T]
+        On success — decoded instance of *expected* type.
+        On encoding or decoding failure — ``Error``.
+    """
+    if isinstance(buf := ed2buf(ed, size), Error):
+        return buf
+    return expected.get(buf)
+
+
+def recast[T: ED](ed: ED, *expected: type[T], size: int = 65535)  -> ValueOrError[T]:
+    """
+    Encode *ed* to a buffer, then attempt to decode the buffer as each
+    *expected* type in order. The first type to successfully decode wins.
+
+    This is a generalisation of ``ed2ed``: instead of a single target type
+    it accepts one or more, trying each until one succeeds.  With a single
+    *expected* type the behaviour is equivalent to ``ed2ed``.
+
+    Parameters
+    ----------
+    ed : ED
+        Source object to encode (e.g. a ``Data`` instance wrapping a value).
+    *expected : type[T]
+        One or more target types whose ``get()`` classmethod will be tried
+        to decode the buffer. Must implement the ``ED`` protocol.
+    size : int, optional
+        Buffer size in bytes (default ``65535``).
+
+    Returns
+    -------
+    ValueOrError[T]
+        On success — decoded instance of the first matching *expected* type.
+        On encoding failure or when no *expected* type matches — ``Error``.
+    """
+    buf = ByteBuffer.allocate(size)
+    if isinstance(err := ed.put(buf), Error):
+        return err
+    buf = buf.extract()
+    if not expected:
+        return Error.from_e(RuntimeError("recast requires at least one expected type"))
+    for exp in expected:
+        if not isinstance(ret := exp.get(buf), Error):
+            return ret
+        buf.set_pos(0)
+    return Error.from_e(TypeError("no expected type matched"))
+
+
 class EDTLV(ED, Protocol):
     """
     Protocol interface for BER/X.690 TLV (Tag-Length-Value) encoding/decoding.
@@ -217,3 +313,5 @@ class Tag(ED, x680.Tag):
             and self.class_ == other.class_
             and self.constructed == other.constructed
         )
+
+
