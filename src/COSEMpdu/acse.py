@@ -5,6 +5,7 @@ Implements A-XDR encoding/decoding according to IEC 61334-6 ACSE APDU Types (COS
 """
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Final
+from StructResult.result import ValueOrError, Error, Ok, OK
 from . import x690
 from .x680 import Class
 from .ber import GraphicString, BitStringType, IntegerType, SequenceType, ExplicitTaggedType, OctetStringType, ChoiceType, ObjectIdentifierType
@@ -13,6 +14,16 @@ from .ber import GraphicString, BitStringType, IntegerType, SequenceType, Explic
 class ApplicationContextName(ExplicitTaggedType, ObjectIdentifierType):
     """application-context-name [1] Application-context-name"""
     tag2: ClassVar[x690.Tag] = x690.Tag(1, Class.CONTEXT_SPECIFIC, constructed=True)
+
+    def validate(self) -> Ok | Error:
+        if len(self.value) != 7:
+            return Error.from_e(ValueError(f"got {len(self.value)} elements, expected 7"))
+        return OK
+
+    def get_context_id(self) -> ValueOrError[int]:
+        if isinstance(err := self.validate(), Error):
+            return err
+        return self.value[6]
 
 
 class APTitle(OctetStringType):

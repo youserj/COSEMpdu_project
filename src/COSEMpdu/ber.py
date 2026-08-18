@@ -342,7 +342,7 @@ class GraphicString(ImplicitTaggedType, x680.GraphicString):
             return cls.new("")
         if isinstance(value := buf.read(length.value), Error):
             return value
-        return cls.new(bytes(value).decode("ascii", errors="replace"))  # GRAPHIC STRING is ISO 8859-1, but we'll decode as ASCII for display
+        return cls.new(bytes(value).decode("latin-1", errors="replace"))  # GRAPHIC STRING is ISO 8859-1, but we'll decode as ASCII for display
 
     def put_lc(self, buf: ByteBuffer) -> ValueOrError[int]:
         """
@@ -355,7 +355,7 @@ class GraphicString(ImplicitTaggedType, x680.GraphicString):
         """
         return buf.put_chain(
             Length(len(self.value)).put,
-            RawPutter(self.value.encode("ascii", errors="replace")).put    # GRAPHIC STRING is ISO 8859-1, but we'll encode as ASCII for simplicity
+            RawPutter(self.value.encode("latin-1", errors="replace")).put    # GRAPHIC STRING is ISO 8859-1, but we'll encode as ASCII for simplicity
         )
 
     def __str__(self) -> str:
@@ -396,7 +396,7 @@ class ChoiceType(x680.ChoiceType[TaggedType]):
         - Tag identifies which alternative was selected
         - For DLMS/COSEM, alternatives use CONTEXT SPECIFIC class
     """
-    alternatives: ClassVar[dict[int, TaggedType]]
+    alternatives: ClassVar[dict[int, type[TaggedType]]]
     value: TaggedType
 
     def __init_subclass__(cls) -> None:

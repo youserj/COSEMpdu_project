@@ -463,6 +463,8 @@ class IntegerType(Members, Simple[INTEGER], BuiltinType):
                 return m.identifier
         return None
 
+    def __lt__(self, other: Self) -> bool:
+        return self.value < other.value
 
 # =============================================================================
 # 4. bit_string.py — BIT STRING type
@@ -825,6 +827,9 @@ class BooleanType(Simple[BOOLEAN], BuiltinType):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.value})"
+
+    def __int__(self) -> int:
+        return int(self.value)
 
 
 # =============================================================================
@@ -1441,6 +1446,12 @@ class ObjectIdentifierType(Simple[OBJECT_IDENTIFIER], BuiltinType):
                 return Error.from_e(ConstraintError(f"Arc {i} must be non-negative, got {arc}"))
         return cls(value)
 
+    def __iter__(self) -> Iterator[int]:
+        return iter(self.value)
+
+    def __getitem__(self, key: int) -> int:
+        return self.value[key]
+
     @classmethod
     def default(cls) -> Self:
         return cls((0, 0))  # Default to {0 0}, though this may be invalid
@@ -1614,7 +1625,7 @@ class ChoiceType[T: Type](BuiltinType, Protocol):
     """
 
     # Class variable: defines available alternatives for this CHOICE type
-    alternatives: ClassVar[dict[int, Type]]
+    alternatives: ClassVar[dict[int, type[Type]]]
     value: T
 
     def __init__(self, value: T) -> None:

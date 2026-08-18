@@ -59,6 +59,7 @@ from COSEMpdu.acse import (
     ResponderACSERequirements,
     ResponseMechanismName,
     RespondingAuthenticationValue,
+    CallingAuthenticationValue
 )
 
 
@@ -133,7 +134,7 @@ class TestEncodingDecoding(unittest.TestCase):
             mechanism_name=ResponseMechanismName((1, 2, 840, 10008, 1, 2)),
             responding_authentication_value=RespondingAuthenticationValue(Charstring("resp_auth")),
             implementation_information=ImplementationInformation("DLMS/COSEM"),
-            user_information=UserInformation(b"\x01\x02\x03"),
+            user_information=UserInformation(b"\x04\x05\x06"),
         )
 
         check_encode_decode(aare, AAREapdu, 1024)
@@ -142,7 +143,7 @@ class TestEncodingDecoding(unittest.TestCase):
         """Test RLRQApdu encoding and decoding with all optional fields"""
         rlrq = RLRQapdu(
             reason=RequestReason(0),
-            user_information=UserInformation(b"\x04\x05\x06"),
+            user_information=UserInformation(b"\x07\x08\x09"),
         )
 
         check_encode_decode(rlrq, RLRQapdu, 512)

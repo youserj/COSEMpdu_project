@@ -214,6 +214,12 @@ class IntegerType(Type, x680.IntegerType):
             RawPutter(self.value.to_bytes(num_bytes, byteorder="big")).put
         )
 
+    def __lt__(self, other: Self) -> bool:
+        return self.value < other.value
+
+    def __le__(self, other) -> bool:
+        return self.value <= other.value
+
 
 # =============================================================================
 # BIT STRING Type (IEC 61334-6 §6.4)
@@ -386,7 +392,7 @@ class Utf8String(Type, x680.VisibleString):  # todo: copypast VisibleString
 # =============================================================================
 # CHOICE Type (IEC 61334-6 §6.6)
 # =============================================================================
-Alternatives: TypeAlias = dict[int, "ImplicitTaggedType | ChoiceType"]
+Alternatives: TypeAlias = dict[int, type[ImplicitTaggedType]]
 
 
 class ChoiceType(Type, x680.ChoiceType[Type]):

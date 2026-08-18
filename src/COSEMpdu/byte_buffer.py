@@ -6,7 +6,7 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
     """Object class wrapping a byte array and allowing manipulation"""
     buf: T
     _pos: int
-    __slots__ = ("buf", "_pos")
+    __slots__ = ("_pos", "buf")
 
     def __init__(self, buffer: T, pos: int = 0) -> None:
         self.buf = buffer
@@ -133,6 +133,31 @@ class _ByteBuffer[T: (bytearray, bytes)](Protocol):
             >>> extracted = buf.extract()  # contains b'Hello'
         """
         return self.__class__(self.buf[:self._pos])
+
+    def get_consumed(self) -> T:
+        """
+        Return raw bytes that have been consumed so far (from start to current
+        position). This is the complement of the remaining space and represents
+        bytes that have been either read (ByteBufferFrozen) or written
+        (ByteBuffer). For a typed wrapper use `extract()` instead.
+        """
+        return self.buf[:self._pos]
+
+    def take_consumed(self) -> T:
+        """
+        Destructively take the consumed bytes and reset position to zero.
+
+        Returns the raw data from start to current position (same as
+        `get_consumed()`), then sets the position back to 0 so the buffer
+        can be reused without reallocation. Use this when you are done
+        building a message and want to extract the result while preparing
+        the buffer for the next write operation.
+
+        See also: `get_consumed()` for a non-destructive read.
+        """
+        ret = self.get_consumed()
+        self._pos = 0
+        return ret
 
 
 class ByteBufferFrozen(_ByteBuffer[bytes]):

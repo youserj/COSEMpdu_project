@@ -1528,7 +1528,7 @@ class GeneralBlockTransfer(ImplicitTaggedType, SequenceType):
     block_data: OctetStringType
 
 
-class XDLMS_APDU(ChoiceType):
+class XDLMSApdu(ChoiceType):
     """XDLMS-APDU"""
     value: Union[
         InitialRequest, ReadRequest, WriteRequest, InitialResponse,
